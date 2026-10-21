@@ -93,36 +93,6 @@ STML 可以用来管理相互调用的 Stope 程序，或实现面向对象等�
 
 ---
 
-## 目录结构
-
-```
-stope-lang/
-  docs/zh-cn/              语言标准（跨实现，不绑定任何一门语言）
-    syntax-intro.md          语法入门
-    syntax-reference.md      语法参考（完整规则与边界情况）
-    syntax-impl.md           各模块的对外契约
-    constant-folding.md      常量折叠规则
-    lexer-test-plan.md       词法：字符流 → Token 流
-    parser-test-plan.md      语法：Token 流 → AST
-    compiler-test-plan.md    编译器：AST → Program
-    stml-test-plan.md        STML：文本 → 元素树
-    vm-guide.md              怎么写一个自己的执行器（指南，不是规范）
-  cpp/                     C++ 实现（权威）
-    include/stope/           19 个头文件，只放声明
-    src/                     9 个编译单元 → build/libstope.a
-    test/                    ctest 13 组
-    demo/01-quick-start.cpp  嵌入示例
-    demo/02-custom-opcode.cpp 自定义指令（只编译 + 反汇编）
-    demo/03-stml.cpp         STML：把三种代码段切出来
-    docs/                    实现侧文档：教程 3 份 + 测试计划 4 份 + expr_optim / basic_vm / development
-  gdscript/                GDScript 原型实现（不建议使用）
-```
-
-四份 `*-test-plan.md` 是**行为契约**，不是 C++ 专属的测试说明：C++ 与 GDScript 两套实现都按它验证，  
-期望值由 C++ 侧实测导出，不手推。
-
----
-
 ## 实现状态
 
 |         | C++                      | GDScript   |
