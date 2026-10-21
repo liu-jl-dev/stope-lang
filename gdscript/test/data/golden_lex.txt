@@ -1,0 +1,148 @@
+# C++ golden dump for docs/zh-cn/lexer-test-plan.md
+ID=LEX-W-01	SRC=	TOKS=Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-W-02	SRC= \t\v\f\r	TOKS=Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-W-03	SRC=\n\n	TOKS=Eof(3)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-W-04	SRC=// c\n1	TOKS=Integer(2)[1]=1 Eof(2)	LEXEMES=0:1	ERRN=0	ERRS=
+ID=LEX-W-05	SRC=// c	TOKS=Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-W-06	SRC=/* a\nb */1	TOKS=Integer(2)[1]=1 Eof(2)	LEXEMES=0:1	ERRN=0	ERRS=
+ID=LEX-W-07	SRC=/* a /* b */ c	TOKS=Ident(1)[c] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-W-08	SRC=1/* unclosed	TOKS=Integer(1)[1]=1 Eof(1)	LEXEMES=0:1	ERRN=0	ERRS=
+ID=LEX-W-09	SRC=a // x\n :b	TOKS=Ident(1)[a:b] Eof(2)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-L-01	SRC=1\n2\n\n3\r\n4	TOKS=Integer(1)[1]=1 Integer(2)[2]=2 Integer(4)[3]=3 Integer(5)[4]=4 Eof(5)	LEXEMES=0:1,1:2,2:3,3:4	ERRN=0	ERRS=
+ID=LEX-L-02	SRC='a\nb' 1	TOKS=BinArr(1) Integer(2)[1]=1 Eof(2)	LEXEMES=0:a\nb,1:1	ERRN=0	ERRS=
+ID=LEX-L-03	SRC=1\n  \t 2	TOKS=Integer(1)[1]=1 Integer(2)[2]=2 Eof(2)	LEXEMES=0:1,1:2	ERRN=0	ERRS=
+ID=LEX-L-04	SRC=a\n:\nb	TOKS=Ident(1)[a:b] Eof(3)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-N-I-01	SRC=0	TOKS=Integer(1)[0]=0 Eof(1)	LEXEMES=0:0	ERRN=0	ERRS=
+ID=LEX-N-I-02	SRC=00	TOKS=Integer(1)[00]=0 Eof(1)	LEXEMES=0:00	ERRN=0	ERRS=
+ID=LEX-N-I-03	SRC=0009	TOKS=Integer(1)[0009]=9 Eof(1)	LEXEMES=0:0009	ERRN=0	ERRS=
+ID=LEX-N-I-04	SRC=1_000	TOKS=Integer(1)[1000]=1000 Eof(1)	LEXEMES=0:1_000	ERRN=0	ERRS=
+ID=LEX-N-I-05	SRC=1_	TOKS=Integer(1)[1]=1 Eof(1)	LEXEMES=0:1_	ERRN=0	ERRS=
+ID=LEX-N-I-06	SRC=0_1	TOKS=Integer(1)[01]=1 Eof(1)	LEXEMES=0:0_1	ERRN=0	ERRS=
+ID=LEX-N-I-07	SRC=0x1F	TOKS=Integer(1)[0x1F]=31 Eof(1)	LEXEMES=0:0x1F	ERRN=0	ERRS=
+ID=LEX-N-I-08	SRC=0X1f	TOKS=Integer(1)[0X1f]=31 Eof(1)	LEXEMES=0:0X1f	ERRN=0	ERRS=
+ID=LEX-N-I-09	SRC=0xFF	TOKS=Integer(1)[0xFF]=255 Eof(1)	LEXEMES=0:0xFF	ERRN=0	ERRS=
+ID=LEX-N-I-10	SRC=0b101	TOKS=Integer(1)[0b101]=5 Eof(1)	LEXEMES=0:0b101	ERRN=0	ERRS=
+ID=LEX-N-I-10B	SRC=0B101	TOKS=Integer(1)[0B101]=5 Eof(1)	LEXEMES=0:0B101	ERRN=0	ERRS=
+ID=LEX-N-I-11	SRC=0o17	TOKS=Integer(1)[0o17]=15 Eof(1)	LEXEMES=0:0o17	ERRN=0	ERRS=
+ID=LEX-N-I-11B	SRC=0O17	TOKS=Integer(1)[0O17]=15 Eof(1)	LEXEMES=0:0O17	ERRN=0	ERRS=
+ID=LEX-N-I-12	SRC=0b1_01	TOKS=Integer(1)[0b101]=5 Eof(1)	LEXEMES=0:0b1_01	ERRN=0	ERRS=
+ID=LEX-N-I-13	SRC=0x_1	TOKS=Integer(1)[0x1]=1 Eof(1)	LEXEMES=0:0x_1	ERRN=0	ERRS=
+ID=LEX-N-I-14	SRC=0o_7	TOKS=Integer(1)[0o7]=7 Eof(1)	LEXEMES=0:0o_7	ERRN=0	ERRS=
+ID=LEX-N-I-15	SRC=9223372036854775807	TOKS=Integer(1)[9223372036854775807]=9223372036854775807 Eof(1)	LEXEMES=0:9223372036854775807	ERRN=0	ERRS=
+ID=LEX-N-I-16	SRC=0x7FFFFFFFFFFFFFFF	TOKS=Integer(1)[0x7FFFFFFFFFFFFFFF]=9223372036854775807 Eof(1)	LEXEMES=0:0x7FFFFFFFFFFFFFFF	ERRN=0	ERRS=
+ID=LEX-N-I-17	SRC=9223372036854775808	TOKS=Invalid(1)[9223372036854775808] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid integer. 
+ID=LEX-N-I-18	SRC=0xFFFFFFFFFFFFFFFFF	TOKS=Invalid(1)[0xFFFFFFFFFFFFFFFFF] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid integer. 
+ID=LEX-N-I-19B	SRC=0b	TOKS=Invalid(1)[0b] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid integer. 
+ID=LEX-N-I-19X	SRC=0x	TOKS=Invalid(1)[0x] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid integer. 
+ID=LEX-N-I-19O	SRC=0o	TOKS=Invalid(1)[0o] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid integer. 
+ID=LEX-N-I-20B	SRC=0b_	TOKS=Invalid(1)[0b] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid integer. 
+ID=LEX-N-I-20X	SRC=0x_	TOKS=Invalid(1)[0x] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid integer. 
+ID=LEX-N-I-20O	SRC=0o_	TOKS=Invalid(1)[0o] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid integer. 
+ID=LEX-N-I-21	SRC=0b2	TOKS=Invalid(1)[0b] Integer(1)[2]=2 Eof(1)	LEXEMES=1:2	ERRN=1	ERRS=line 1: invalid integer. 
+ID=LEX-N-I-22	SRC=123abc	TOKS=Integer(1)[123]=123 Ident(1)[abc] Eof(1)	LEXEMES=0:123	ERRN=0	ERRS=
+ID=LEX-N-F-01	SRC=1e5	TOKS=Float(1)[1e5]=100000 Eof(1)	LEXEMES=0:1e5	ERRN=0	ERRS=
+ID=LEX-N-F-02	SRC=1E-3	TOKS=Float(1)[1E-3]=0.001 Eof(1)	LEXEMES=0:1E-3	ERRN=0	ERRS=
+ID=LEX-N-F-03	SRC=.5	TOKS=Float(1)[.5]=0.5 Eof(1)	LEXEMES=0:.5	ERRN=0	ERRS=
+ID=LEX-N-F-04	SRC=1_.5	TOKS=Float(1)[1.5]=1.5 Eof(1)	LEXEMES=0:1_.5	ERRN=0	ERRS=
+ID=LEX-N-F-05	SRC=1e+3	TOKS=Float(1)[1e+3]=1000 Eof(1)	LEXEMES=0:1e+3	ERRN=0	ERRS=
+ID=LEX-N-F-06	SRC=1.	TOKS=Float(1)[1.]=1 Eof(1)	LEXEMES=0:1.	ERRN=0	ERRS=
+ID=LEX-N-F-07	SRC=1..2	TOKS=Float(1)[1.]=1 Float(1)[.2]=0.2 Eof(1)	LEXEMES=0:1.,1:.2	ERRN=0	ERRS=
+ID=LEX-N-F-08	SRC=1.5.5	TOKS=Float(1)[1.5]=1.5 Float(1)[.5]=0.5 Eof(1)	LEXEMES=0:1.5,1:.5	ERRN=0	ERRS=
+ID=LEX-N-F-09	SRC=.	TOKS=Invalid(1)[.] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid float. 
+ID=LEX-N-F-10A	SRC=.e5	TOKS=Invalid(1)[.e5] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid float. 
+ID=LEX-N-F-10B	SRC=._	TOKS=Invalid(1)[.] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid float. 
+ID=LEX-N-F-11A	SRC=1e	TOKS=Invalid(1)[1e] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid float. 
+ID=LEX-N-F-11B	SRC=1e+	TOKS=Invalid(1)[1e+] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid float. 
+ID=LEX-N-F-11C	SRC=.5e	TOKS=Invalid(1)[.5e] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid float. 
+ID=LEX-N-F-12A	SRC=1e999	TOKS=Invalid(1)[1e999] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid float. 
+ID=LEX-N-F-12B	SRC=1e-999	TOKS=Invalid(1)[1e-999] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: invalid float. 
+ID=LEX-I-01A	SRC=_	TOKS=Ident(1)[_] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-I-01B	SRC=__9	TOKS=Ident(1)[__9] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-I-01C	SRC=_9a	TOKS=Ident(1)[_9a] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-I-02	SRC=9a	TOKS=Integer(1)[9]=9 Ident(1)[a] Eof(1)	LEXEMES=0:9	ERRN=0	ERRS=
+ID=LEX-I-03	SRC=a:b	TOKS=Ident(1)[a:b] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-I-04	SRC=a:b:c	TOKS=Ident(1)[a:b:c] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-I-05	SRC=a\n:b	TOKS=Ident(1)[a:b] Eof(2)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-I-06	SRC=a // c\n:b	TOKS=Ident(1)[a:b] Eof(2)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-I-07	SRC=a :/*x*/ b	TOKS=Ident(1)[a:b] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-I-08	SRC=a::b	TOKS=Invalid(1)[a:] Invalid(1) Ident(1)[b] Eof(1)	LEXEMES=	ERRN=2	ERRS=line 1: unclosed identifier. |line 1: unknown token. 
+ID=LEX-I-09	SRC=a:1	TOKS=Invalid(1)[a:] Integer(1)[1]=1 Eof(1)	LEXEMES=1:1	ERRN=1	ERRS=line 1: unclosed identifier. 
+ID=LEX-I-10	SRC=a:	TOKS=Invalid(1)[a:] Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unclosed identifier. 
+ID=LEX-K-01idiv	SRC=idiv	TOKS=IDiv(1)[idiv] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01not	SRC=not	TOKS=Not(1)[not] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01and	SRC=and	TOKS=And(1)[and] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01or	SRC=or	TOKS=Or(1)[or] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01if	SRC=if	TOKS=If(1)[if] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01elif	SRC=elif	TOKS=Elif(1)[elif] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01else	SRC=else	TOKS=Else(1)[else] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01let	SRC=let	TOKS=Let(1)[let] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01return	SRC=return	TOKS=Return(1)[return] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01while	SRC=while	TOKS=While(1)[while] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01break	SRC=break	TOKS=Break(1)[break] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01continue	SRC=continue	TOKS=Continue(1)[continue] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01null	SRC=null	TOKS=Null(1)[null] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01false	SRC=false	TOKS=False(1)[false] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01true	SRC=true	TOKS=True(1)[true] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01args	SRC=args	TOKS=Args(1)[args] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01argc	SRC=argc	TOKS=Argc(1)[argc] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-01export	SRC=export	TOKS=Export(1)[export] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-02A	SRC=IF	TOKS=Ident(1)[IF] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-02B	SRC=If	TOKS=Ident(1)[If] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-02C	SRC=iff	TOKS=Ident(1)[iff] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-02D	SRC=if2	TOKS=Ident(1)[if2] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-03	SRC=if	TOKS=If(1)[if] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-04	SRC=myop	TOKS=Custom(1)[myop] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-05	SRC=vop	TOKS=Custom(1)[vop] Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-K-06	SRC=myop(1, vop)	TOKS=Custom(1)[myop] LParen(1) Integer(1)[1]=1 Comma(1) Custom(1)[vop] RParen(1) Eof(1)	LEXEMES=2:1	ERRN=0	ERRS=
+ID=LEX-S-01	SRC=""	TOKS=String(1) Eof(1)	LEXEMES=0:	ERRN=0	ERRS=
+ID=LEX-S-02	SRC="abc"	TOKS=String(1)[abc] Eof(1)	LEXEMES=0:abc	ERRN=0	ERRS=
+ID=LEX-S-03	SRC="a\\"b"	TOKS=String(1)[a"b] Eof(1)	LEXEMES=0:a\\"b	ERRN=0	ERRS=
+ID=LEX-S-04	SRC="a\\nb"	TOKS=String(1)[a\nb] Eof(1)	LEXEMES=0:a\\nb	ERRN=0	ERRS=
+ID=LEX-S-05	SRC="a\\\\b"	TOKS=String(1)[a\\b] Eof(1)	LEXEMES=0:a\\\\b	ERRN=0	ERRS=
+ID=LEX-S-06b	SRC="a\\bb"	TOKS=String(1)[ab] Eof(1)	LEXEMES=0:a\\bb	ERRN=0	ERRS=
+ID=LEX-S-06f	SRC="a\\fb"	TOKS=String(1)[a\fb] Eof(1)	LEXEMES=0:a\\fb	ERRN=0	ERRS=
+ID=LEX-S-06r	SRC="a\\rb"	TOKS=String(1)[a\rb] Eof(1)	LEXEMES=0:a\\rb	ERRN=0	ERRS=
+ID=LEX-S-06t	SRC="a\\tb"	TOKS=String(1)[a\tb] Eof(1)	LEXEMES=0:a\\tb	ERRN=0	ERRS=
+ID=LEX-S-06v	SRC="a\\vb"	TOKS=String(1)[a\vb] Eof(1)	LEXEMES=0:a\\vb	ERRN=0	ERRS=
+ID=LEX-S-06q	SRC="a\\'b"	TOKS=String(1)[a'b] Eof(1)	LEXEMES=0:a\\'b	ERRN=0	ERRS=
+ID=LEX-S-07	SRC="a\\qb"	TOKS=String(1)[a] Eof(1)	LEXEMES=0:a\\qb	ERRN=1	ERRS=line 1: invalid escape character. 
+ID=LEX-S-08	SRC="abc	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unclosed string literal. 
+ID=LEX-S-09	SRC="abc\\	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unclosed string literal. 
+ID=LEX-B-01	SRC=''	TOKS=BinArr(1) Eof(1)	LEXEMES=0:	ERRN=0	ERRS=
+ID=LEX-B-02	SRC='a'	TOKS=BinArr(1) Eof(1)	LEXEMES=0:a	ERRN=0	ERRS=
+ID=LEX-B-03	SRC='a' 'b'	TOKS=BinArr(1) BinArr(1) Eof(1)	LEXEMES=0:a,1:b	ERRN=0	ERRS=
+ID=LEX-B-04	SRC='a\\nb'	TOKS=BinArr(1) Eof(1)	LEXEMES=0:a\\nb	ERRN=0	ERRS=
+ID=LEX-B-05	SRC='a	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unclosed binary array. 
+ID=LEX-B-06	SRC='a\nb'	TOKS=BinArr(1) Eof(2)	LEXEMES=0:a\nb	ERRN=0	ERRS=
+ID=LEX-P-01a	SRC=,	TOKS=Comma(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-01b	SRC=;	TOKS=Semi(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-01c	SRC=(	TOKS=LParen(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-01d	SRC=)	TOKS=RParen(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-01e	SRC=[	TOKS=LBrack(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-01f	SRC=]	TOKS=RBrack(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-01g	SRC={	TOKS=LBrace(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-01h	SRC=}	TOKS=RBrace(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-02a	SRC==	TOKS=Assign(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-02b	SRC=+	TOKS=Add(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-02c	SRC=-	TOKS=Sub(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-02d	SRC=*	TOKS=Mul(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-02e	SRC=/	TOKS=Div(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-02f	SRC=%	TOKS=Mod(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-02g	SRC=^	TOKS=Pow(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-03	SRC===	TOKS=EQ(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-04a	SRC=<=	TOKS=LE(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-04b	SRC=>=	TOKS=GE(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-05	SRC=!=	TOKS=NE(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-06a	SRC=&&	TOKS=And(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-06b	SRC=||	TOKS=Or(1) Eof(1)	LEXEMES=	ERRN=0	ERRS=
+ID=LEX-P-07a	SRC=&	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unknown token. 
+ID=LEX-P-07b	SRC=|	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unknown token. 
+ID=LEX-P-08a	SRC=@	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unknown token. 
+ID=LEX-P-08b	SRC=#	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unknown token. 
+ID=LEX-P-08c	SRC=$	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unknown token. 
+ID=LEX-P-08d	SRC=~	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unknown token. 
+ID=LEX-P-08e	SRC=?	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unknown token. 
+ID=LEX-P-08f	SRC=\\	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unknown token. 
+ID=LEX-P-09	SRC=@@#	TOKS=Invalid(1) Invalid(1) Invalid(1) Eof(1)	LEXEMES=	ERRN=3	ERRS=line 1: unknown token. |line 1: unknown token. |line 1: unknown token. 
+ID=LEX-MIX-01	SRC=let a = 1 + 2.5; // c\n return a;	TOKS=Let(1)[let] Ident(1)[a] Assign(1) Integer(1)[1]=1 Add(1) Float(1)[2.5]=2.5 Semi(1) Return(2)[return] Ident(2)[a] Semi(2) Eof(2)	LEXEMES=3:1,5:2.5	ERRN=0	ERRS=
+ID=LEX-MIX-02	SRC=if a { b[0] = 'x 41'; }	TOKS=If(1)[if] Ident(1)[a] LBrace(1) Ident(1)[b] LBrack(1) Integer(1)[0]=0 RBrack(1) Assign(1) BinArr(1) Semi(1) RBrace(1) Eof(1)	LEXEMES=5:0,8:x 41	ERRN=0	ERRS=

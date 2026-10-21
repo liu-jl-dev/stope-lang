@@ -1,0 +1,18 @@
+# C++ 代码风格：与 VSCode 里 C_Cpp.clang_format_style = "Chromium" 对齐，
+# 只覆盖两条会破坏本仓库内容的规则。说明见 docs/development.md §5。
+#
+# 用法：
+#   clang-format -i src/parser.cpp                 # 就地格式化（按文件来，别整目录扫）
+#   clang-format --dry-run --Werror src/parser.cpp # 只检查
+# 本仓库 .vscode/settings.json 已设 C_Cpp.clang_format_style = "file"，所以 Shift+Alt+F 就用这份。
+BasedOnStyle: Chromium
+IndentWidth: 2
+ColumnLimit: 80
+
+# include 是按依赖顺序（先 ast.hpp 再 parser.hpp）写的，不是字母序。
+# 打开排序会把 core.hpp 里的顺序改掉，看不出真实依赖。
+SortIncludes: Never
+
+# clang-format 按字节算列宽，一个汉字占 3 列。打开注释重排会把中文句子
+# 从中间断开，还会把相邻两行注释并成一行。
+ReflowComments: false

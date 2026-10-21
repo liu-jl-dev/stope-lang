@@ -1,0 +1,86 @@
+BA		ok	[]
+BA	 	ok	[]
+BA	a	ok	[0a]
+BA	ab	ok	[ab]
+BA	b 0100 0001	ok	[04,01]
+BA	b 01000001	ok	[41]
+BA	B 1	ok	[01]
+BA	o 101	ok	[41]
+BA	O 7	ok	[07]
+BA	d 65	ok	[41]
+BA	d 300	ok	[2c]
+BA	D 255 0	ok	[ff,00]
+BA	x 41	ok	[41]
+BA	x ff FF	ok	[ff,ff]
+BA	X 0f	ok	[0f]
+BA	41	ok	[41]
+BA	4_1	ok	[41]
+BA	_41	ok	[41]
+BA	01 02	ok	[01,02]
+BA	  01   02  	ok	[01,02]
+BA	x zz	err	[]
+BA	z	err	[]
+BA	b	ok	[]
+BA	d	ok	[]
+BA	b 2	err	[]
+BA	o 8	err	[]
+BA	0 1	ok	[00,01]
+BA	9999999999999999999999	err	[]
+BA	d 2147483647	ok	[ff]
+BA	d 2147483648	err	[]
+BA	ff	ok	[ff]
+FB	+	1	3
+FB	-	1	2
+FB	*	1	6
+FB	/	1	3.5
+FB	/	1	2
+FB	/	0	?
+FB	idiv	1	3
+FB	%	1	1
+FB	^	1	1024
+FB	^	1	0.5
+FB	+	1	2.5
+FB	+	0	?
+FB	*	0	?
+FB	+	1	2
+FB	+	1	"abcd"
+FB	*	1	"ababab"
+FB	*	1	"ababab"
+FB	*	1	""
+FB	*	0	?
+FB	*	0	?
+FB	+	1	[01,02]
+FB	*	1	[01,01,01]
+FB	+	1	5
+FB	+	1	5
+FB	+	1	Null
+FB	-	1	-5
+FB	-	1	5
+FB	-	1	Null
+FB	*	1	Null
+FB	^	1	Null
+FB	==	1	true
+FB	==	1	false
+FB	!=	1	true
+FB	<	0	?
+FB	==	1	true
+FB	==	0	?
+FB	==	1	true
+FB	==	1	true
+FB	<	1	true
+FB	<	0	?
+FB	<=	1	true
+FB	>	1	true
+FB	>=	1	true
+FB	and	1	false
+FB	or	1	true
+FU	-	1	-1
+FU	-	1	0
+FU	-	1	-5
+FU	-	1	-1.5
+FU	-	0	?
+FU	!	1	true
+FU	!	1	true
+FU	!	1	true
+FU	!	1	false
+FU	!	0	?
