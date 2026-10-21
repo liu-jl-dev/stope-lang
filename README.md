@@ -1,4 +1,4 @@
-# Stope
+# Stope 语言
 
 **Stope** 是一门面向嵌入的小型脚本语言，配套一个内嵌标记语言 **STML**。本仓库存放它的语言标准与参考实现。
 
@@ -53,7 +53,7 @@ STML 是 Stope 项目内嵌的**标记语言**。它的写法像 XML，但规则
 （差别见下面的「特点」）。一份 STML 文档是一棵元素树，元素里可以挂三类"代码段"：
 普通文本、Nevext 脚本、Stope 脚本。
 
-[Nevext](https://github.com/liu-jl-dev/nevext) 是另一门**汇编风格的数据描述语言**，与 Stope 相互独立；STML 只是负责把 Nevext 代码段**原样**切出来交给宿主。可以使用 Nevext 编写配置信息等，甚至用 Nevext 实现“汇编版本”的 Stope 编译器。
+[Nevext](https://github.com/liu-jl-dev/nevext) 是另一门**汇编风格的数据描述语言**，与 Stope 相互独立；STML 只是负责把 Nevext 代码段**原样**切出来交给宿主。可以使用 Nevext 编写配置信息等，甚至可以用 Nevext 实现“汇编版本”的 Stope 编译器。
 
 ```xml
 <stml package="MyPkg">
@@ -138,29 +138,9 @@ stope-lang/
 
 ---
 
-## 构建与测试（C++）
-
-```bash
-cd cpp
-cmake -B build -G "MinGW Makefiles"
-cmake --build build
-ctest --test-dir build
-./build/demo01.exe
-```
-
-只需要 CMake 和一个支持 C++20 的编译器。两个坑：
-
-- 删过 `build/` 后**必须**显式写 `-G "MinGW Makefiles"`，否则 CMake 会误选 Visual Studio  
-  并报 `No CMAKE_CXX_COMPILER could be found`。
-- **不要加 `-DCMAKE_BUILD_TYPE=Release`**。优化后栈帧变小，8 组 `parser-depth-*`  
-  里有 4 组"应当栈溢出"的用例反而不崩，测试会失败。
-
-更多（含"源码编译失败时 ctest 仍报全绿"这类陷阱）见  
-[cpp/docs/development.md](cpp/docs/development.md)。
-
----
-
-## 嵌入你的程序
+## Quick Start：嵌入你的程序
+详见  
+[cpp/docs/quick-start.md](cpp/docs/quick-start.md)。
 
 四步：编译源码 → 装配虚拟机 → 建立 `State` 并注入依赖 → 执行。
 
@@ -211,8 +191,27 @@ int main() {
 }
 ```
 
-宿主函数怎么注册、入参怎么传、有哪些必踩的坑，见  
-[cpp/docs/quick-start.md](cpp/docs/quick-start.md)。
+---
+
+## 构建与测试（C++）
+
+```bash
+cd cpp
+cmake -B build -G "MinGW Makefiles"
+cmake --build build
+ctest --test-dir build
+./build/demo01.exe
+```
+
+只需要 CMake 和一个支持 C++20 的编译器。两个坑：
+
+- 删过 `build/` 后**必须**显式写 `-G "MinGW Makefiles"`，否则 CMake 会误选 Visual Studio  
+  并报 `No CMAKE_CXX_COMPILER could be found`。
+- **不要加 `-DCMAKE_BUILD_TYPE=Release`**。优化后栈帧变小，8 组 `parser-depth-*`  
+  里有 4 组"应当栈溢出"的用例反而不崩，测试会失败。
+
+更多（含"源码编译失败时 ctest 仍报全绿"这类陷阱）见  
+[cpp/docs/development.md](cpp/docs/development.md)。
 
 ---
 
