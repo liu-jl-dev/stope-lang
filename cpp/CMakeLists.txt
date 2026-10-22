@@ -100,6 +100,15 @@ target_link_libraries(test_ast_visitor PRIVATE stope)
 
 add_test(NAME ast_visitor COMMAND test_ast_visitor)
 
+# vm 测试：编译 + 在 BasicVM 上执行 + 比对返回值。
+# BasicVM 不是标准的一部分（只是参考实现），但这组断言锁的是「编译器产物能被
+# 正确执行」—— 2026-10-22 删掉 ReplaceTopValues / GetValueTop 后，栈上不再有
+# Identifier，这个转换靠的就是这套端到端用例来兜底。
+add_executable(test_vm test/test_vm.cpp)
+target_link_libraries(test_vm PRIVATE stope)
+
+add_test(NAME vm COMMAND test_vm)
+
 # 深嵌套探测：test_parser_depth <kind> <depth>
 # 阈值是默认 8 MB 栈下的实测值（g++ 15.2 / MinGW-w64），换编译器或链接选项
 # （-Wl,--stack）会变。崩溃深度由 run_depth.cmake 包装：被信号杀死时 ctest 报

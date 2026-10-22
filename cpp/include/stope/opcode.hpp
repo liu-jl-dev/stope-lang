@@ -10,33 +10,34 @@ enum class Opcode : unsigned short {
   PushFloat,   // 5
   PushString,  // 6
   PushBinArr,  // 7
-  PushId,      // 8
-  Call,        // 9
+  PushValue,   // 8
+  PushId,      // 9
 
-  At,     // 10
-  Pop,    // 11
-  Minus,  // 12
-  Not,    // 13
-  Pow,    // 14
-  Mul,    // 15
-  Div,    // 16
-  IDiv,   // 17
-  Mod,    // 18
-  Add,    // 19
+  Call,   // 10
+  At,     // 11
+  Pop,    // 12
+  Minus,  // 13
+  Not,    // 14
+  Pow,    // 15
+  Mul,    // 16
+  Div,    // 17
+  IDiv,   // 18
+  Mod,    // 19
 
-  Sub,     // 20
-  EQ,      // 21
-  NE,      // 22
-  LT,      // 23
-  LE,      // 24
-  GT,      // 25
-  GE,      // 26
-  If,      // 27
-  GoTo,    // 28
-  GetArg,  // 29
+  Add,   // 20
+  Sub,   // 21
+  EQ,    // 22
+  NE,    // 23
+  LT,    // 24
+  LE,    // 25
+  GT,    // 26
+  GE,    // 27
+  If,    // 28
+  GoTo,  // 29
 
-  ArgNum,  // 30
-  Return,  // 31
-};  // 共 32 个
+  GetArg,  // 30
+  ArgNum,  // 31
+  Return,  // 32
+};  // 共 33 个
 
 }  // namespace Stope

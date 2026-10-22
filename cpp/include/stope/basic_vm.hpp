@@ -231,13 +231,13 @@ struct Arguments {
 constexpr int kOpCount = (int)Opcode::Return + 1;
 inline std::string opcodeName(short op) {
   static const std::string kNames[kOpCount] = {
-      "Assign",    "PushNull",   "PushFalse",  "PushTrue", "PushInt",
-      "PushFloat", "PushString", "PushBinArr", "PushId",   "Call",
-      "At",        "Pop",        "Minus",      "Not",      "Pow",
-      "Mul",       "Div",        "IDiv",       "Mod",      "Add",
-      "Sub",       "EQ",         "NE",         "LT",       "LE",
-      "GT",        "GE",         "If",         "GoTo",     "GetArg",
-      "ArgNum",    "Return",
+      "Assign",    "PushNull",   "PushFalse",  "PushTrue",  "PushInt",
+      "PushFloat", "PushString", "PushBinArr", "PushValue", "PushId",
+      "Call",      "At",         "Pop",        "Minus",     "Not",
+      "Pow",       "Mul",        "Div",        "IDiv",      "Mod",
+      "Add",       "Sub",        "EQ",         "NE",        "LT",
+      "LE",        "GT",         "GE",         "If",        "GoTo",
+      "GetArg",    "ArgNum",     "Return",
   };
   if (op >= 0 && op < kOpCount)
     return kNames[op];
@@ -274,23 +274,8 @@ struct State {
     errors.push_back(std::to_string(i) + ": " + msg);
   }
   // 栈顶下标一律「从栈顶数、1 起算」：AtTop(1) 就是 stack.back()。
-  // 注意这里不能把循环变量写成 i——那是指令指针。
+  // 注意这里不能把循环变量写成 i——那是指针。
   Value& AtTop(int i) { return stack[stack.size() - i]; }
-  void ReplaceTopValues(int num) {
-    for (int k = 0; k < num; k++) {
-      Value& v = stack[stack.size() - 1 - k];
-      if (v.type == Value::Type::Identifier) {
-        Value::Copy(*alloc, variables[v.data.index], v);
-      }
-    }
-  }
-  Value& GetValueTop(int i) {
-    Value& v = stack[stack.size() - i];
-    if (v.type == Value::Type::Identifier) {
-      Value::Copy(*alloc, variables[v.data.index], v);
-    }
-    return v;
-  }
   void Pop() {
     stack.back().Clear2(*alloc);
     stack.pop_back();
@@ -311,6 +296,24 @@ struct State {
     stack.back().type = Value::Type::Float;
     stack.back().data.floating = val;
   }
+  void ClearStack() {
+    for (auto& v : stack) {
+      v.Clear2(*alloc);
+    }
+    stack.clear();
+    returns = {};
+  }
+  void ClearVariables() {
+    for (auto& v : variables) {
+      v.Clear2(*alloc);
+    }
+    variables.clear();
+  }
+  void Clear() {
+    ClearStack();
+    ClearVariables();
+  }
+  ~State() { Clear(); }
 };
 
 struct API {
@@ -321,11 +324,11 @@ struct API {
       return;
     }
     if (s.AtTop(2).type != Value::Type::Identifier) {
-      s.Error("'Assign' can only assign to a variable. ");
+      s.Error("no implement for value type. ");
       return;
     }
     unsigned vIndex = s.AtTop(2).data.index;
-    Value& val = s.GetValueTop(1);
+    Value& val = s.stack.back();
     Value::Move(*s.alloc, val, s.variables[vIndex]);
     s.PopN(2);
   }
@@ -378,11 +381,17 @@ struct API {
     ++s.i;
     val.data.index = s.program->opcodes[s.i];
   }
+  static void opPushValue(API& a, State& s) {
+    ++s.i;
+    unsigned index = s.program->opcodes[s.i];
+    s.stack.emplace_back();
+    Value& val = s.stack.back();
+    Value::Copy(*s.alloc, s.variables[index], val);
+  }
   static void opCall(API& a, State& s) {
     // 不检查 Stack Underflow，因为在编译期检查。
     ++s.i;
     unsigned argNum = s.program->opcodes[s.i];
-    s.ReplaceTopValues(argNum + 1);
     if (s.AtTop(argNum + 1).type != Value::Type::HostFunction) {
       s.Error("\"Call\" can only call a function. ");
     }
@@ -399,8 +408,8 @@ struct API {
       s.Error("no implement for key num != 1. ");
       return;
     }
-    Value& container = s.GetValueTop(2);
-    Value& key = s.GetValueTop(1);
+    Value& container = s.AtTop(2);
+    Value& key = s.AtTop(1);
     if (key.type != Value::Type::Integer) {
       s.Error("index must be integer. ");
       return;
@@ -430,7 +439,6 @@ struct API {
   }
   static void opPop(API& a, State& s) { s.Pop(); }
   static void opMinus(API& a, State& s) {
-    s.ReplaceTopValues(1);
     Value& val = s.stack.back();
     if (val.type == Value::Type::Integer) {  // 回绕，不检查溢出
       val.data.integer =
@@ -442,7 +450,6 @@ struct API {
     }
   }
   static void opNot(API& a, State& s) {
-    s.ReplaceTopValues(1);
     Value& val = s.stack.back();
     if (val.type == Value::Type::Null) {
       val.type = Value::Type::Integer;
@@ -458,7 +465,6 @@ struct API {
     }
   }
   static void opPow(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     if (!checkArith(s, "Pow", left, right))
@@ -559,7 +565,6 @@ struct API {
     Value::ShallowCopy(*s.alloc, result, s.stack.back());
   }
   static void opMul(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     if (left.type == Value::Type::Null || right.type == Value::Type::Null) {
@@ -627,7 +632,6 @@ struct API {
     storeBinary(s, result);
   }
   static void opDiv(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     if (!checkArith(s, "Div", left, right) ||
@@ -653,7 +657,6 @@ struct API {
     storeBinary(s, result);
   }
   static void opIDiv(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     if (!checkArith(s, "IDiv", left, right) ||
@@ -672,7 +675,6 @@ struct API {
     storeBinary(s, result);
   }
   static void opMod(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     if (!checkArith(s, "Mod", left, right) ||
@@ -690,7 +692,6 @@ struct API {
     storeBinary(s, result);
   }
   static void opAdd(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     Value result;
@@ -749,7 +750,6 @@ struct API {
     storeBinary(s, result);
   }
   static void opSub(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     if (!checkArith(s, "Sub", left, right))
@@ -837,7 +837,6 @@ struct API {
     return lessThan(s, right, left);
   }
   static void opEQ(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     Value result;
@@ -848,7 +847,6 @@ struct API {
     Value::ShallowCopy(*s.alloc, result, s.stack.back());
   }
   static void opNE(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     Value result;
@@ -859,7 +857,6 @@ struct API {
     Value::ShallowCopy(*s.alloc, result, s.stack.back());
   }
   static void opLT(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     Value result;
@@ -870,7 +867,6 @@ struct API {
     Value::ShallowCopy(*s.alloc, result, s.stack.back());
   }
   static void opLE(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     Value result;
@@ -881,7 +877,6 @@ struct API {
     Value::ShallowCopy(*s.alloc, result, s.stack.back());
   }
   static void opGT(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     Value result;
@@ -892,7 +887,6 @@ struct API {
     Value::ShallowCopy(*s.alloc, result, s.stack.back());
   }
   static void opGE(API& a, State& s) {
-    s.ReplaceTopValues(2);
     Value& left = s.AtTop(2);
     Value& right = s.stack.back();
     Value result;
@@ -918,7 +912,6 @@ struct API {
     return true;
   }
   static void opIf(API& a, State& s) {
-    s.ReplaceTopValues(1);
     Value& cond = s.stack.back();
     const bool yes = truely(s, cond);
     s.Pop();  // 条件用完即弹，不再留在栈上
@@ -937,7 +930,6 @@ struct API {
       s.Error("no args. ");
       return;
     }
-    s.ReplaceTopValues(1);
     Value result;
     s.args->at(s, s.stack.back(), result);
     Value::Move(*s.alloc, result, s.stack.back());
@@ -952,21 +944,20 @@ struct API {
   static void opReturn(API& a, State& s) {
     ++s.i;
     unsigned short num = s.program->opcodes[s.i];
-    s.ReplaceTopValues(num);
     s.returns = std::span<Value>(s.stack.data() + s.stack.size() - num, num);
     s.i = s.program->opcodes.size();
   }
   static inline const std::array<OpFunc, kOpCount> opFuncs{
-      opAssign,    opPushNull,   opPushFalse,  opPushTrue, opPushInt,
-      opPushFloat, opPushString, opPushBinArr, opPushId,   opCall,
+      opAssign,    opPushNull,   opPushFalse,  opPushTrue,  opPushInt,
+      opPushFloat, opPushString, opPushBinArr, opPushValue, opPushId,
 
-      opAt,        opPop,        opMinus,      opNot,      opPow,
-      opMul,       opDiv,        opIDiv,       opMod,      opAdd,
+      opCall,      opAt,         opPop,        opMinus,     opNot,
+      opPow,       opMul,        opDiv,        opIDiv,      opMod,
 
-      opSub,       opEQ,         opNE,         opLT,       opLE,
-      opGT,        opGE,         opIf,         opGoTo,     opGetArg,
+      opAdd,       opSub,        opEQ,         opNE,        opLT,
+      opLE,        opGT,         opGE,         opIf,        opGoTo,
 
-      opArgNum,    opReturn,
+      opGetArg,    opArgNum,     opReturn,
   };
 };
 

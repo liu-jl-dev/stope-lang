@@ -19,7 +19,7 @@
 | 头文件 | `include/stope/` 19 个，只放声明；自引用一律 `#include <stope/xxx.hpp>` |
 | 编译单元 | `src/` 9 个 `*.cpp`：`ast` `ast_visitor` `compiler` `expr_optim` `lexer` `parse_binarr` `parser` `stml_lexer` `stml_parser` |
 | 产物 | `add_library(stope STATIC ...)` → `build/libstope.a` |
-| 测试 | ctest **13/13**：`lexer` `parser` `compiler` `ast_visitor` `stml` 五个目标 + 8 组 `parser-depth-*` |
+| 测试 | ctest **14/14**：`lexer` `parser` `compiler` `ast_visitor` `stml` `vm` 六个目标 + 8 组 `parser-depth-*` |
 | 示例 | `demo/01-quick-start.cpp` → 目标 `demo01`；`demo/02-custom-opcode.cpp` → `demo02`（都未接 ctest） |
 | 依赖 | **零第三方**。C++20 |
 

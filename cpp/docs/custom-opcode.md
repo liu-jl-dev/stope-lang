@@ -19,24 +19,24 @@
 ## 0. 先摆正位置：它是**宿主扩展**，不是语言特性
 
 Stope 只规定三件事：语言、STML、编译器产物 `Program` 的编码（见仓库根 `README.md`）。
-指令集里内置的 32 条（`include/stope/opcode.hpp`，编号 0…31）是标准的一部分；
-**从 32 起一个编号都没有被占用**，全部留给宿主。
+指令集里内置的 **33** 条（`include/stope/opcode.hpp`，编号 0…32）是标准的一部分；
+**从 33 起一个编号都没有被占用**，全部留给宿主。
 
 于是加指令这件事只发生在你的 C++ 程序里，Stope 源码不需要任何新语法：
 
 ```
-CustomOpcodeConfig： "my:add" -> #32，2 参
+CustomOpcodeConfig： "my:add" -> #33，2 参
         │
         ├── Lexer     名字命中注册表 → TokenType::Custom
         ├── Parser    Custom token → AST::CustomOpcodeExpr
         └── Compiler  查编号与参数个数 → 写进 Program
 
 Stope 源码：my:add(x, 4);      和普通函数调用长得一样，只靠名字区分
-产物 Program：…… PushId 0，PushInt 1，32，Pop ……
+产物 Program：…… PushValue 0，PushInt 1，33，Pop ……
 ```
 
-最后一行是关键：`Program` 里只剩下 **`32`** 这个编号 —— 它什么含义、谁来执行，全由宿主
-决定。这正是本 demo 只编译不运行的原因（`BasicVM` 只实现了 32 条内置指令）。
+最后一行是关键：`Program` 里只剩下 **`33`** 这个编号 —— 它什么含义、谁来执行，全由宿主
+决定。这正是本 demo 只编译不运行的原因（`BasicVM` 只实现了 33 条内置指令）。
 
 > **一句话**：内置指令是「标准说好大家一起实现」的，自定义指令是「你自己定义、
 > 自己执行」的。前者写进 `Program` 的契约，后者写进你的宿主程序。
@@ -90,18 +90,18 @@ config.addCustomOpcode(haltName, kFirstCustomOpcode + 2, 0);  // 定长 0 参
 
 ```
 [1] 登记自定义指令：
-  my:add -> #32（定长 2 参）
-  my:log -> #33（变长）
-  my:halt -> #34（定长 0 参）
+  my:add -> #33（定长 2 参）
+  my:log -> #34（变长）
+  my:halt -> #35（定长 0 参）
 ```
 
 四个要注意的地方：
 
 | 点 | 说明 |
 | --- | --- |
-| **编号起点** | 用 `kFirstCustomOpcode`（定义在 `debug.hpp`，等于 `Opcode::Return + 1` = 32）。编号撞到 0…31 会被当成内置指令，见 §5.3 |
+| **编号起点** | 用 `kFirstCustomOpcode`（定义在 `debug.hpp`，等于 `Opcode::Return + 1` = **33**）。编号撞到 0…32 会被当成内置指令，见 §5.3 |
 | **变长 = `argNum < 0`** | 传 `-1`（默认值）即变长；`isVarArg` 由它推出来，不用自己填 |
-| **形参是非 const 引用** | `addCustomOpcode(std::u16string& name, …)`，所以 `addCustomOpcode(u"my:add", 32, 2)` **编译不过** —— 先声明变量再传 |
+| **形参是非 const 引用** | `addCustomOpcode(std::u16string& name, …)`，所以 `addCustomOpcode(u"my:add", 33, 2)` **编译不过** —— 先声明变量再传 |
 | **返回值** | `Result::Success`；同名重复注册返回 `DuplicateWithBuiltinOpcode`（名字叫 builtin，实际是「重名」，`addCustomOpcode` 目前**不**校验编号范围） |
 
 名字的规则来自词法器：普通标识符或命名空间形式 `a:b`（`^[a-zA-Z_][a-zA-Z0-9_]*(?::…)*$`），
@@ -156,24 +156,24 @@ u16string src = uR"(
 [0]     PushId     0
 [2]     PushInt    0
 [4]     Assign
-[5]     PushId     0
+[5]     PushValue  0
 [7]     PushInt    1
 [9]     my:add
 [10]    Pop
 [11]    PushString 0
-[13]    PushId     0
+[13]    PushValue  0
 [15]    my:log     2
 [17]    Pop
 [18]    my:log     0
 [20]    Pop
 [21]    my:halt
 [22]    Pop
-[23]    PushId     0
+[23]    PushValue  0
 [25]    Return     1
 custom opcodes:
-  my:add     -> 32 (2 args)
-  my:log     -> 33 (vararg)
-  my:halt    -> 34 (0 args)
+  my:add     -> 33 (2 args)
+  my:log     -> 34 (vararg)
+  my:halt    -> 35 (0 args)
 variables:
   ""
 int consts:
@@ -192,12 +192,12 @@ required stack size: 2
 | 指令 | 来自 | 说明 |
 | --- | --- | --- |
 | `[0] PushId 0` `[2] PushInt 0` `[4] Assign` | `let x = 3;` | 变量槽 0；`3` 进 `intConsts[0]` |
-| `[5] PushId 0` `[7] PushInt 1` `[9] my:add` | `my:add(x, 4);` | 参数照常先压栈，**定长指令本身不带操作数**（参数个数在注册时定死） |
+| `[5] PushValue 0` `[7] PushInt 1` `[9] my:add` | `my:add(x, 4);` | `x` 是**读值** → `PushValue`；参数照常先压栈，**定长指令本身不带操作数**（参数个数在注册时定死） |
 | `[10] Pop` | 同上 | 表达式语句丢弃结果 |
-| `[11] PushString 0` `[13] PushId 0` `[15] my:log 2` | `my:log("x =", x);` | 变长 → 紧跟一个 `2` 表示本次调用的实参个数 |
+| `[11] PushString 0` `[13] PushValue 0` `[15] my:log 2` | `my:log("x =", x);` | 变长 → 紧跟一个 `2` 表示本次调用的实参个数 |
 | `[18] my:log 0` | `my:log();` | 0 参也要写 `0`，不是省略 |
 | `[21] my:halt` | `my:halt();` | 定长 0 参 → 不带操作数 |
-| `[23] PushId 0` `[25] Return 1` | `return x;` | — |
+| `[23] PushValue 0` `[25] Return 1` | `return x;` | 读值 → `PushValue` |
 
 栈容量的记账有个细节（`compiler_test_plan.md` CD-3）：自定义指令**没有 callee 入栈**，
 结果仍占 1 格，所以净变化是 `-(n-1)`。定长 2 参的 `my:add` 只多占 1 格，这也是
@@ -247,7 +247,7 @@ compileAndReport(u"my:add(1, 2);", nullptr, plain);  // 不传 config
 ```
 
 ```
-[0]     PushId     0
+[0]     PushValue  0
 [2]     PushInt    0
 [4]     PushInt    1
 [6]     Call       2
@@ -256,7 +256,7 @@ variables:
   "my:add"
 ```
 
-`my:add` 变成了「调用一个名叫 `my:add` 的宿主函数」：callee 先入栈（`PushId 0`），
+`my:add` 变成了「调用一个名叫 `my:add` 的宿主函数」：callee 先入栈（`PushValue 0`），
 `Call` 带实参个数 2。顺带注意 `variables:` 里的 `"my:add"` —— 未声明的标识符会被
 隐式登记进 `Program.exports`，宿主得往这个槽位里放一个函数，否则运行期报错。
 
@@ -302,7 +302,7 @@ warning: custom opcode "my:steal" uses #19, which collides with Add; builtin dec
 本 demo 到此为止 —— 再往下就进入「执行器」的领域，而项目**不规定虚拟机**
 （见 `../../docs/zh-cn/vm-guide.md` 开头）。要做的话，自定义指令只有三条要求：
 
-1. **分派表得认识这些编号。** `BasicVM` 的 `API::opFuncs` 只有 32 项
+1. **分派表得认识这些编号。** `BasicVM` 的 `API::opFuncs` 只有 33 项
    （`kOpCount = Opcode::Return + 1`），`State::Run()` 直接 `opFuncs[opcode]` 下标取 ——
    自定义编号会越界。换成你自己的执行器时，分派要么做成 `switch`，要么把表扩到最大编号。
 2. **栈效果是 `[a₁ … aₙ] → [ret]`。** 参数已经按从左到右压好了，结果占 1 格；
@@ -358,7 +358,7 @@ int main() {
 [4]     my:emit    2
 [6]     Pop
 custom opcodes:
-  my:emit    -> 32 (vararg)
+  my:emit    -> 33 (vararg)
 variables:
 
 int consts:
@@ -393,8 +393,8 @@ g++ -std=c++20 -Iinclude sk.cpp build/libstope.a -o sk.exe
 | `expected 2 args, but got 1` | 定长指令的 `argNum` 与实际调用不符 |
 | 反汇编里出现 `Custom40` | `DumpProgram` 没传 config |
 | 反汇编从某条变长指令开始整段错位 | 同上：参数个数被当成了下一条指令 |
-| `addCustomOpcode(u"x", 32, 2)` 编译不过 | 形参是 `std::u16string&`，先声明变量再传 |
-| 程序跑起来越界/崩 | 执行器不认识这个编号：`BasicVM` 只有 32 项 |
+| `addCustomOpcode(u"x", 33, 2)` 编译不过 | 形参是 `std::u16string&`，先声明变量再传 |
+| 程序跑起来越界/崩 | 执行器不认识这个编号：`BasicVM` 只有 33 项 |
 
 ---
 

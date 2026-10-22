@@ -18,7 +18,7 @@
 ```cpp
 Allocator          字符串 / BinArr 的 refcount 句柄池
 ProgramConstants   把 Program 的常量提前装进 Allocator
-API                32 条内置指令的实现表（opFuncs）
+API                33 条内置指令的实现表（opFuncs）
 Arguments          宿主向脚本提供 argc / args[i] 的接口
 Value              栈上的值（句柄式）
 State              一次执行的全部状态
@@ -89,12 +89,16 @@ Value(Value&& other) noexcept : type(other.type), data(other.data) {
 ## 3. 栈与变量
 
 - **栈顶下标一律「从栈顶数、1 起算」**：`AtTop(1)` 就是 `stack.back()`。
-  `GetValueTop(i)` 额外做一件事——若栈顶是 `Identifier`，先把它**解引用**成真实值。
-- **`ReplaceTopValues(n)`** 把栈顶 `n` 个 `Identifier` 就地解引用，供 `Assign` / 二元运算使用。
+- **栈上不放 `Identifier`。** 编译器保证 `PushValue` 压的是解引用后的值，
+  `PushId` 只在紧邻 `Assign` 的左侧出现（`let` 的目标、赋值语句的裸标识符左值）。
+  所以执行指令时直接读栈顶即可，不需要任何「解引用兜底」。
+  > 早期版本有 `ReplaceTopValues(n)` / `GetValueTop(i)` 两个辅助函数，在每个指令里
+  > 把 `Identifier` 就地换成真实值。2026-10-22 拆出 `PushValue` 之后这类栈内容不再
+  > 产生，两个函数已删除。**不要再加回来** —— 它们只是掩盖编译器的产物错误。
 - `Pop()` / `PopN(n)` 在移除前**必须先 `Clear2`**，否则句柄泄漏。
 
 > 循环变量**绝不能写成 `i`** —— `i` 是 `State` 的指令指针。曾因把 `for (int k…)` 写成
-> `for (i…)`，`ReplaceTopValues` 每次把指令指针归零，`Run()` 直接死循环。
+> `for (i…)`，循环把指令指针归零，`Run()` 直接死循环。
 
 ---
 

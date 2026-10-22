@@ -168,24 +168,7 @@ void Compiler::onVisitLetStmt(AST::LetStmt* s) {
   BlockScope* bs = topBlockScope();
   if (bs == nullptr)
     return;
-  if (s->hasAssign) {  // let a = expr; —— 只有一个标识符
-    if (s->idents.empty())
-      return;
-    const std::u16string& name = s->idents[0];
-    if (bs->idMap.find(name) != bs->idMap.end()) {
-      error(s->line, "duplicate declaration of '" + narrowAscii(name) + "'. ");
-      return;
-    }
-    // 不要 Visit 标识符本身（那会生成 PushId 取值），这里是要绑定到新变量
-    int idx = varAlloc.newVar();
-    bs->idMap[name] = idx;
-    emitOp(Opcode::PushId);
-    emitIndex(idx);
-    stackSize.inc();
-    Visit(s->expr.get());
-    emitOp(Opcode::Assign);
-    stackSize.dec(2);
-  } else {
+  if (!s->hasAssign) {
     for (const auto& name : s->idents) {
       if (bs->idMap.find(name) != bs->idMap.end()) {
         error(s->line,
@@ -194,7 +177,25 @@ void Compiler::onVisitLetStmt(AST::LetStmt* s) {
       }
       bs->idMap[name] = varAlloc.newVar();
     }
+    return;
   }
+  if (s->idents.empty())
+    return;
+  // 一个标识符，赋值
+  const std::u16string& name = s->idents[0];
+  if (bs->idMap.find(name) != bs->idMap.end()) {
+    error(s->line, "duplicate declaration of '" + narrowAscii(name) + "'. ");
+    return;
+  }
+  // 不要 Visit 标识符本身（那会生成 PushId 取值），这里是要绑定到新变量
+  int idx = varAlloc.newVar();
+  bs->idMap[name] = idx;
+  emitOp(Opcode::PushId);
+  emitIndex(idx);
+  stackSize.inc();
+  Visit(s->expr.get());
+  emitOp(Opcode::Assign);
+  stackSize.dec(2);
 }
 
 void Compiler::onVisitReturnStmt(AST::ReturnStmt* s) {
@@ -281,7 +282,22 @@ void Compiler::onVisitWhileStmt(AST::WhileStmt* s) {
 }
 
 void Compiler::onVisitAssignStmt(AST::AssignStmt* s) {
-  Visit(s->leftExpr.get());  // 左值必须是 PushId / At 之类能接赋值的位置
+  if (s->leftExpr->type == AST::NodeType::IdentExpr) {
+    AST::IdentExpr& e = *static_cast<AST::IdentExpr*>(s->leftExpr.get());
+    BlockScope* host = findIdentHost(e.ident);
+    int idx = 0;
+    if (host != nullptr) {
+      idx = host->idMap[e.ident];
+    } else {  // 未声明，当作 export 变量，登记到文件作用域。
+      declareExported(e.ident, varAlloc.newUniqueVar(e.ident));
+      idx = fileScope()->idMap[e.ident];
+    }
+    emitOp(Opcode::PushId);  // 压的是变量本身，不是值，否则无法赋值
+    emitIndex(idx);
+    stackSize.inc();
+  } else {  // 可能是使用者设计的数组元素引用、对象成员引用等。压入值。
+    Visit(s->leftExpr.get());
+  }
   Visit(s->rightExpr.get());
   emitOp(Opcode::Assign);
   stackSize.dec(2);
@@ -346,13 +362,11 @@ void Compiler::onVisitIdentExpr(AST::IdentExpr* e) {
   int idx = 0;
   if (host != nullptr) {
     idx = host->idMap[e->ident];
-  } else {
-    // 未声明就使用：当作外部变量，登记到文件作用域。
-    // 名字非空 → 会出现在 Program.exports 里（与参考实现一致）。
+  } else {  // 未声明，当作 export 变量，登记到文件作用域。
     declareExported(e->ident, varAlloc.newUniqueVar(e->ident));
     idx = fileScope()->idMap[e->ident];
   }
-  emitOp(Opcode::PushId);  // 压的是变量本身，不是值，否则无法赋值
+  emitOp(Opcode::PushValue);
   emitIndex(idx);
   stackSize.inc();
 }
@@ -467,8 +481,8 @@ void Compiler::onVisitCustomOpcodeExpr(AST::CustomOpcodeExpr* e) {
   if (customOpcodeConfig == nullptr ||
       customOpcodeConfig->opcodes.find(e->opcodeName) ==
           customOpcodeConfig->opcodes.end()) {
-    error(e->line, "undefined custom opcode \"" +
-                       narrowAscii(e->opcodeName) + "\". ");
+    error(e->line,
+          "undefined custom opcode \"" + narrowAscii(e->opcodeName) + "\". ");
     return;
   }
   const CustomOpcode& info = customOpcodeConfig->opcodes.at(e->opcodeName);

@@ -3,9 +3,13 @@
 - 被测对象：`cpp/include/stope/compiler.hpp` — `Stope::Compiler`（2026-10-18 起 `public` 继承 `ASTVisitor`，
   同目录的基类 `ast_visitor.hpp` 的测试在 `test_ast_visitor.cpp`；另外依赖 `scope_context.hpp`，
   AST 侧依赖 `ast.hpp`、`opcode.hpp`、`program.hpp`、`custom_opcode.hpp`）
-- 计划版本：v1.2（2026-10-18）：**全部测试落地并全绿** ——
-  53 个用例（C-01…C-52 + C-37b）/ 98 断言 / 0 失败，Opcode 覆盖 32/32；
-  基类另有 `test_ast_visitor` 的 V 组 36 断言 / 0 失败；`ctest` **12/12**。
+- 计划版本：v1.3（2026-10-22）：**全部测试落地并全绿** ——
+  53 个用例（C-01…C-52 + C-37b）/ 98 断言 / 0 失败，Opcode 覆盖 **33/33**；
+  基类另有 `test_ast_visitor` 的 V 组 36 断言 / 0 失败；
+  另有 `test_vm` 的 VM 组 131 断言 / 0 失败；`ctest` **14/14**。
+  - v1.3 的变化只有一处：`Opcode` 新增 `PushValue`（编号 8），读变量与「当赋值
+    目标」分成两条指令，见 §2.1 末尾。用例数与断言数不变，只是期望串里的读值位置
+    由 `PushId` 改成 `PushValue`，覆盖口径 32 → 33。
 - 实测环境：g++ (MinGW-w64 x86_64-win32-seh) 15.2.0，`-std=c++20`
 - 参考实现（语义基准）：`gdscript/stope/stope_compiler.gd`（配 `stope.gd` 的 `Inst` / `has_a_param`、
   `stope_asm.gd` 的收尾）
@@ -20,7 +24,7 @@
 1. 为 `Compiler::Compile(AST::Prog&, Program&)` 建立回归基线：指令字节序、常量池去重、
    变量编号与回收、导出表、跳转目标回填、`maxReturnNum`、`requiredStackSize`。
 2. 把「相对参考实现的 4 处偏离」逐条钉住（见 §3），防止后来者"照着参考实现改回去"。
-3. 覆盖 32 个 `Opcode` 的全部产生路径（当前 32/32），未覆盖的要在 README 里点名。
+3. 覆盖 33 个 `Opcode` 的全部产生路径（当前 33/33），未覆盖的要在 README 里点名。
 4. 同时验证**折叠开 / 折叠关**两条端到端路径：`parser.constFolding` 的开关会影响指令长短。
 
 ### 1.2 非目标
@@ -72,7 +76,7 @@ struct Compiler : public ASTVisitor {            // 基类见 ast_visitor.hpp
 | --- | --- | --- |
 | `PushNull` `PushFalse` `PushTrue` `Pop` `Minus` `Not` `Pow` `Mul` `Div` `IDiv` `Mod` `Add` `Sub` `EQ` `NE` `LT` `LE` `GT` `GE` `GetArg` `ArgNum` | 否 | — |
 | `Assign` | 否 | （栈上取 target / value） |
-| `PushInt` `PushFloat` `PushString` `PushBinArr` `PushId` | 是 | 常量池 / 变量表索引 |
+| `PushInt` `PushFloat` `PushString` `PushBinArr` `PushValue` `PushId` | 是 | 常量池 / 变量表索引 |
 | `Call` `At` | 是 | 参数个数 |
 | `If` `GoTo` | 是 | 跳转目标（**code 的元素下标**，不是指令条数） |
 | `Return` | 是 | 返回值个数 |
@@ -81,14 +85,30 @@ struct Compiler : public ASTVisitor {            // 基类见 ast_visitor.hpp
 判断依据是 `gdscript/stope/stope.gd` 的 `Stope.has_a_param`；C++ 多出的 `PushBinArr`
 让后面所有阈值整体后移一位（见测试里的 `opHasParam`）。
 
+#### `PushId` 与 `PushValue` 的分工（2026-10-22 起）
+
+两者都带一个变量表索引，**区别在压的是槽位还是槽位里的值**：
+
+| 指令 | 压什么 | 谁会生成 |
+| --- | --- | --- |
+| `PushId` | 变量槽位**本身**（一个左值）；`Assign` 靠它才能写回去 | ① 有赋值的 `let` 的左侧　② 赋值语句等号左侧**恰好是裸标识符**时 |
+| `PushValue` | 槽位**当前的值**（压栈时就取出来） | 其余一切「读变量」的位置：表达式里的变量、被调用者、被索引的容器、条件、`return` 的值… |
+
+判据写在 `onVisitAssignStmt` 里：`s->leftExpr->type == AST::NodeType::IdentExpr` 才走
+`PushId`，否则 `Visit(s->leftExpr.get())` 走普通读值。所以 `a[0] = 1;` 里的 `a` 是
+`PushValue`（左侧是 `IndexExpr`，不是裸标识符）—— 这就是 C-48 的形状。
+
+> 拆分前所有位置都是 `PushId`，执行器得在每条读值路径上自己解一次引用；拆分后
+> 读值在编译期就定下来了。`basic_vm.hpp` 的 `opPushValue` 就是「从槽位取值压栈」。
+
 ### 2.2 跳转目标怎么数
 
 `If(x)` / `GoTo(x)` 里的 `x` 是 **`opcodes` 数组的下标**，所以必须把每条带操作数指令的
-操作数也算进去。首版手推期望时全组算错（`PushId(0)` 占 2 个 short），排查口径统一为：
+操作数也算进去。首版手推期望时全组算错（`PushValue(0)` 占 2 个 short），排查口径统一为：
 
 ```
-0:PushId 1:(0) 2:If 3:(7) 4:PushTrue 5:GoTo 6:(15)
-7:PushId 8:(1) 9:If 10:(14) 11:PushTrue 12:GoTo 13:(15) 14:PushFalse 15:Pop
+0:PushValue 1:(0) 2:If 3:(7) 4:PushTrue 5:GoTo 6:(15)
+7:PushValue 8:(1) 9:If 10:(14) 11:PushTrue 12:GoTo 13:(15) 14:PushFalse 15:Pop
 ```
 
 写新用例（尤其涉及 `If` / `GoTo` / `while`）时**先画这条下标轴**再写期望串，
@@ -232,9 +252,9 @@ parser 识别 `myop`（把它变成 `Custom` token），编译器这边查不到
 | --- | --- | --- |
 | C-01…C-06 | `1;` `1.5;` `"ab";` `'x 41';` `true;` `null;` | 6 个字面量各自的 Push 指令 + `Pop`；每种都断言 `requiredStackSize == 1` |
 | C-07 | `1; 2; 1; 2.0; 2.0;` | 常量池去重：int 池 2 项、float 池 1 项 |
-| C-08 | `a; b; a;` | 未声明就使用 → `newUniqueVar` 登记到 file scope，出现在 `exports`（`a:0 b:1`） |
-| C-09 | `let a = 1;` | `PushId` + 值 + `Assign`；局部变量不导出 |
-| C-10 | `let a, b; a = 1; b = a;` | 无赋值的多标识符 let 不产生指令 |
+| C-08 | `a; b; a;` | 未声明就使用 → `newUniqueVar` 登记到 file scope，出现在 `exports`（`a:0 b:1`）；三处都是读值 → 全 `PushValue` |
+| C-09 | `let a = 1;` | 等号左侧 → `PushId` + 值 + `Assign`；局部变量不导出 |
+| C-10 | `let a, b; a = 1; b = a;` | 无赋值的多标识符 let 不产生指令；`b = a` 左侧 `PushId`、右侧 `PushValue` |
 | C-11 | `{ let a = 1; } let b = 2;` | 出块后索引进回收堆复用，`variableNum == 1` |
 | C-12 | `export a, b;` | 只登记变量，**不产生任何指令** |
 
@@ -297,7 +317,7 @@ parser 识别 `myop`（把它变成 `Custom` token），编译器这边查不到
 | --- | --- | --- |
 | C-43 | `1 + 2 * 3;`（fold = on） | `PushInt(0) Pop`，且常量池里就是 `7` |
 | C-44 | 同（fold = off） | `PushInt(0) PushInt(1) PushInt(2) Mul Add Pop` |
-| C-45 | `a + 2 * 3;`（fold = on） | 只有含变量的子树保留：`PushId(0) PushInt(0) Add Pop`，常量是 `6` |
+| C-45 | `a + 2 * 3;`（fold = on） | 只有含变量的子树保留：`PushValue(0) PushInt(0) Add Pop`，常量是 `6` |
 
 ### 5.8 C-46…C-52 综合与边界
 
@@ -305,7 +325,7 @@ parser 识别 `myop`（把它变成 `Custom` token），编译器这边查不到
 | --- | --- | --- |
 | C-46 | 一段小程序（export + let + while + args + return） | 端到端：`export main` 占 0 号，`a`/`b` 由 `let` 拿到 1/2，`sum` 拿 3；`variableNum == 4`；指令 34 个字；`stack size >= 3` |
 | C-47 | `f(g(1), 2);` | 嵌套调用峰值 = 3 |
-| C-48 | `a[0] = 1;` | **CD-5**：先 `At(1)` 再 `Assign` |
+| C-48 | `a[0] = 1;` | **CD-5**：先 `At(1)` 再 `Assign`；左侧不是裸标识符 → `a` 走 `PushValue` |
 | C-49 | `{ let a = 1; { let a = 2; } }` | 内层块可遮蔽外层同名变量（不同 BlockScope） |
 | C-50 | `{ let a = 1; let a = 2; }` | 同一作用域内重复声明才报错 |
 | C-51 | `while a { while b { break; } continue; }` | `break` / `continue` 归**最近**的那层 |
@@ -319,16 +339,16 @@ parser 识别 `myop`（把它变成 `Custom` token），编译器这边查不到
 | --- | --- | --- |
 | 用例数 | 53 | — |
 | 断言数 | 98 | 全部通过 |
-| `Opcode` 覆盖 | 32/32 | **必须保持 32/32**。测试里统计见过的 opcode，缺哪个会打印名字 |
+| `Opcode` 覆盖 | 33/33 | **必须保持 33/33**。测试里统计见过的 opcode，缺哪个会打印名字 |
 | `AST::NodeType` 产生路径 | 26 个可编译节点全覆盖 | — |
 | 错误路径 | 7 类 error + 6 类错误信息全覆盖 | — |
-| `ctest` | 12/12 | 全部通过（lexer + parser + compiler + ast_visitor + 8 组深嵌套） |
+| `ctest` | 14/14 | 全部通过（lexer + parser + compiler + stml + ast_visitor + vm + 8 组深嵌套） |
 | `test_ast_visitor` 断言数 | 36 | 全部通过（V 组，锁基类遍历顺序与分发表完整性） |
 
 跑完的尾部输出：
 
 ```
-== Opcode 覆盖: 32/32
+== Opcode 覆盖: 33/33
 == 汇总
    断言总数 98 | 失败 0
 RESULT: PASSED

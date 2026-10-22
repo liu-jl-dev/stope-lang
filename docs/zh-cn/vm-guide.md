@@ -36,7 +36,7 @@
 - [2. 三条执行路线](#2-三条执行路线)
 - [3. 值系统](#3-值系统)
 - [4. 栈、变量槽与「左值」](#4-栈变量槽与左值)
-- [5. 指令语义（32 条 + 自定义）](#5-指令语义32-条--自定义)
+- [5. 指令语义（33 条 + 自定义）](#5-指令语义33-条--自定义)
 - [6. 控制流：If / GoTo](#6-控制流if--goto)
 - [7. 宿主接口](#7-宿主接口)
 - [8. 必须实现的语言语义](#8-必须实现的语言语义)
@@ -139,11 +139,9 @@ true == 1;   // 参考实现：真。因为 true 就是整数 1
 - 槽位号来自编译期分配：`export` 出来的名字在 `exports` 里能查到；`let` 声明的查不到。
 - 未初始化的槽位填 `Null`。
 
-### 4.2 `PushId` 压的是**变量本身**，不是值
+### 4.2 `PushId` 压的是**变量本身**，`PushValue` 压的是**值**
 
-这是设计上最关键的一点。编译器源码里的注释是原话：
-
-> `emitOp(Opcode::PushId);  // 压的是变量本身，不是值，否则无法赋值`
+这是设计上最关键的一点，也是 2026-10-22 拆分两条指令的原因。
 
 因为 `Assign` 不携带操作数 —— 它从栈上取「写到哪里」：
 
@@ -151,39 +149,52 @@ true == 1;   // 参考实现：真。因为 true 就是整数 1
 x = 1;
 ```
 
-编译成 `PushId(槽位) PushInt(常量1) Assign`。如果 `PushId` 压的是值，`Assign`
-就无从知道目标是哪个槽位。
+编译成 `PushId(槽位) PushInt(常量1) Assign`。如果压的是值，`Assign` 就无从知道目标
+是哪个槽位。所以**当赋值目标**时，压进栈的必须是一个「引用」而不是值。
 
-**三种解法，任选：**
+但读变量值的时候恰恰相反 —— 你要是也压引用，执行器就得在每条读值路径上自己解一次引用。
+拆成两条指令，这个判断就挪到了编译期（编译器明确知道自己在左值还是右值位置）：
 
-| 解法 | 做法 | 代价 |
+| 指令 | 压什么 | 谁生成 |
 | --- | --- | --- |
-| ① 延迟求值（参考实现） | 栈上放一个 `Identifier` 标记；读取时求值，作为 `Assign` 目标时取槽位号 | 每次取值都要判断一次类型 |
-| ② 拆成两条指令 | `PushVarRef`（压引用）与 `LoadVar`（压值） | 需要改编译器，产物格式变了 |
-| ③ 编译期区分上下文 | 编译器知道左值位置，直接 emit 一条 `StoreVar(槽位)` | 同样要改编译器 |
+| `PushId` | 变量槽位**本身**（引用 / 左值） | 有赋值的 `let` 左侧；赋值语句等号左侧恰好是裸标识符时 |
+| `PushValue` | 槽位**当前的值**（压栈时就取出来） | 其余一切读变量的位置：表达式、被调用者、被索引的容器、条件、`return` 的值… |
 
-标准只规定 emit `PushId`，所以 **① 是"不动编译器"的唯一方案**。
-参考实现为此提供了一组工具：
+判据在 `compiler.cpp` 的 `onVisitAssignStmt`：只有 `leftExpr` 是 `IdentExpr` 才 emit
+`PushId`，否则 `Visit(leftExpr)` 走普通读值。所以 `a[0] = 1;` 里的 `a` 是 `PushValue`。
 
 ```cpp
-// 把栈顶 num 个 Identifier 就地替换成它指向的值（读语义）
-void ReplaceTopValues(int num);
-// 取栈顶第 i 个并求值（i 从栈顶起算、1 起算：GetValueTop(1) == stack.back()）
-Value& GetValueTop(int i);
+// 编译器里两处 emit 的原话（cpp/src/compiler.cpp）
+emitOp(Opcode::PushId);     // 压的是变量本身，不是值，否则无法赋值
+emitOp(Opcode::PushValue);  // onVisitIdentExpr：读变量，压它的值
 ```
+
+**因此执行器不需要「解引用兜底」。** 编译器保证：
+
+- `PushValue` 压进栈的已经是解引用后的真实值；
+- `PushId` 只出现在**紧邻 `Assign`** 的位置（`let` 的目标、赋值语句的裸标识符左值）。
+
+所以每条指令直接读栈顶就对了，不用判断某个槽里是不是「变量引用」。参考实现早期
+有过 `ReplaceTopValues(n)` / `GetValueTop(i)` 这类辅助函数，在每个指令里就地解引用
+`Identifier`；拆出 `PushValue` 之后它们已从 `basic_vm.hpp` 中**删除**。
+
+> **给你的执行器**：`PushValue` 必须实现，语义就是「从槽位取值压栈」。
+> 不要为了「兼容」而在运算指令里保留解引用分支 —— 那只会掩盖编译器的产物错误，
+> 让真正的 bug 变成静默的数据污染。
 
 ---
 
-## 5. 指令语义（32 条 + 自定义）
+## 5. 指令语义（33 条 + 自定义）
 
-编号由标准钉死（见 [compiler-test-plan.md](compiler-test-plan.md) §2.2）。
+编号由标准钉死（见 [compiler-test-plan.md](compiler-test-plan.md) §2.1）。
 下表写的是**执行器需要实现的语义**；栈效果用 `[…] → […]` 表示，右边是栈顶。
 
 ### 5.1 变量与常量
 
 | 指令 | 操作数 | 栈效果 | 语义 |
 | --- | --- | --- | --- |
-| `PushId` | 槽位号 | `[] → [ref]` | 压入变量的**引用**，见 §4.2 |
+| `PushId` | 槽位号 | `[] → [ref]` | 压入变量的**引用**（左值），见 §4.2 |
+| `PushValue` | 槽位号 | `[] → [v]` | 压入变量的**值**（右值），见 §4.2 |
 | `PushNull` | — | `[] → [v]` | 压 `Null` |
 | `PushFalse` / `PushTrue` | — | `[] → [v]` | 压假 / 真（参考实现压整数 `0` / `1`） |
 | `PushInt` | `intConsts` 下标 | `[] → [v]` | 压整数常量 |
@@ -257,11 +268,11 @@ export x; if x < 3 { x = 1; } else { x = 2; }
 实测反汇编（`DumpProgramNoCustom` 输出，已删去常量池部分）：
 
 ```
-[0]     PushId     0
+[0]     PushValue  0        // x 是读值 → PushValue
 [2]     PushInt    0        // intConsts[0] == 3
 [4]     LT
 [5]     If         14       // 条件为假 → 跳到 14（else 分支）
-[7]     PushId     0
+[7]     PushId     0        // x 是赋值目标 → PushId
 [9]     PushInt    1        // intConsts[1] == 1
 [11]    Assign
 [12]    GoTo       19       // 分支走完，跳出整个 if（19 == 程序末尾）
@@ -277,17 +288,20 @@ let i = 0; while i < 3 { i = i + 1; } return i;
 ```
 
 ```
-[5]     PushId     0
+[0]     PushId     0        // let i = 0 的目标
+[2]     PushInt    0
+[4]     Assign
+[5]     PushValue  0        // 条件里的 i 是读值
 [7]     PushInt    1
 [9]     LT
 [10]    If         22       // 假 → 跳到 22（循环之后）
-[12]    PushId     0
-[14]    PushId     0
+[12]    PushId     0        // i 是赋值目标
+[14]    PushValue  0        // 右侧的 i 是读值
 [16]    PushInt    2
 [18]    Add
 [19]    Assign
 [20]    GoTo       5        // 回到条件
-[22]    PushId     0
+[22]    PushValue  0        // return i
 [24]    Return     1
 ```
 
@@ -523,8 +537,8 @@ struct Arguments {
    症状是 `Assign` 报 "can only assign to a variable"（它从 `AtTop(2)` 取到的是陈旧值）。
 3. **`GoTo` 读错操作数** —— 操作数在指令自己后面；到底读 `i` 还是 `i+1`
    取决于你的指令指针在哪一步推进（§6.3）。
-4. **循环变量用了指令指针** —— 参考实现里 `State::i` 是指令指针，
-   `ReplaceTopValues` 早期版本把它当循环变量用，直接死循环。
+4. **循环变量用了指令指针** —— 参考实现里 `State::i` 是指针，
+   早期某个辅助函数把 `State::i` 当循环变量用，直接死循环。
 5. **栈顶「从 0 起算」还是「从 1 起算」不统一** —— 参考实现统一用「从栈顶数、1 起算」
    （`AtTop(1) == stack.back()`）。混用会差一格。
 6. **跳转目标等于 `opcodes.size()`** —— 是合法的「结束」，要单独处理。

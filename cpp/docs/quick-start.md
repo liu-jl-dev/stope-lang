@@ -50,7 +50,7 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 cd cpp
 cmake -B build -G "MinGW Makefiles"     # 必须显式指定 generator
 cmake --build build                      # 产出 build/libstope.a 与各测试
-ctest --test-dir build                   # 13/13
+ctest --test-dir build                   # 14/14
 ./build/demo01.exe
 ```
 
@@ -61,7 +61,7 @@ ctest --test-dir build                   # 13/13
 [2]     PushFloat  0
 [4]     Assign
 ...
-[44]    PushId     0
+[44]    PushValue  0
 [46]    Return     1
 variables:
   "" "" "fmt:println"
@@ -177,7 +177,7 @@ BasicVM::API api;
 - **`Allocator`** 持有所有字符串 / BinArr 的 refcount 句柄池。
 - **`ProgramConstants(alloc, program)`** 在构造时就把 `program` 的常量装进 `alloc`，
   所以**必须先有 `alloc`**。
-- **`API`** 持有 32 条内置指令的实现表（`static inline std::array<OpFunc, kOpCount> opFuncs`），
+- **`API`** 持有 33 条内置指令的实现表（`static inline std::array<OpFunc, kOpCount> opFuncs`），
   `State::Run()` 就是 `api->opFuncs[opcode](*api, *this)`。目前没有可替换的余地，
   但 `SetAPI` 是必需的——漏了 `api` 就是空指针。
 

@@ -60,27 +60,37 @@
 > （GDScript 参考实现里的 `int_consts:ConstantManager` 是 Reference 对象，照抄成成员 + 赋值在
 > 其它语言里就变成了真拷贝。）
 
-### 2.2 指令表（32 条，编号必须两侧一致）
+### 2.2 指令表（33 条，编号必须两侧一致）
 
 ```
 0  Assign      1  PushNull    2  PushFalse   3  PushTrue    4  PushInt
-5  PushFloat   6  PushString  7  PushBinArr  8  PushId      9  Call
-10 At          11 Pop         12 Minus       13 Not         14 Pow
-15 Mul         16 Div         17 IDiv        18 Mod         19 Add
-20 Sub         21 EQ          22 NE          23 LT          24 LE
-25 GT          26 GE          27 If          28 GoTo        29 GetArg
-30 ArgNum      31 Return
+5  PushFloat   6  PushString  7  PushBinArr  8  PushValue   9  PushId
+10 Call        11 At          12 Pop         13 Minus       14 Not
+15 Pow         16 Mul         17 Div         18 IDiv        19 Mod
+20 Add         21 Sub         22 EQ          23 NE          24 LT
+25 LE          26 GT          27 GE          28 If          29 GoTo
+30 GetArg      31 ArgNum      32 Return
 ```
 
 **带操作数的**（其余无操作数）：
 
 | 指令 | 操作数 |
 | --- | --- |
-| `PushInt` / `PushFloat` / `PushString` / `PushBinArr` / `PushId` | 常量池或变量表的**索引** |
+| `PushInt` / `PushFloat` / `PushString` / `PushBinArr` / `PushValue` / `PushId` | 常量池或变量表的**索引** |
 | `Call` / `At` | **实参个数**（不含 callee / container） |
 | `If` / `GoTo` | 跳转目标 = **opcodes 的槽位索引**（不是字节偏移） |
 | `Return` | 返回值个数 |
-| 自定义指令 | 值 **> Return（31）**；变长参数时多带一个「实参个数」 |
+| 自定义指令 | 值 **> Return（32）**；变长参数时多带一个「实参个数」 |
+
+> **`PushId` vs `PushValue`**（2026-10-22 引入）：`PushId` 压的是**变量槽位本身**
+> （左值），只有 `let` 的目标和「等号左侧恰好是裸标识符」的赋值目标才会用它；
+> `PushValue` 压的是**变量的值**（右值），其余一切读变量的位置都用它 ——
+> 表达式里的变量、被调用者、被索引的容器、条件、`return` 的值。
+> 详见 `cpp/docs/compiler_test_plan.md` §2.1。
+
+> ⚠ 下表 CM 组（§5）记录的是 **GDScript 参考实现**的产物，那边**没有** `PushValue`
+> 这条指令，所以 CM 组的期望串里读变量仍是 `PushId`。C++ 侧的对应期望见
+> `cpp/docs/compiler_test_plan.md` §5，两边编号相同、只用词不同。
 
 ### 2.3 Program 序列化格式（跨实现比较用）
 

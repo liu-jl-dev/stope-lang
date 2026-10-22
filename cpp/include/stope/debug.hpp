@@ -34,13 +34,13 @@ namespace Debug {
 // 这张表按行手工对齐是为了让「第几个」看得清，别让格式化器揉成一团。
 // clang-format off
 inline constexpr const char* kBuiltinOpcodeNames[] = {
-    "Assign",    "PushNull", "PushFalse", "PushTrue",  "PushInt",
-    "PushFloat", "PushString", "PushBinArr", "PushId", "Call",
-    "At",        "Pop",      "Minus",     "Not",       "Pow",
-    "Mul",       "Div",      "IDiv",      "Mod",       "Add",
-    "Sub",       "EQ",       "NE",        "LT",        "LE",
-    "GT",        "GE",       "If",        "GoTo",      "GetArg",
-    "ArgNum",    "Return",
+    "Assign",    "PushNull",   "PushFalse",  "PushTrue",   "PushInt",
+    "PushFloat", "PushString", "PushBinArr", "PushValue",  "PushId",
+    "Call",      "At",         "Pop",        "Minus",      "Not",
+    "Pow",       "Mul",        "Div",        "IDiv",       "Mod",
+    "Add",       "Sub",        "EQ",         "NE",         "LT",
+    "LE",        "GT",         "GE",         "If",         "GoTo",
+    "GetArg",    "ArgNum",     "Return",
 };
 // clang-format on
 inline constexpr int kBuiltinOpcodeCount = static_cast<int>(

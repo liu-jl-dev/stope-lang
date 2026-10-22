@@ -44,6 +44,8 @@ inline const char* opName(short raw) {
       return "PushString";
     case Opcode::PushBinArr:
       return "PushBinArr";
+    case Opcode::PushValue:
+      return "PushValue";
     case Opcode::PushId:
       return "PushId";
     case Opcode::Call:
@@ -248,7 +250,8 @@ void runCompilerTests() {
   }
   {  // C-08 未声明就使用的标识符 → file scope 的唯一变量，进 exports
     auto r = compileSrc(u"a; b; a;");
-    expectCode(r, "PushId(0) Pop PushId(1) Pop PushId(0) Pop", "C-08");
+    // 三处都是「读值」→ PushValue（PushId 只留给 let / 赋值的等号左侧）
+    expectCode(r, "PushValue(0) Pop PushValue(1) Pop PushValue(0) Pop", "C-08");
     check(r.prog.variableNum == 2, "C-08", "variable num == 2",
           "got=" + std::to_string(r.prog.variableNum));
     check(dumpExportNames(r.prog) == "a:0 b:1", "C-08", "exports == a:0 b:1",
@@ -262,7 +265,8 @@ void runCompilerTests() {
   }
   {  // C-10 let 无赋值可以有多个标识符
     auto r = compileSrc(u"let a, b; a = 1; b = a;");
-    expectCode(r, "PushId(0) PushInt(0) Assign PushId(1) PushId(0) Assign",
+    // a = 1：等号左侧是裸标识符 → PushId；b = a：左侧 b 是 PushId，右侧 a 是读值
+    expectCode(r, "PushId(0) PushInt(0) Assign PushId(1) PushValue(0) Assign",
                "C-10");
     check(r.prog.variableNum == 2, "C-10", "variable num == 2", "");
   }
@@ -287,17 +291,18 @@ void runCompilerTests() {
       std::u16string src;
       const char* want;
     } cases[] = {
-        {"C-13", u"a + b;", "PushId(0) PushId(1) Add Pop"},
-        {"C-14", u"a - b;", "PushId(0) PushId(1) Sub Pop"},  // 二元减必须是 Sub
+        {"C-13", u"a + b;", "PushValue(0) PushValue(1) Add Pop"},
+        {"C-14", u"a - b;",
+         "PushValue(0) PushValue(1) Sub Pop"},  // 二元减必须是 Sub
         // `^` 的优先级高于 `* / idiv %`（common.hpp 的 OpPrecedence），
         // 所以这里是 ((a*b)/c%d) idiv (e^f)，不是 ((((a*b)/c)%d) idiv e)^f。
         {"C-15", u"a * b / c % d idiv e ^ f;",
-         "PushId(0) PushId(1) Mul PushId(2) Div PushId(3) Mod PushId(4) "
-         "PushId(5) Pow IDiv Pop"},
+         "PushValue(0) PushValue(1) Mul PushValue(2) Div PushValue(3) Mod "
+         "PushValue(4) PushValue(5) Pow IDiv Pop"},
         {"C-16", u"a == b; a != b; a < b; a <= b; a > b; a >= b;",
-         "PushId(0) PushId(1) EQ Pop PushId(0) PushId(1) NE Pop "
-         "PushId(0) PushId(1) LT Pop PushId(0) PushId(1) LE Pop "
-         "PushId(0) PushId(1) GT Pop PushId(0) PushId(1) GE Pop"},
+         "PushValue(0) PushValue(1) EQ Pop PushValue(0) PushValue(1) NE Pop "
+         "PushValue(0) PushValue(1) LT Pop PushValue(0) PushValue(1) LE Pop "
+         "PushValue(0) PushValue(1) GT Pop PushValue(0) PushValue(1) GE Pop"},
     };
     for (const auto& c : cases) {
       auto r = compileSrc(c.src);
@@ -307,17 +312,18 @@ void runCompilerTests() {
   }
   {  // C-17 一元：- 取 Minus，! / not 取 Not
     auto r = compileSrc(u"-a; !b; not c;");
-    expectCode(r, "PushId(0) Minus Pop PushId(1) Not Pop PushId(2) Not Pop",
-               "C-17");
+    expectCode(
+        r, "PushValue(0) Minus Pop PushValue(1) Not Pop PushValue(2) Not Pop",
+        "C-17");
   }
   {  // C-18 短路或：两条路径都只留 1 个结果。
-     // 索引要把操作数算进去：PushId(0) 占 2 个 short，If(x) 占 2 个。
-     //   0:PushId 1:(0) 2:If 3:(7) 4:PushTrue 5:GoTo 6:(15)
-    //   7:PushId 8:(1) 9:If 10:(14) 11:PushTrue 12:GoTo 13:(15) 14:PushFalse 15:Pop
+     // 索引要把操作数算进去：PushValue(0) 占 2 个 short，If(x) 占 2 个。
+     //   0:PushValue 1:(0) 2:If 3:(7) 4:PushTrue 5:GoTo 6:(15)
+    //   7:PushValue 8:(1) 9:If 10:(14) 11:PushTrue 12:GoTo 13:(15) 14:PushFalse 15:Pop
     auto r = compileSrc(u"a or b;");
     expectCode(r,
-               "PushId(0) If(7) PushTrue GoTo(15) PushId(1) If(14) PushTrue "
-               "GoTo(15) PushFalse Pop",
+               "PushValue(0) If(7) PushTrue GoTo(15) PushValue(1) If(14) "
+               "PushTrue GoTo(15) PushFalse Pop",
                "C-18");
     // 分支必须「汇合」着记账，否则会算成各分支深度之和（曾算出 3）
     check(r.prog.requiredStackSize == 1, "C-18", "stack size == 1",
@@ -325,9 +331,10 @@ void runCompilerTests() {
   }
   {  // C-19 短路且
     auto r = compileSrc(u"a and b;");
-    expectCode(
-        r, "PushId(0) If(11) PushId(1) If(11) PushTrue GoTo(12) PushFalse Pop",
-        "C-19");
+    expectCode(r,
+               "PushValue(0) If(11) PushValue(1) If(11) PushTrue GoTo(12) "
+               "PushFalse Pop",
+               "C-19");
     check(r.prog.requiredStackSize == 1, "C-19", "stack size == 1",
           "got=" + std::to_string(r.prog.requiredStackSize));
   }
@@ -339,12 +346,13 @@ void runCompilerTests() {
       std::u16string src;
       const char* want;
     } cases[] = {
-        {"C-20", u"f();", "PushId(0) Call(0) Pop"},
-        {"C-21", u"f(1, 2);", "PushId(0) PushInt(0) PushInt(1) Call(2) Pop"},
-        {"C-22", u"a[];", "PushId(0) At(0) Pop"},
-        {"C-23", u"a[1, 2];", "PushId(0) PushInt(0) PushInt(1) At(2) Pop"},
+        // 被调用者 / 被索引的容器同样是「读值」→ PushValue
+        {"C-20", u"f();", "PushValue(0) Call(0) Pop"},
+        {"C-21", u"f(1, 2);", "PushValue(0) PushInt(0) PushInt(1) Call(2) Pop"},
+        {"C-22", u"a[];", "PushValue(0) At(0) Pop"},
+        {"C-23", u"a[1, 2];", "PushValue(0) PushInt(0) PushInt(1) At(2) Pop"},
         {"C-24", u"a(b[0]);",
-         "PushId(0) PushId(1) PushInt(0) At(1) Call(1) Pop"},
+         "PushValue(0) PushValue(1) PushInt(0) At(1) Call(1) Pop"},
     };
     for (const auto& c : cases) {
       auto r = compileSrc(c.src);
@@ -371,34 +379,35 @@ void runCompilerTests() {
   // ---------- C-28…C-33 if / while / break / continue ----------
   {  // C-28 if：跳转目标含操作数的 short 一起数
     auto r = compileSrc(u"if a { b; }");
-    expectCode(r, "PushId(0) If(9) PushId(1) Pop GoTo(9)", "C-28");
+    expectCode(r, "PushValue(0) If(9) PushValue(1) Pop GoTo(9)", "C-28");
   }
   {  // C-29 if / elif / else
     auto r = compileSrc(u"if a { b; } elif c { d; } else { e; }");
     expectCode(r,
-               "PushId(0) If(9) PushId(1) Pop GoTo(21) "
-               "PushId(2) If(18) PushId(3) Pop GoTo(21) "
-               "PushId(4) Pop",
+               "PushValue(0) If(9) PushValue(1) Pop GoTo(21) "
+               "PushValue(2) If(18) PushValue(3) Pop GoTo(21) "
+               "PushValue(4) Pop",
                "C-29");
   }
   {  // C-30 while + continue：回到条件开头（索引 0）
     auto r = compileSrc(u"while a { continue; }");
-    expectCode(r, "PushId(0) If(8) GoTo(0) GoTo(0)", "C-30");
+    expectCode(r, "PushValue(0) If(8) GoTo(0) GoTo(0)", "C-30");
   }
   {  // C-31 while + break：跳到循环末尾（索引 8）
     auto r = compileSrc(u"while a { break; }");
-    expectCode(r, "PushId(0) If(8) GoTo(8) GoTo(0)", "C-31");
+    expectCode(r, "PushValue(0) If(8) GoTo(8) GoTo(0)", "C-31");
   }
   {  // C-32 无条件 while：没有条件就不需要回填跳转目标
     // （参考实现这里会把 code[0] 写成 code 长度，见 compiler.hpp 的偏离说明 4）
     auto r = compileSrc(u"while { b; }");
-    expectCode(r, "PushId(0) Pop GoTo(0)", "C-32");
+    expectCode(r, "PushValue(0) Pop GoTo(0)", "C-32");
   }
   {  // C-33 if 分支有独立作用域，出分支后变量索引被回收复用
-     //   a 是未声明就使用的 → file scope 索引 0；块里的 x 与块外的 y 共用索引 1
+     //   a 是未声明就使用的 → file scope 索引 0（读值 → PushValue）；
+     //   块里的 x 与块外的 y 共用索引 1，两处 let 的目标都是 PushId
     auto r = compileSrc(u"if a { let x = 1; } let y = 2;");
     expectCode(r,
-               "PushId(0) If(11) PushId(1) PushInt(0) Assign GoTo(11) "
+               "PushValue(0) If(11) PushId(1) PushInt(0) Assign GoTo(11) "
                "PushId(1) PushInt(1) Assign",
                "C-33");
     check(r.prog.variableNum == 2, "C-33", "variable num == 2",
@@ -441,7 +450,7 @@ void runCompilerTests() {
     }
     {  // C-37b 名字不在 cfg 里时 parser 根本不会产出 Custom token，退化成普通调用
       auto r = compileSrc(u"nope(1);", &cfg);
-      expectCode(r, "PushId(0) PushInt(0) Call(1) Pop", "C-37b", &cfg);
+      expectCode(r, "PushValue(0) PushInt(0) Call(1) Pop", "C-37b", &cfg);
       expectErrCount(r, 0, "C-37b");
     }
   }
@@ -486,7 +495,7 @@ void runCompilerTests() {
   }
   {  // C-45 混合：只有含变量的子树保留
     auto r = compileSrc(u"a + 2 * 3;", nullptr, true);
-    expectCode(r, "PushId(0) PushInt(0) Add Pop", "C-45");
+    expectCode(r, "PushValue(0) PushInt(0) Add Pop", "C-45");
     check(r.prog.intConsts[0] == 6, "C-45", "2*3 folded == 6", "");
   }
 
@@ -505,13 +514,15 @@ void runCompilerTests() {
     //  0..4  let sum = 0       5..10 while a < argc  11..19 sum = sum + args[a]
     //  20..27 a = a + 1        28..29 GoTo 条件开头   30..33 return sum
     // 变量：main=0(export) a=1 b=2 sum=3；常量池 [0, 1]
+    // PushId 只出现在「等号左侧」：let sum 的目标、sum = … 的 sum、a = … 的 a。
+    // 其余出现（条件里的 a、右侧的 sum 与 a、return 的 sum）都是读值 → PushValue。
     expectCode(r,
                "PushId(3) PushInt(0) Assign "
-               "PushId(1) ArgNum LT If(30) "
-               "PushId(3) PushId(3) PushId(1) GetArg Add Assign "
-               "PushId(1) PushId(1) PushInt(1) Add Assign "
+               "PushValue(1) ArgNum LT If(30) "
+               "PushId(3) PushValue(3) PushValue(1) GetArg Add Assign "
+               "PushId(1) PushValue(1) PushInt(1) Add Assign "
                "GoTo(5) "
-               "PushId(3) Return(1)",
+               "PushValue(3) Return(1)",
                "C-46");
     check(dumpExportNames(r.prog) == "main:0", "C-46", "exports == main:0",
           "got=[" + dumpExportNames(r.prog) + "]");
@@ -525,14 +536,16 @@ void runCompilerTests() {
   {  // C-47 嵌套调用：峰值出现在「最内层调用 + 外层已压栈」的那一刻
     auto r = compileSrc(u"f(g(1), 2);");
     expectCode(r,
-               "PushId(0) PushId(1) PushInt(0) Call(1) PushInt(1) Call(2) Pop",
+               "PushValue(0) PushValue(1) PushInt(0) Call(1) PushInt(1) "
+               "Call(2) Pop",
                "C-47");
     check(r.prog.requiredStackSize == 3, "C-47", "stack size == 3",
           "got=" + std::to_string(r.prog.requiredStackSize));
   }
-  {  // C-48 下标在左值位置：按参考实现的做法，先算 At 再 Assign（CD-5）
+  {  // C-48 下标在左值位置：按参考实现的做法，先算 At 再 Assign（CD-5）。
+     // 等号左侧不是裸标识符（是 a[0]），所以 a 走普通的读值 → PushValue。
     auto r = compileSrc(u"a[0] = 1;");
-    expectCode(r, "PushId(0) PushInt(0) At(1) PushInt(1) Assign", "C-48");
+    expectCode(r, "PushValue(0) PushInt(0) At(1) PushInt(1) Assign", "C-48");
   }
   {  // C-49 内层块可以遮蔽外层同名变量（不同 BlockScope）
     auto r = compileSrc(u"{ let a = 1; { let a = 2; } }");
@@ -546,14 +559,17 @@ void runCompilerTests() {
   {  // C-51 嵌套循环：break / continue 归最近的那一层
     auto r = compileSrc(u"while a { while b { break; } continue; }");
     expectCode(
-        r, "PushId(0) If(16) PushId(1) If(12) GoTo(12) GoTo(4) GoTo(0) GoTo(0)",
+        r,
+        "PushValue(0) If(16) PushValue(1) If(12) GoTo(12) GoTo(4) GoTo(0) "
+        "GoTo(0)",
         "C-51");
   }
   {  // C-52 循环嵌套 if 时的跳转目标仍然正确
     auto r = compileSrc(u"while a { if b { break; } else { continue; } }");
     expectCode(
         r,
-        "PushId(0) If(16) PushId(1) If(12) GoTo(16) GoTo(14) GoTo(0) GoTo(0)",
+        "PushValue(0) If(16) PushValue(1) If(12) GoTo(16) GoTo(14) GoTo(0) "
+        "GoTo(0)",
         "C-52");
   }
 }
@@ -573,7 +589,7 @@ int main() {
   printf("=== stope compiler tests ===\n");
   runCompilerTests();
 
-  const int totalTypes = 32;  // opcode.hpp 里的 Opcode 总数
+  const int totalTypes = 33;  // opcode.hpp 里的 Opcode 总数
   printf("\n== Opcode 覆盖: %zu/%d", g_seenOpcodes.size(), totalTypes);
   if (g_seenOpcodes.size() < static_cast<size_t>(totalTypes)) {
     printf("  缺失:");
