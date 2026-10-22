@@ -91,7 +91,7 @@ static AST::Expr* parseBinaryOpExpr(Parser& p, AST::Expr* leftExpr) {
 1 + 2 * 3;   →  Int(7)      // 内层 2*3 先折成 Int(6)
 (1 + 2) * 3; →  Int(9)
 - (2 * 3);   →  Int(-6)
-2 ^ 3 ^ 2;   →  Int(64)     // ^ 左结合：(2^3)^2
+2 ^ 3 ^ 2;   →  Int(512)    // ^ 右结合：2^(3^2)
 ```
 
 > 若要对一棵**已存在**的树做一次性折叠，需在外部做后序遍历再调用 `OptimizeInPlace`
@@ -503,7 +503,7 @@ bool   true+1 → Int(2)    1+true → Int(2)    true+true → Int(2)   false+fa
        -(INT64_MIN) → Int(-9223372036854775808)
        INT64_MIN * -1 → Int(-9223372036854775808)
        INT64_MIN / -1 → Int(-9223372036854775808)   INT64_MIN % -1 → Int(0)
-嵌套   1+2*3 → Int(7)   (1+2)*3 → Int(9)   -(2*3) → Int(-6)   2^3^2 → Int(64)
+嵌套   1+2*3 → Int(7)   (1+2)*3 → Int(9)   -(2*3) → Int(-6)   2^3^2 → Int(512)
        'x 41'*2+'x 42' → BinArr(3B)   "ab"*2+"ab" → String(ababab)
 ```
 

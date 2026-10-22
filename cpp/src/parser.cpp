@@ -516,6 +516,10 @@ AST::Expr* Parser::parseBinaryOpExpr(Parser& p, AST::Expr* leftExpr) {
   expr->line = leftExpr->line;
   expr->op = p.curToken().type;
   OpPrecedence prec = p.curPrecedence();
+  // 右结合，优先级 -1
+  if (expr->op == TokenType::Pow) {
+    prec = OpPrecedence(int(prec) - 1);
+  }
   p.nextToken();
   expr->rightExpr.reset(p.parseExpr(prec));
   AST::Expr* out = expr;  // 两侧都已折好，折叠只在最深的节点先发生

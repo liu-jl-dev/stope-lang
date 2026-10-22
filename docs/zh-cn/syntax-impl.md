@@ -174,7 +174,7 @@ enum class OpPrecedence : int {
 | 4 `LessGreater` | `<` `<=` `>` `>=` | 左 | — |
 | 5 `AddSub` | `+` `-` | 左 | — |
 | 6 `MulDiv` | `*` `/` `idiv` `%` | 左 | — |
-| 7 `Pow` | `^` | **左**（项目定夺，PD-7 已关闭） | `2^3^2` == `(2^3)^2` |
+| 7 `Pow` | `^` | **右**（2026-10-22 项目定夺） | `2^3^2` == `2^(3^2)` |
 | 8 `Prefix` | 一元 `-` `!` `not` | 前缀 | 高于 `Pow`，故 `-2^2` == `(-2)^2`（PD-18 待定） |
 | 9 `Paren` | `f(...)` `a[...]` | 后缀 | 最高 |
 
@@ -237,6 +237,29 @@ AST::Expr* parseExpr(OpPrecedence prec) {
   回调里手动判断 `;`**。
 - `.at()` 用的是 `curToken()`（因为刚 `nextToken()` 过），早期版本误用 `peekToken()` 导致整体错位。
 
+**结合性不在这个 while 里决定**，它取决于 infix 回调往右递归时传入的阈值（`parseBinaryOpExpr`）：
+
+```cpp
+expr->op = p.curToken().type;
+OpPrecedence prec = p.curPrecedence();
+// 右结合：优先级 -1（OpPrecedence 的取值连续，-1 就是低一级）
+if (expr->op == TokenType::Pow) {
+  prec = OpPrecedence(int(prec) - 1);
+}
+p.nextToken();
+expr->rightExpr.reset(p.parseExpr(prec));
+```
+
+同一个阈值解释了两种形状：传 `prec` 时，`2^3^2` 右侧遇同级 `^` 会被
+`prec < peekPrecedence()` 挡住，剩给外层 while 迭代 → **左嵌套** `(2^3)^2`；
+传低一级时右侧继续吃同级 `^` → **右嵌套** `2^(3^2)`。
+所以**改结合性改的是这里，不是 parseExpr 的循环**。
+目前只有 `^` 走这条分支（写在 `parseBinaryOpExpr` 里，没有单独的结合性表）。
+⚠ `int(prec) - 1` 依赖 `OpPrecedence` 的取值连续，且**结果必须落在合法枚举内**：
+`^` 是 `Pow = 7`，减一得 `6`（`AddSub`）没问题；但若将来把某个运算符的优先级降到
+`Lowest = 0` 又按右结合处理，就会产生 `-1` —— 枚举外的值，行为未定义。
+新增右结合运算符时先确认它的 `OpPrecedence` 不是 `Lowest`。
+
 ---
 
 ## 6. 递归结构与 token 缓冲
@@ -270,6 +293,8 @@ void nextToken() { curTokenIdx = (curTokenIdx + 1) % 2;
 | `parseProg` | `parseBlockStmt` / `parseIfStmt`（含 elif/else）/ `parseWhileStmt` | `{{{{a;}}}}` |
 
 注意 `1+1+1+…` 这类左结合链**不递归**（`parseExpr` 的 while 是迭代的），所以加深限不会影响它。
+但 `^` 自 2026-10-22 改为右结合后，`a^a^a^…` **每级一个 `parseExpr` 递归**（阈值降一级，
+同级的 `^` 会进右侧子树），与嵌套括号一样吃栈——PD-13 的风险面多了一种形态。
 
 **当前没有深度上限**（PD-13）。8 MB 栈实测阈值：
 
@@ -620,8 +645,7 @@ void error(int line, const char* msg) {
 | PD-6 | 顶层孤立 `}` 静默结束并丢弃后续语句 | 2026-10-16 |
 | PD-16 | `ArgsExpr::line` 恒为 -1 | 2026-10-16 |
 | PD-17 | `x; myop();` 空参数表误报缺 `;` | 2026-10-16 |
-| PD-7 | `^` 结合性 —— **项目定夺为左结合**，当前行为即规范，缺陷关闭 | 2026-10-16 |
-
+| PD-7 | `^` 结合性 —— 2026-10-16 定夺为左结合，**2026-10-22 改为右结合**（`2^3^2` ≡ `2^(3^2)`），机制见 §5.3 | 2026-10-22 |
 ### 10.2 未修 / 待定
 
 | 编号 | 现象 | 建议 |

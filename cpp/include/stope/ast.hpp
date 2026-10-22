@@ -201,4 +201,4 @@ namespace Stope {
 // ② 用函数封装可以避免「静态初始化顺序」问题：即便有全局对象在 main 之前访问，
 //    首次调用时才构造，一定来得及。
 const std::map<TokenType, OpPrecedence>& binopPrecMap();
-}
+}  // namespace Stope

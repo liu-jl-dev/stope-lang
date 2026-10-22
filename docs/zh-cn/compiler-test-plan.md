@@ -194,7 +194,7 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 | --- | --- | --- | --- |
 | CM-25 | `1 + 2 * 3;` | `code[PushInt(0) PushInt(1) PushInt(2) Mul Add Pop]` `ints=[1,2,3]` | 3 |
 | CM-26 | `1 - 2 - 3;` | `code[PushInt(0) PushInt(1) Sub PushInt(2) Sub Pop]` | 2 |
-| CM-27 | `2 ^ 3 ^ 2;` | `code[PushInt(0) PushInt(1) Pow PushInt(0) Pow Pop]` `ints=[2,3]` | 2 |
+| CM-27 | `2 ^ 3 ^ 2;` | `code[PushInt(0) PushInt(1) PushInt(0) Pow Pow Pop]` `ints=[2,3]` | 3 |
 | CM-28 | `1 < 2 == true;` | `code[PushInt(0) PushInt(1) LT PushTrue EQ Pop]` | 2 |
 | CM-29 | `-a * b;` | `code[PushId(0) Minus PushId(1) Mul Pop]` | 2 |
 | CM-30 | `1 - -2;` | `code[PushInt(0) PushInt(1) Minus Sub Pop]` `ints=[1,2]` | 2 |

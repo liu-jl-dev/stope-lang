@@ -46,13 +46,13 @@ void runPrecTests() {
     EXPECT_PERR_COUNT(r, 0, c.id);
   }
 
-  {  // P-06 ^ 左结合：项目已定夺左结合（2026-10-16），即规范行为，转普通断言。
+  {  // P-06 ^ 右结合：项目于 2026-10-22 改为右结合，即规范行为。
     auto r = parseAll(u"2 ^ 3 ^ 2;", nullptr, false);
-    EXPECT_PSTMT_SHAPE(r, 0, "ExprStmt(Bin(Pow, Bin(Pow, Int(2), Int(3)), Int(2)))", "P-06");
+    EXPECT_PSTMT_SHAPE(r, 0, "ExprStmt(Bin(Pow, Int(2), Bin(Pow, Int(3), Int(2))))", "P-06");
     EXPECT_PERR_COUNT(r, 0, "P-06");
     auto r2 = parseAll(u"2 ^ 3 ^ 2 ^ 4;", nullptr, false);
     EXPECT_PSTMT_SHAPE(r2, 0,
-                       "ExprStmt(Bin(Pow, Bin(Pow, Bin(Pow, Int(2), Int(3)), Int(2)), Int(4)))",
+                       "ExprStmt(Bin(Pow, Int(2), Bin(Pow, Int(3), Bin(Pow, Int(2), Int(4)))))",
                        "P-06");
     EXPECT_PERR_COUNT(r2, 0, "P-06");
   }

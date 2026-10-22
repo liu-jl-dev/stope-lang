@@ -19,7 +19,7 @@ void runFoldTests() {
       // ---- 算术：自底向上，整棵子树折成一个字面量 ----
       {"O-01", u"1 + 2 * 3;", "ExprStmt(Int(7))"},
       {"O-02", u"(1 + 2) * 3;", "ExprStmt(Int(9))"},
-      {"O-03", u"2 ^ 3 ^ 2;", "ExprStmt(Int(64))"},          // 左结合 + 折叠
+      {"O-03", u"2 ^ 3 ^ 2;", "ExprStmt(Int(512))"},         // 右结合 + 折叠：2^(3^2)
       {"O-04", u"7 / 2;", "ExprStmt(Float(3.5))"},           // 不整除 → Float
       {"O-05", u"8 / 4 / 2;", "ExprStmt(Int(1))"},           // 整除保 Int
       {"O-06", u"7 idiv 2 % 3;", "ExprStmt(Int(0))"},
