@@ -14,11 +14,10 @@ struct Parser {
   Lexer* lexer;
   std::vector<std::string> errors;
   bool constFolding = true;  // 表达式常量求值
-
- public:
   // 词法器是必填依赖，传引用；只有可空的 config 用指针（见 development.md §7）。
   // 构造体内会立刻调用两次 nextToken()，所以 lexer 必须已经就绪。
   Parser(Lexer& lexer, CustomOpcodeConfig* customOpcodeConfig = nullptr);
+  void Reset(Lexer& lexer, CustomOpcodeConfig* customOpcodeConfig = nullptr);
   void ParseProgram(AST::Prog& prog);
 
  private:

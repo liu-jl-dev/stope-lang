@@ -56,7 +56,7 @@ struct Allocator {
     }
   }
   void BinArrRefDec(unsigned handle) {
-    if (handle >= binArrs.size()) {
+    if (handle >= binArrs.size() || binArrs[handle].isDeleted) {
       return;
     }
     binArrs[handle].refCount--;
@@ -203,9 +203,13 @@ struct Value {
 };
 
 struct ProgramConstants {
+  Allocator* alloc;
   std::vector<Value> binArrs;
   std::vector<Value> strings;
+  ProgramConstants(const ProgramConstants&) = delete;  // 禁止拷贝
+  ProgramConstants& operator=(const ProgramConstants&) = delete;
   ProgramConstants(Allocator& alloc, const Program& program) {
+    this->alloc = &alloc;
     for (auto& data : program.binArrConsts) {
       binArrs.emplace_back();
       binArrs.back().type = Value::Type::BinArr;
@@ -219,6 +223,21 @@ struct ProgramConstants {
       alloc.strings[strings.back().data.handle].data = data;
     }
   }
+  void Clear() {
+    for (auto& v : binArrs) {
+      if (v.type == Value::Type::BinArr) {
+        alloc->BinArrRefDec(v.data.handle);
+      }
+    }
+    binArrs.clear();
+    for (auto& v : strings) {
+      if (v.type == Value::Type::String) {
+        alloc->StringRefDec(v.data.handle);
+      }
+    }
+    strings.clear();
+  }
+  ~ProgramConstants() { Clear(); }
 };
 
 struct State;

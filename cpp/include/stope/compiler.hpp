@@ -85,10 +85,12 @@ struct Compiler : public ASTVisitor {
   const CustomOpcodeConfig* customOpcodeConfig = nullptr;
   std::vector<std::string> errors;
 
-  // 自定义指令配置只在构造时注入一次，之后每个 Compile 都用它。
-  // （早期版本 Compile 还有一个同义参数，默认 nullptr 会把这里的值覆盖掉。）
   Compiler(const CustomOpcodeConfig* custom = nullptr)
       : customOpcodeConfig(custom) {}
+  void Reset(const CustomOpcodeConfig* custom = nullptr) {
+    errors.clear();
+    customOpcodeConfig = custom;
+  }
 
   // 编译 ast，结果直接写进 out。
   // 有错误时返回 Result::Error，并把 out 复原为空 —— 等价于参考实现出错时返回

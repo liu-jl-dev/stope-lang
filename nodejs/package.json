@@ -1,0 +1,36 @@
+{
+  "name": "@liu-jl-dev/stope",
+  "version": "0.1.0",
+  "description": "Stope language implementation for Node.js (zero dependencies)",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "sideEffects": false,
+  "keywords": [
+    "stope",
+    "stml",
+    "compiler",
+    "lexer",
+    "parser"
+  ],
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "test:watch": "node --test --watch \"test/**/*.test.js\"",
+    "test:cov": "node --test --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=80 --test-coverage-branches=70 \"test/**/*.test.js\"",
+    "check": "node --check src/index.js"
+  }
+}

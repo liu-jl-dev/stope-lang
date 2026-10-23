@@ -16,7 +16,12 @@ struct Lexer {
   std::vector<std::string> errors;
   int line = 1;
   void NextToken(Token& token, const CustomOpcodeConfig* custom = nullptr);
-  Lexer(std::u16string_view input) : input(input) {}
+  Lexer(std::u16string_view input) { Reset(input); }
+  void Reset(std::u16string_view input) {
+    line = 1;
+    this->input = input;
+    errors.clear();
+  }
 
  private:
   // 将 type 和 lexeme 输出到 token

@@ -6,6 +6,11 @@
 namespace Stope {
 
 Parser::Parser(Lexer& lexer, CustomOpcodeConfig* customOpcodeConfig) {
+  Reset(lexer, customOpcodeConfig);
+}
+
+void Parser::Reset(Lexer& lexer, CustomOpcodeConfig* customOpcodeConfig) {
+  errors.clear();
   this->lexer = &lexer;  // 借用：Parser 不拥有词法器
   this->customOpcodeConfig = customOpcodeConfig;
   nextToken();
