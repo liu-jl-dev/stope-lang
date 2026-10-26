@@ -15,7 +15,6 @@
 #include <utility>
 #include <vector>
 
-#include <stope/custom_opcode.hpp>
 #include <stope/opcode.hpp>
 #include <stope/program.hpp>
 #include <stope/utf.hpp>

@@ -20,7 +20,6 @@
 
 #include <stope/ast.hpp>
 #include <stope/ast_visitor.hpp>
-#include <stope/custom_opcode.hpp>
 #include <stope/opcode.hpp>
 #include <stope/program.hpp>
 #include <stope/scope_context.hpp>

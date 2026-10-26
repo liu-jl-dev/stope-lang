@@ -1,3 +1,5 @@
+import { Result } from './common.js'
+
 var Opcode = {}
 Opcode[Opcode["Assign"] = 0] = "Assign"
 Opcode[Opcode["PushNull"] = 1] = "PushNull"
@@ -38,4 +40,34 @@ Opcode[Opcode["Return"] = 32] = "Return"
 
 Object.freeze(Opcode)
 
-export { Opcode }
+const kFirstCustomOpcode = Opcode.Return + 1 // 33
+
+class CustomOpcode {
+  constructor(opcode, argNum = -1) {
+    this.opcode = opcode
+    this.isVarArg = argNum < 0
+    this.argNum = argNum
+  }
+}
+
+// 名字 → CustomOpcode 的登记表。Lexer / Parser / Compiler 要共用同一份对象，
+// 各建一份会出现「编译期找不到指令」或「退化成普通函数调用」。
+//
+// 名字是普通标识符或命名空间形式 a:b（词法器保证），且关键字优先 ——
+// 注册一个叫 if 的指令是无效的，if 永远按关键字处理。
+class CustomOpcodeConfig {
+  constructor() {
+    this.opcodes = new Map()
+  }
+  // argNum 默认 -1（变长）。同名重复注册返回 DuplicateWithBuiltinOpcode。
+  // 与 C++ 一样不校验编号范围，编号请从 kFirstCustomOpcode 开始。
+  addCustomOpcode(name, opcode, argNum = -1) {
+    if (this.opcodes.has(name)) {
+      return Result.DuplicateWithBuiltinOpcode
+    }
+    this.opcodes.set(name, new CustomOpcode(opcode, argNum))
+    return Result.Success
+  }
+}
+
+export { Opcode, CustomOpcode, CustomOpcodeConfig }

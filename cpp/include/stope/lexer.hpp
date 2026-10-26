@@ -3,7 +3,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <stope/common.hpp>
-#include <stope/custom_opcode.hpp>
+#include <stope/opcode.hpp>
 #include <stope/scope_context.hpp>
 #include <stope/token.hpp>
 #include <string>

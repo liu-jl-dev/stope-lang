@@ -9,26 +9,6 @@
 > 本文讲解「如果要自己写一个执行器，该怎么做」。文里的具体做法来自 C++ 参考实现
 > （`cpp/include/stope/basic_vm.hpp`），它是**一种可行解**，不是必须照抄的标准答案。
 
-文档分工：
-
-| 文档 | 面向 | 内容 |
-| --- | --- | --- |
-| [syntax-intro.md](syntax-intro.md) | 第一次写 Stope | 最常用的规则 |
-| [syntax-reference.md](syntax-reference.md) | 写 Stope 的人 | 完整语法与语义规则 |
-| [compiler-test-plan.md](compiler-test-plan.md) | 实现编译器的人 | `Program` 的**编码契约**（字段、指令表、操作数、序列化格式） |
-| [syntax-impl.md](syntax-impl.md) §7.2 | 走 B 路线（直接跑 AST）的人 | `ASTVisitor` 遍历骨架：继承它、重写钩子 |
-| **vm-guide.md（本文）** | 实现执行器的人 | 怎么把 `Program` 跑起来 |
-
-**要分清「什么是标准」**：
-
-| 层 | 是否标准 | 说明 |
-| --- | --- | --- |
-| 语言语义（运算符、真值、类型规则） | ✅ 标准 | 见 [syntax-reference.md](syntax-reference.md) §2、§4。任何执行器都必须实现出这些行为 |
-| `Program` 的编码（指令编号、操作数含义、跳转目标是 `opcodes` 下标） | ✅ 标准 | 见 [compiler-test-plan.md](compiler-test-plan.md) §2 |
-| 怎么执行它（栈 / 寄存器 / 值怎么表示 / 内存怎么管 / 错误怎么报 / 宿主接口长什么样） | ❌ 不是标准 | 本文讲的都是这一层 |
-
-换个说法：**标准规定编译器"吐出什么"，不规定你"怎么吃掉它"。**
-你甚至可以不用 `Program`——只要你的执行器在行为上符合语言语义，就是一个合法的 Stope 实现。
 
 ## 目录
 
@@ -70,44 +50,18 @@
 
 ---
 
-## 2. 三条执行路线
-
-| 路线 | 做法 | 适合 |
-| --- | --- | --- |
-| **A. 栈式字节码 VM** | 直接解释 `opcodes`，维护一个操作数栈 | 绝大多数情况。参考实现就是这条 |
-| **B. 直接解释 AST** | 绕开 `Program`，自己遍历语法树 | 你已经有一棵树、不需要产物可移植时 |
-| **C. 转译** | `Program` → C / LLVM IR / 宿主语言的闭包，交给别的运行时 | 追求性能，或想把 Stope 嵌进已有的 JIT |
-
-**建议先做 A**：它与 [compiler-test-plan.md](compiler-test-plan.md) 的用例可以直接逐条对照，
-出问题能立刻判断是编译器错还是执行器错。等 A 全绿了，再决定要不要换路线。
-
-走 B 要注意：标准规定的是「有一个编译器能把 AST 变成 `Program`」，没说你必须用它。
-但**语言语义仍然是标准**，B 路线同样要实现 §8 的全部行为。
-
-B 路线在 C++ 里有个现成的起点：`cpp/include/stope/ast_visitor.hpp` 的 `ASTVisitor`
-（`Compiler` 的父类），它已经把「按 `NodeType` 分派 + 默认递归子节点」写好，你只填语义动作。
-用法与完整例子见 [syntax-impl.md](syntax-impl.md) §7.2。
-
----
-
 ## 3. 值系统
 
-**至少要能表示这 6 种值**（名字来自参考实现，你可以换）：
+Stope 是动态类型语言，每个值应当存储有一个类型标记。也可以借助宿主的动态类型来省去类型标记，例如 JavaScript、Python 等语言本身就是动态类型，或利用 C# 的 object、go 的 any 等。
 
-| 类型 | 承载 | 说明 |
-| --- | --- | --- |
-| `Null` | — | `null` |
-| `Integer` | 有符号 64 位 | 整数 |
-| `Float` | 双精度 | 浮点 |
-| `String` | UTF-16 串 | 与 `stringConsts` 一致 |
-| `BinArr` | 字节序列 | 二进制数组 |
-| `HostFunction` | 宿主函数 | 由宿主放入槽位，见 §7 |
-
-在此基础上参考实现**多两种**，属于它的内部设计，你不必照做：
-
-- `Identifier` —— 栈上表示「某个变量槽位的引用」，见 §4。
-- 引用计数的**句柄**：`String` / `BinArr` 的实际数据放在分配器里，`Value` 只持句柄。
-  你也可以用 GC、不可变值 + 拷贝、arena，标准不管。
+至少要能表示这 6 种值：
+- null
+- 整数
+- 浮点数
+- 字节数组
+- 字符串
+- 标识符索引
+Stope 有 PushFalse、PushTrue 向栈压入布尔值，可以借助整数实现。
 
 ### 布尔值的一个岔路口
 
@@ -169,19 +123,6 @@ emitOp(Opcode::PushId);     // 压的是变量本身，不是值，否则无法�
 emitOp(Opcode::PushValue);  // onVisitIdentExpr：读变量，压它的值
 ```
 
-**因此执行器不需要「解引用兜底」。** 编译器保证：
-
-- `PushValue` 压进栈的已经是解引用后的真实值；
-- `PushId` 只出现在**紧邻 `Assign`** 的位置（`let` 的目标、赋值语句的裸标识符左值）。
-
-所以每条指令直接读栈顶就对了，不用判断某个槽里是不是「变量引用」。参考实现早期
-有过 `ReplaceTopValues(n)` / `GetValueTop(i)` 这类辅助函数，在每个指令里就地解引用
-`Identifier`；拆出 `PushValue` 之后它们已从 `basic_vm.hpp` 中**删除**。
-
-> **给你的执行器**：`PushValue` 必须实现，语义就是「从槽位取值压栈」。
-> 不要为了「兼容」而在运算指令里保留解引用分支 —— 那只会掩盖编译器的产物错误，
-> 让真正的 bug 变成静默的数据污染。
-
 ---
 
 ## 5. 指令语义（33 条 + 自定义）
@@ -203,8 +144,11 @@ emitOp(Opcode::PushValue);  // onVisitIdentExpr：读变量，压它的值
 | `PushBinArr` | `binArrConsts` 下标 | `[] → [v]` | 压二进制数组常量 |
 | `Assign` | — | `[ref, v] → []` | 把 `v` 存入 `ref` 指向的槽位，**弹两个** |
 
-`Assign` 的两个约定：栈顶是待存的值，它下面必须是变量引用，否则报错
-（参考实现：`'Assign' can only assign to a variable.`）。
+Stope 的赋值语句允许等号左侧是表达式，而不仅仅是标识符。因此可以在等号左侧放置通过 VM 实现的变量索引，例如数组中变量的索引。
+```
+a = Array:NewSized(10); // 创建一个长度为 10 的空数组
+a[0] = 1;
+```
 
 ### 5.2 调用与索引
 

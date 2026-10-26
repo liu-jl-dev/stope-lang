@@ -26,9 +26,17 @@ nodejs/
 ├── .editorconfig     # 与仓库 .gitattributes 一致：LF 行尾
 ├── src/
 │   ├── index.js      # 唯一公共入口，只做 re-export
-│   └── index.d.ts    # 手写类型声明（不引 TypeScript 工具链）
-└── test/
-    └── smoke.test.js # 工程自检：ESM / 零依赖 / exports 不悬空
+│   ├── index.d.ts    # 手写类型声明（不引 TypeScript 工具链）
+│   ├── common.js     # Result 枚举（对应 cpp/include/stope/common.hpp）
+│   ├── token.js      # TokenType 枚举（47 项）+ Token
+│   ├── opcode.js     # Opcode 枚举（33 项）+ 自定义指令登记
+│   └── lexer.js      # 词法分析器
+├── test/
+│   ├── smoke.test.js  # 工程自检：ESM / 零依赖 / exports 不悬空
+│   ├── helpers.js     # lexer 的断言族（对应 C++ 的 EXPECT_* 宏）
+│   └── lexer.test.js  # lexer 用例，编号与 C++ 侧逐条对齐
+└── docs/
+    └── lexer_test_plan.md   # lexer 测试计划：覆盖矩阵、与 C++ 的差异、交叉验证做法
 ```
 
 ## 测试
@@ -37,7 +45,7 @@ nodejs/
 | --- | --- |
 | 跑全部测试 | `npm test` |
 | 单文件 | `node --test test/lexer.test.js` |
-| 按名字过滤 | `node --test --test-name-pattern="Lexer"` |
+| 按名字/编号过滤 | `node --test --test-name-pattern="I-0" test/lexer.test.js` |
 | 自动重跑 | `npm run test:watch` |
 | 覆盖率 + 阈值门禁 | `npm run test:cov` |
 | 语法自检 | `npm run check` |
@@ -75,8 +83,11 @@ describe('Lexer', () => {
 - **零依赖是硬约束**：`package.json` 里不得出现 `dependencies` / `devDependencies`，
   `src/` 下只允许 import `node:` 内置模块和相对路径。`test/smoke.test.js` 会自动检查这两条。
 - **纯 ESM**：`"type": "module"`，源码里不用 `require`、不写 `.cjs`。
-- **断言分族**：与 C++ 侧一致 —— 每个模块一组语义化断言（如 `expectToken`），
-  公用断言抽到 `test/helpers.js`，期望值改一处即可。
+- **断言分族**：与 C++ 侧一致 —— lexer 用无前缀的 `expectType` / `expectSeq` / …，
+  公用断言抽到 `test/helpers.js`，期望值改一处即可。以后 parser 一组带 `P` 前缀，
+  STML 一组带 `STOK`/`SP` 前缀。
+- **用例编号与 C++ 对齐**：`test/lexer.test.js` 的 `I-xx` / `F-xx` / `D-xx` / … 全部沿用
+  `cpp/test/test_lexer_*.cpp` 的编号，清单见 `docs/lexer_test_plan.md`。C++ 改行为时两边一起改。
 - **golden 数据由 C++ 侧 dump 生成**，不手写；比对前统一剥掉 `\r`（Windows 行尾差异）。
 - **`exports` 封闭包内路径**：外部只能从包根导入，深引用 `pkg/src/x.js` 会失败，这是刻意的。
 
