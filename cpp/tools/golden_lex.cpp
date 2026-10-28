@@ -1,5 +1,7 @@
-// 临时探针：把「词法分析通用测试计划」里每一条用例在 C++ 侧的真实 token 流 dump 成
-// 机器可读文本，供 GDScript 测试直接比对。
+// golden 数据生成器：把「词法分析通用测试计划」里每一条用例在 C++ 侧的真实 token 流
+// dump 成机器可读文本，供 GDScript 测试直接比对。
+//
+// 重生成（在 cpp/ 下）：cmake --build build --target gen-golden
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -35,8 +37,7 @@ static CustomOpcodeConfig* g_cfg = nullptr;
 
 static void one(const char* id, const char* src) {
   auto holder = std::make_shared<std::u16string>(U(src));
-  Lexer lx;
-  lx.input = *holder;
+  Lexer lx(*holder);  // 构造即 Reset：输入、行号、errors 一次到位
   std::string toks;
   std::string lexemes;
   for (int i = 0; i < 10000; ++i) {

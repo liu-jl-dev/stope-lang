@@ -29,9 +29,9 @@ static func _run_source_cases(rep:StopeTestUtil.Report) -> void:
 			rep.check(id, k, c.get(k, ''), got[k])
 
 static func _one(src:String, fold:bool) -> Dictionary:
-	var lx := StopeToken.Lexer.new(src)
-	lx.set_custom_insts(StopeTestUtil.custom_insts())
-	var ps := StopeParser.new(lx)
+	var lx := StopeLexer.Lexer.new(src)
+	var cfg := StopeTestUtil.custom_config()
+	var ps := StopeParser.Parser.new(lx, cfg)
 	ps.const_folding = fold
 	var prog := StopeAst.Prog.new()
 	ps.parse_program(prog)
@@ -77,7 +77,7 @@ static func _dump_binarr() -> Array[String]:
 				StopeAst.fmt_bytes(ba), ']'))
 
 	# ---- FB：二元折叠 ----
-	var T := StopeToken.Type
+	var T := StopeLexer.Token.Type
 	out.append(_fb('+', T.Add, _int(1), _int(2)))
 	out.append(_fb('-', T.Sub, _int(5), _int(3)))
 	out.append(_fb('*', T.Mul, _int(2), _int(3)))
@@ -160,7 +160,7 @@ static func _fu(name:String, op:int, v:StopeAst.Expr) -> String:
 	var folded:int = 0 if o.node_type == StopeAst.NodeType.UnaryOpExpr else 1
 	return str('FU\t', name, '\t', folded, '\t', _val(o))
 
-# 折叠结果的紧凑写法：与 test/tools/golden_binarr.cpp 的 fmtValue 一致
+# 折叠结果的紧凑写法：与 cpp/tools/golden_binarr.cpp 的 fmtValue 一致
 static func _val(e) -> String:
 	if e == null: return "null"
 	match e.node_type:

@@ -80,7 +80,7 @@ int main() {
   Compiler compiler;  // 构造参：CustomOpcodeConfig*，默认 nullptr
   Program program;
   compiler.Compile(tree, program);  // 输入、输出都传引用
-  cout << DumpProgramNoCustom(program) << endl;
+  cout << DisasmNoCustom(program) << endl;
 
   // step 2: initialize the VM
   //

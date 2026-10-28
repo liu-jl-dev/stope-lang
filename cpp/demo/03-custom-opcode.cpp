@@ -1,4 +1,4 @@
-// Demo 02: 自定义指令 —— 给编译器加几条自己的指令，只编译 + 反汇编，不运行。
+// Demo 03: 自定义指令 —— 给编译器加几条自己的指令，只编译 + 反汇编，不运行。
 //
 // 项目只规定 32 条内置指令（include/stope/opcode.hpp）与 Program 的编码契约；
 // 再往上加指令是宿主自己的事，三步：
@@ -14,7 +14,7 @@
 //
 // 两条硬约束（见 docs/compiler_test_plan.md §4.4）：
 //   * 编号必须 > Opcode::Return。opcodes 是 short 混排序列，撞号以后与内置指令
-//     无法区分；DumpProgram() 会把这种注册报成 warning（[5] 演示）。
+//     无法区分；Disasm() 会把这种注册报成 warning（[5] 演示）。
 //   * 定长指令的 argNum 必须与实际调用一致，否则编译期报错、不产出（[4] 演示）。
 
 #ifdef _WIN32
@@ -96,7 +96,7 @@ int main() {
   //
   // 注意 my:add 的参数照常先压栈，指令本身不再带操作数；只有 my:log 这种变长
   // 指令后面多一个 short。反汇编要认出这些，必须把同一份 config 交给
-  // DumpProgram()。
+  // Disasm()。
   u16string src =
       uR"(
     let x = 3;
@@ -113,7 +113,7 @@ int main() {
   if (!compileAndReport(src, &config, program)) {
     return 1;
   }
-  cout << DumpProgram(program, &config);
+  cout << Disasm(program, &config);
 
   // ---------- 3. 对照：名字没登记就只是普通调用 ----------
   //
@@ -123,7 +123,7 @@ int main() {
   Program plain;
   cout << "\n[3] 同样的调用，不传 config：\n";
   if (compileAndReport(plainSrc, nullptr, plain)) {
-    cout << DumpProgramNoCustom(plain);
+    cout << DisasmNoCustom(plain);
   }
 
   // ---------- 4. 参数个数不符 ----------
@@ -142,7 +142,7 @@ int main() {
   //
   // 自定义编号必须 > Opcode::Return。这里故意用一个内置编号注册：编译器写出
   // 的仍是同一个 short，谁也分不清它到底是 Add 还是 my:steal ——
-  // DumpProgram() 只能按内置指令解码，并把它报成 warning。
+  // Disasm() 只能按内置指令解码，并把它报成 warning。
   CustomOpcodeConfig collide;
   u16string stealName = u"my:steal";
   collide.addCustomOpcode(stealName, static_cast<short>(Opcode::Add), 2);
@@ -150,7 +150,7 @@ int main() {
   Program stolen;
   cout << "\n[5] 用内置 Add 的编号注册 my:steal：\n";
   if (compileAndReport(stealSrc, &collide, stolen)) {
-    cout << DumpProgram(stolen, &collide);
+    cout << Disasm(stolen, &collide);
   }
 
   return 0;

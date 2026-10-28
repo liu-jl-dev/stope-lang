@@ -288,12 +288,77 @@ void runNoIdentifierLeft() {
   }
 }
 
+// ==================== V-31…V-34 Step() 与 Run() 等价 ====================
+// Step() 从 2026-10-28 起才有实现（之前只有声明，谁调都是链接错误）。这组把两条
+// 驱动路径钉在一起：同一份源码，Run 一次跑完 vs Step 逐条走到停机，返回值、停机
+// 位置、错误都必须一致。Step 的三个约定见 basic_vm.hpp 里的注释。
+void runStepCases() {
+  section("V-31…V-34 Step() vs Run()");
+
+  struct {
+    const char* id;
+    std::u16string src;
+    bool expectError;
+    bool checkSteps;  // 顺序执行才有「步数 == 指令条数」，带循环的不成立
+  } cases[] = {
+      // 顺序执行：步数应当正好等于指令条数（不含操作数）
+      {"V-31", u"let a = 1; let b = 2; return a + b;", false, true},
+      // 带回边：If / GoTo 会改 i，同一条指令会被反复执行，只比终态
+      {"V-32", u"let i = 0; while i < 3 { i = i + 1; } return i;", false,
+       false},
+      // 运行期出错（null 不参与算术）：两条路径停在同一条指令上；出错是提前停，
+      // 步数同样不可预知
+      {"V-33", u"let x; return 1 + x;", true, false},
+      // 只有一条指令就 return：Step 一次就结束，越界后不得再动
+      {"V-34", u"return 7;", false, true},
+  };
+
+  for (auto& c : cases) {
+    VmResult r;
+    runSrc(c.src, r);
+    StepTrace t;
+    runSrcByStep(c.src, t);
+
+    if (!r.compiled || !t.compiled) {
+      check(false, c.id, "compiled without error",
+            vmDetail(r) + "\n         step:" + vmStepDetail(t));
+      continue;
+    }
+    check(r.runError == t.hitError, c.id, "Run and Step agree on outcome",
+          vmDetail(r) + "\n         step:" + vmStepDetail(t));
+    check(r.finalI == t.finalI, c.id, "same instruction pointer at stop",
+          vmDetail(r) + "\n         step:" + vmStepDetail(t));
+    check(r.runErrors == t.errors, c.id, "same errors",
+          vmDetail(r) + "\n         step:" + vmStepDetail(t));
+    check(
+        r.retType == t.retType && r.retInt == t.retInt && r.retStr == t.retStr,
+        c.id, "same return value",
+        vmDetail(r) + "\n         step:" + vmStepDetail(t));
+
+    if (!c.expectError) {
+      check(t.postEndNoop, c.id,
+            "Step() after the end is a no-op returning Success",
+            vmStepDetail(t));
+      if (c.checkSteps)
+        check(t.steps == t.instCount, c.id,
+              "one Step per instruction (no operands counted)",
+              vmStepDetail(t));
+      check(t.firstI > 0, c.id, "first Step() moves i forward",
+            vmStepDetail(t));
+    } else {
+      check(t.errorRepeatDelta == 0, c.id,
+            "Step() in error state adds no error", vmStepDetail(t));
+    }
+  }
+}
+
 void runVmTests() {
   runReturnCases();
   runAtCases();
   runBinaryAndAssign();
   runControlFlow();
   runNoIdentifierLeft();
+  runStepCases();
 }
 
 }  // namespace Test

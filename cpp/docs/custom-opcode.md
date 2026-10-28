@@ -1,11 +1,12 @@
 # 自定义指令：注册、编译、反汇编
 
 > 目标读者：想在 C++ 里给自己的 Stope 程序加指令的人。
-> 本文逐段讲 `cpp/demo/02-custom-opcode.cpp`（可编译运行，**只编译 + 反汇编，不接执行器**），
+> 本文逐段讲 `cpp/demo/03-custom-opcode.cpp`（可编译运行，**只编译 + 反汇编，不接执行器**），
 > §7 给一份可复制的最小骨架（按文档原文编译运行过）。
 
 | 想看 | 去哪（相对本文件） |
 | --- | --- |
+| 本目录总览（面向所有人） | [README.md](README.md) |
 | 自定义指令的**语言规则**（文法、命名、关键字优先） | [syntax-reference.md](../../docs/zh-cn/syntax-reference.md) §5.3 |
 | 执行器侧怎么执行这些编号 | [vm-guide.md](../../docs/zh-cn/vm-guide.md) §5.5 |
 | `Program` 的编码契约（哪条指令带操作数） | [compiler_test_plan.md](compiler_test_plan.md) §2、§4.4 |
@@ -49,7 +50,7 @@ Stope 源码：my:add(x, 4);      和普通函数调用长得一样，只靠名�
 cd cpp
 cmake -B build -G "MinGW Makefiles"     # 必须显式指定 generator
 cmake --build build
-./build/demo02.exe
+./build/demo03.exe
 ```
 
 不需要别的依赖（C++20 + CMake）。demo 分五段（`[1]`–`[5]`），§2–§4 讲前两段，
@@ -205,14 +206,14 @@ required stack size: 2
 
 ---
 
-## 4. 反汇编：`DumpProgram(program, &config)`
+## 4. 反汇编：`Disasm(program, &config)`
 
 `debug.hpp` 提供两个入口：
 
 | 函数 | 什么时候用 |
 | --- | --- |
-| `DumpProgram(program, &config)` | 产物里**可能**有自定义指令 —— 拿得到名字、变长操作数与注册表 |
-| `DumpProgramNoCustom(program)` | 确定没有自定义指令的产物；等价于 `DumpProgram(program, nullptr)`，输出与旧版**逐字节相同** |
+| `Disasm(program, &config)` | 产物里**可能**有自定义指令 —— 拿得到名字、变长操作数与注册表 |
+| `DisasmNoCustom(program)` | 确定没有自定义指令的产物；等价于 `Disasm(program, nullptr)` |
 
 带 config 时它多做三件事：
 
@@ -237,7 +238,7 @@ required stack size: 2
 
 下面三段都用 demo 里的辅助函数 `compileAndReport(src, cfg, out)` —— 它就是 §3 那四行
 （lex → parse → compile），出错时直接把 `parser.errors` / `compiler.errors` 打到屏幕。
-完整写法见 `demo/02-custom-opcode.cpp`。
+完整写法见 `demo/03-custom-opcode.cpp`。
 
 ### 5.1 名字没登记就只是普通调用
 
@@ -310,7 +311,7 @@ warning: custom opcode "my:steal" uses #19, which collides with Add; builtin dec
 3. **变长指令先读一个 `short` 当 `n`。** 定长指令的参数个数在注册表里，流里不重复写。
 
 编号 → 名字的映射留给你自己保管（`CustomOpcodeConfig` 就是现成的地方）；
-`DumpProgram` 印出来的 `custom opcodes:` 一节，正好可以拿来核对。
+`Disasm` 印出来的 `custom opcodes:` 一节，正好可以拿来核对。
 
 ---
 
@@ -346,7 +347,7 @@ int main() {
     }
     return 1;
   }
-  std::cout << DumpProgram(program, &config);
+  std::cout << Disasm(program, &config);
 }
 ```
 
@@ -391,7 +392,7 @@ g++ -std=c++20 -Iinclude sk.cpp build/libstope.a -o sk.exe
 | 编译报 `undefined custom instruction "myop"` | Parser 有这份 config，Compiler 没有（或名字拼错） |
 | 编出来是 `Call` 而不是自定义指令 | 名字没进 config，或与关键字同名（关键字优先） |
 | `expected 2 args, but got 1` | 定长指令的 `argNum` 与实际调用不符 |
-| 反汇编里出现 `Custom40` | `DumpProgram` 没传 config |
+| 反汇编里出现 `Custom40` | `Disasm` 没传 config |
 | 反汇编从某条变长指令开始整段错位 | 同上：参数个数被当成了下一条指令 |
 | `addCustomOpcode(u"x", 33, 2)` 编译不过 | 形参是 `std::u16string&`，先声明变量再传 |
 | 程序跑起来越界/崩 | 执行器不认识这个编号：`BasicVM` 只有 33 项 |
@@ -402,9 +403,9 @@ g++ -std=c++20 -Iinclude sk.cpp build/libstope.a -o sk.exe
 
 | 文件 | 作用 |
 | --- | --- |
-| `demo/02-custom-opcode.cpp` | 本文讲的例子（目标 `demo02`，未接 ctest） |
+| `demo/03-custom-opcode.cpp` | 本文讲的例子（目标 `demo03`，未接 ctest） |
 | `include/stope/custom_opcode.hpp` | `CustomOpcode` / `CustomOpcodeConfig` |
-| `include/stope/debug.hpp` | `DumpProgram` / `DumpProgramNoCustom` / `kFirstCustomOpcode` |
+| `include/stope/debug.hpp` | `Disasm` / `DisasmNoCustom` / `kFirstCustomOpcode` |
 | `compiler_test_plan.md` §4.4 | 自定义指令的坑（编号 > `Return`、`opHasParam` 的兜底分支） |
 | [syntax-reference.md](../../docs/zh-cn/syntax-reference.md) §5.3 | 语言侧规则（文法、命名、关键字优先） |
 | [vm-guide.md](../../docs/zh-cn/vm-guide.md) §5.5 | 执行器侧要求 |

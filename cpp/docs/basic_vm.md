@@ -5,6 +5,7 @@
 
 | 想看 | 去哪 |
 | --- | --- |
+| 本目录总览（面向所有人） | `README.md`（本目录） |
 | 怎么把它跑起来（四步） | `quick-start.md`（本目录） |
 | 指令表与 `Program` 字段 | `compiler_test_plan.md` §2 |
 | 不想先编译、想直接跑 AST（继承 `ASTVisitor`） | `../../docs/zh-cn/syntax-impl.md` §7.2 |
@@ -28,10 +29,37 @@ State              一次执行的全部状态
 但 `Run()` 之前必须都设好。`variables` 要自己 `resize(program.variableNum)`。
 
 ```cpp
-State::Run()  ==  while (i < opcodes.size()) { api->opFuncs[opcodes[i]](*api, *this); ++i; }
+Result State::Step() {          // 执行 i 指向的一条指令（含它的操作数）
+  if (HasError()) return Result::Error;                      // 错误态不再执行
+  if (i >= (int)program->opcodes.size()) return Result::Success;  // 越界：什么也不做
+  api->opFuncs[program->opcodes[i]](*api, *this);
+  if (HasError()) return Result::Error;
+  ++i;
+  return Result::Success;
+}
+
+Result State::Run() {           // 复用 Step：header-only + 隐式 inline，编译期就展开
+  while (i < program->opcodes.size()) {
+    if (Step() != Result::Success) return Result::Error;
+  }
+  return Result::Success;
+}
 ```
 
 出错时 `Error(msg)` 把 `"指令下标: msg"` 追加进 `errors`，`Run()` 立即返回 `Result::Error`。
+
+`Step()` 有两条容易踩的：
+
+- **终止条件要用 `i` 判，不能写成 `while (s.Step() == Result::Success)`** —— 指令流走完
+  之后 `Step()` 返回 Success 但什么也不做，那个循环永远不结束。正确写法：
+  `while (s.i < (int)s.program->opcodes.size() && s.Step() == Result::Success) { ... }`
+- **错误态再调 `Step()` 不执行任何指令**（预检直接返回 `Error`），所以调试器里连点两次
+  不会把同一条错指令跑两遍、把错误刷出两条。`Run()` 没有这个预检 —— 它一出错就返回，
+  调用方本就不该续跑，这是两者唯一的语义差别。
+
+单步遍历的代价是每条指令一次函数调用，但 `Step()` 是 inline 的，`Run()` 复用它不会变慢。
+`test/test_vm.cpp` 的 V-31…V-34 把两条驱动路径钉在一起：同一份源码，`Run()` 一次跑完
+vs `Step()` 逐条走到停机，停机位置、错误、返回值必须一致。
 
 ---
 

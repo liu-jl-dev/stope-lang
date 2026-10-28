@@ -13,7 +13,7 @@ Stope 只规定三件事：
 3. **Stope 编译器** —— AST → `Program` 的产物格式。
 
 **虚拟机不在标准范围内。** `cpp/include/stope/basic_vm.hpp`（以及 `cpp/include/stope/debug.hpp`、  
-GDScript 侧 `stope.gd` 的 `State` / `Api`）都**只是参考实现**，用途是验证产出的 `Program`  
+GDScript 侧 `gdscript/addons/stope/basic_vm.gd` 的 `StopeBasicVM.State` / `Api`）都**只是参考实现**，用途是验证产出的 `Program`  
 确实能被执行。指令集的具体语义、栈的布局、宿主函数的调用约定均**不属于规范**——  
 宿主程序完全可以用自己的执行器替代，只要它能消费编译器产出的 `Program`。
 
@@ -95,16 +95,21 @@ STML 可以用来管理相互调用的 Stope 程序，或实现面向对象等�
 
 ## 实现状态
 
-|         | C++                      | GDScript   |
-| ------- | ------------------------ | ---------- |
-| 定位      | **权威实现**                 | 早期原型       |
-| 布局      | Pitchfork Layout（编译型静态库） | Godot 工程   |
-| 标准 / 依赖 | C++20，零第三方依赖             | Godot 4    |
-| 测试      | ctest 14 组，1478 条断言全绿    | 2429 条断言全绿 |
+|         | C++                      | GDScript                        |
+| ------- | ------------------------ | ------------------------------- |
+| 定位      | **权威实现**                 | 参考实现（逐项按 C++ 对齐）                |
+| 布局      | Pitchfork Layout（编译型静态库） | Godot 工程，以 `addons/stope/` 插件分发 |
+| 标准 / 依赖 | C++20，零第三方依赖             | Godot 4（实测 4.7.2），零第三方插件         |
+| 测试      | ctest 14 组，1503 条断言全绿    | 3076 条断言全绿                      |
 
 两侧出现分歧时**以 C++ 的实测行为为准**，差异登记在对应测试计划的 §7。
 
-> **`gdscript/` 不建议使用。** 它是早期原型，其中一部分 API 由 LLM 生成、**未经一致性设计**，接口混乱，且与 C++ 侧**暂未对齐**。
+> **`gdscript/` 是参考实现，不是第二套标准。** 词法 / 语法 / 编译器 / STML 四块已与 C++
+> 逐项对齐 —— 期望值全部由 C++ 探针 dump，3076 条断言全绿（STML 那 121 条用例两侧跑的是
+> **同一份清单** `gdscript/test/data/stml_cases.txt`）；残留的两条差异见
+> [stml-test-plan.md](docs/zh-cn/stml-test-plan.md) §7 的 GD-S-17/18。参考执行器
+> `basic_vm.gd` 与 C++ 侧一样**不属于规范**。安装与用法见
+> [gdscript/docs/README.md](gdscript/docs/README.md)。
 
 ---
 
@@ -171,6 +176,7 @@ cmake -B build -G "MinGW Makefiles"
 cmake --build build
 ctest --test-dir build
 ./build/demo01.exe
+cmake --build build --target gen-golden   # 重生成 GDScript 侧的期望值，不属于 ctest
 ```
 
 只需要 CMake 和一个支持 C++20 的编译器。两个坑：
@@ -185,6 +191,24 @@ ctest --test-dir build
 
 ---
 
+## 构建与测试（GDScript）
+
+无需构建步骤，只要有 Godot 4（实测 4.7.2）：
+
+```bash
+godot --headless --path gdscript --script res://test/run_tests.gd
+godot --headless --path gdscript res://demo/demo_01.tscn
+godot --headless --path gdscript res://demo/demo_02.tscn
+godot --headless --path gdscript res://demo/demo_03.tscn
+```
+
+第一条跑 3076 条断言（词法 / 语法 / 编译器 / STML / 执行器五组，前四组对齐 C++）；三个 demo 与 `cpp/demo/` 下的
+`0N-*.cpp` 一一对应
+（`01` 编译+运行 / `02` STML 解析 / `03` 自定义指令）。
+更多见 [gdscript/docs/testing.md](gdscript/docs/testing.md)。
+
+---
+
 ## 文档导览
 
 | 想看             | 去哪                                                               |
@@ -194,12 +218,18 @@ ctest --test-dir build
 | 常量折叠规则         | [docs/zh-cn/constant-folding.md](docs/zh-cn/constant-folding.md) |
 | 各模块对外契约        | [docs/zh-cn/syntax-impl.md](docs/zh-cn/syntax-impl.md)           |
 | 四份跨实现行为契约      | [docs/zh-cn/](docs/zh-cn/) 下的 `*-test-plan.md`                   |
+| C++ 实现总览（入口）    | [cpp/docs/README.md](cpp/docs/README.md)                         |
 | 嵌入 C++ 程序（四步）  | [cpp/docs/quick-start.md](cpp/docs/quick-start.md)               |
 | 解析 STML 文档       | [cpp/docs/stml.md](cpp/docs/stml.md)                             |
 | 构建 / 测试 / 行尾约定 | [cpp/docs/development.md](cpp/docs/development.md)               |
 | 虚拟机（参考实现）      | [cpp/docs/basic\_vm.md](cpp/docs/basic_vm.md)                    |
 | 自己实现一个虚拟机       | [docs/zh-cn/vm-guide.md](docs/zh-cn/vm-guide.md)                 |
-| C++ 侧实现笔记      | [cpp/docs/](cpp/docs/) 下的 `*_test_plan.md`、`expr_optim.md`       |
+| GDScript 实现与插件安装 | [gdscript/docs/README.md](gdscript/docs/README.md)               |
+| GDScript API 用法   | [gdscript/docs/usage.md](gdscript/docs/usage.md)                 |
+| GDScript 测试与数据重生成 | [gdscript/docs/testing.md](gdscript/docs/testing.md)             |
+| GDScript 语言坑与代码约定 | [gdscript/docs/gdscript-notes.md](gdscript/docs/gdscript-notes.md) |
+| C++ 侧实现笔记（改 `cpp/` 前看） | [cpp/docs/development.md](cpp/docs/development.md)             |
+| C++ 侧各模块实现笔记    | [cpp/docs/](cpp/docs/) 下的 `*_test_plan.md`、`expr_optim.md`       |
 
 ---
 

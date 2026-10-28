@@ -3,7 +3,7 @@
 //
 // 内置 32 条指令的名字与「是否带操作数」在 opcode.hpp 里是固定的；自定义指令
 // （编号 > Opcode::Return）的名字、参数个数只有 CustomOpcodeConfig 知道。所以
-// 产物里只要可能有自定义指令，就得用 DumpProgram(program, &config) 打印：
+// 产物里只要可能有自定义指令，就得用 Disasm(program, &config) 打印：
 //   * 不带 config 只能用 Custom\#编号 占位，而且变长指令后面那个「参数个数」会被
 //     当成下一条指令（两者只差一个 short，读起来会全错位）；
 //   * 带 config 才会印出名字，并按 isVarArg 决定要不要吃掉后面那个 short。
@@ -23,7 +23,7 @@ namespace Stope {
 
 // 自定义指令的编号必须大于 Opcode::Return（compiler_test_plan.md §4.4）：
 // opcodes 是 short 混排序列，撞号以后编译器写出的仍是同一个 short，运行时与
-// 反汇编都看不出区别。DumpProgram 会把这种注册报成 warning。
+// 反汇编都看不出区别。Disasm 会把这种注册报成 warning。
 inline constexpr short kFirstCustomOpcode =
     static_cast<short>(Opcode::Return) + 1;
 
@@ -83,11 +83,11 @@ inline bool CustomOpcodeHasArg(short raw, const CustomOpcodeConfig& config) {
 
 // 把 Program 反汇编成可读文本。
 //
-// config 可空：产物里没有自定义指令时传 nullptr 即可（就是原来的
-// DumpProgramNoCustom）。含自定义指令时**必须**传注册时用的那一份，否则名字、
-// 变长指令的参数个数都无从得知。
-inline std::string DumpProgram(const Program& prog,
-                               const CustomOpcodeConfig* config = nullptr) {
+// config 可空：产物里没有自定义指令时传 nullptr 即可（等价于
+// 直接调 `DisasmNoCustom(prog)`）。含自定义指令时**必须**传注册时用的那一份，
+// 否则名字、变长指令的参数个数都无从得知。
+inline std::string Disasm(const Program& prog,
+                          const CustomOpcodeConfig* config = nullptr) {
   using namespace std;
 
   // ---------- 编号 -> (名字, 注册项) 的反查表 ----------
@@ -212,7 +212,7 @@ inline std::string DumpProgram(const Program& prog,
     if (raw > static_cast<short>(Opcode::Return))
       warnings.push_back("opcode #" + to_string(raw) +
                          " is not a builtin; pass the CustomOpcodeConfig to "
-                         "DumpProgram() to decode it.");
+                         "Disasm() to decode it.");
     else
       warnings.push_back(
           "opcode #" + to_string(raw) +
@@ -225,8 +225,8 @@ inline std::string DumpProgram(const Program& prog,
 }
 
 // 产物里确定没有自定义指令时的简写。
-inline std::string DumpProgramNoCustom(const Program& prog) {
-  return DumpProgram(prog, nullptr);
+inline std::string DisasmNoCustom(const Program& prog) {
+  return Disasm(prog, nullptr);
 }
 
 }  // namespace Stope

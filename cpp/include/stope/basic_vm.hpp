@@ -980,12 +980,36 @@ struct API {
   };
 };
 
+// 执行 i 指向的一条指令（连同它的操作数）。Success = 这条跑完了、没有新错误。
+//
+// 三条约定（与 GDScript 侧 basic_vm.gd 的 State.step 一致）：
+//   1. **终止条件由调用方用 i 判**，别写 `while (s.Step() == Result::Success)` ——
+//      指令流走完之后 Step 返回 Success 但什么也不做，那个循环永远不结束。正确写法：
+//        while (s.i < static_cast<int>(s.program->opcodes.size()) &&
+//               s.Step() == Result::Success) { /* 每条之后检查 s */ }
+//   2. 已经在错误态时不执行任何指令，直接返回 Error —— 否则手滑再调一次会把同一条
+//      错指令跑第二遍、错误刷两条。**Run 没有这个预检**（它一出错就返回，调用方本就
+//      不该续跑），这是 Step 与 Run 唯一的语义差别。
+//   3. 返回值只管「这条有没有出错」，不管「还有没有下一条」。
+Result State::Step() {
+  if (HasError())
+    return Result::Error;
+  if (i >= static_cast<int>(program->opcodes.size()))
+    return Result::Success;
+  api->opFuncs[program->opcodes[i]](*api, *this);
+  if (HasError())
+    return Result::Error;
+  ++i;
+  return Result::Success;
+}
+
+// 一路跑到 Return 或指令流结束。复用 Step：header-only + 隐式 inline，编译期就展开，
+// 不会比手写循环慢 —— 这与 GDScript 侧「run 和 step 各写一遍」的取舍相反，那边是
+// 真的每次调用都要付出解释器开销。
 Result State::Run() {
   while (i < program->opcodes.size()) {
-    api->opFuncs[program->opcodes[i]](*api, *this);
-    if (HasError())
+    if (Step() != Result::Success)
       return Result::Error;
-    ++i;
   }
   return Result::Success;
 }

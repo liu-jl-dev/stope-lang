@@ -1,13 +1,14 @@
 # STML 上手（C++）
 
 > 目标读者：想在自己的 C++ 程序里解析 STML 文档的人。
-> 本文逐段讲 `cpp/demo/03-stml.cpp`（可以直接编译运行），最后给出一份可复制的最小骨架。
+> 本文逐段讲 `cpp/demo/02-stml.cpp`（可以直接编译运行），最后给出一份可复制的最小骨架。
 >
 > STML **是** Stope 标准三件套之一（Stope 语言 / STML / `Program` 的产物格式），
 > 所以本文的接口比虚拟机那些示例 API 稳定得多，可以照着写。
 
 | 想看 | 去哪（相对本文件） |
 | --- | --- |
+| 本目录总览（面向所有人） | `README.md`（本目录） |
 | STML 的行为契约（跨实现，以它为准） | `../../docs/zh-cn/stml-test-plan.md` |
 | C++ 侧的实现笔记与缺陷流水 | `stml_test_plan.md`（本目录） |
 | Nevext 语言本身 | <https://github.com/liu-jl-dev/nevext> |
@@ -50,10 +51,10 @@ cpp/include/stope/stml_parser.hpp   Element + LexerStateFunc + Parser
 cd cpp
 cmake -B build -G "MinGW Makefiles"     # 必须显式指定 generator
 cmake --build build                      # 产出 build/libstope.a 与各 demo
-./build/demo03.exe
+./build/demo02.exe
 ```
 
-`demo03` **只解析**，不编译也不执行 —— 接过内容之后干什么完全是宿主的事
+`demo02` **只解析**，不编译也不执行 —— 接过内容之后干什么完全是宿主的事
 （要把 Stope 代码跑起来看 `quick-start.md`）。它的完整输出就这么几行：
 
 ```
@@ -67,7 +68,7 @@ let a = 1;
   return a + argc;
 ```
 
-demo 的输入就是 `03-stml.cpp` 里那份 raw string，下面逐字照搬（**包括空行**）：
+demo 的输入就是 `02-stml.cpp` 里那份 raw string，下面逐字照搬（**包括空行**）：
 
 ```xml
 <stml package="MyPkg">
@@ -114,7 +115,7 @@ demo 的打印只有三处，对着输出看：
 > `<method>` 的顺序一变你会发现得更晚。按名字找，或者干脆写个遍历（§4、§7）。
 
 想知道某个元素当时被判成了哪种模式，最简单的办法是把整棵树打印出来 ——
-`demo03` 没做这一步，但把 §7 那份 `walk()` 套上去就能看到全貌；同一份输入的
+`demo02` 没做这一步，但把 §7 那份 `walk()` 套上去就能看到全貌；同一份输入的
 真实输出如下（注意多行 `text` 会真的换行，因为它原样保留缩进）：
 
 ```
@@ -555,7 +556,7 @@ int main() {
 | `include/stope/core.hpp` | 聚合头，demo 用它一次拿到全部公共头 |
 | `src/stml_lexer.cpp` | 四种状态的扫描实现，`<!--` 只在 Xml 生效的那一行就在这 |
 | `src/stml_parser.cpp` | 属性循环为什么"每个分支自己推进"（文件头注释写清楚了） |
-| `demo/03-stml.cpp` | 本文讲的 demo，目标 `demo03`；**只解析，不编译不执行** |
+| `demo/02-stml.cpp` | 本文讲的 demo，目标 `demo02`；**只解析，不编译不执行** |
 | `test/test_stml_parser.cpp`（59 用例） | 语法侧断言，用例编号 PA / PB / PC / PE / PF / PH / PL |
 | `test/test_stml_lexer.cpp`（62 用例） | 词法侧断言，用例编号 SE / SL / SN / SP / SR / SS / ST / SW / SX |
 | `stml_test_plan.md`（本目录） | C++ 侧的实现笔记与缺陷编号 TD-xx |

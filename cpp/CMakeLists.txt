@@ -22,13 +22,13 @@ add_executable(demo01 demo/01-quick-start.cpp)
 target_include_directories(demo01 PUBLIC include)
 target_link_libraries(demo01 PRIVATE stope)
 
-# 自定义指令：只编译 + 反汇编（DumpProgram + CustomOpcodeConfig），不接执行器。
-add_executable(demo02 demo/02-custom-opcode.cpp)
+# STML：解析一份内嵌标记文档，把里面的三种代码段原样切出来。
+add_executable(demo02 demo/02-stml.cpp)
 target_include_directories(demo02 PUBLIC include)
 target_link_libraries(demo02 PRIVATE stope)
 
-# STML：解析一份内嵌标记文档，把里面的三种代码段原样切出来。
-add_executable(demo03 demo/03-stml.cpp)
+# 自定义指令：只编译 + 反汇编（DumpProgram + CustomOpcodeConfig），不接执行器。
+add_executable(demo03 demo/03-custom-opcode.cpp)
 target_include_directories(demo03 PUBLIC include)
 target_link_libraries(demo03 PRIVATE stope)
 
@@ -129,3 +129,47 @@ while(STOPE_DEPTH_CASES)
                    -DKIND=${kind} -DDEPTH=${depth} -DEXPECT=${expect}
                    -P ${CMAKE_CURRENT_SOURCE_DIR}/test/run_depth.cmake)
 endwhile()
+
+# ---------------------------------------------------------------------------
+# golden 数据生成（给 GDScript 侧测试用，**不属于 ctest**）
+#
+# 探针源码在 tools/（C++ 侧代码不放进 GDScript 工程目录）。它们必须链接 stope
+# 库 —— 期望值只能由权威实现产出，不能让被测实现自证（那样测试永远绿，等于没测）。
+# 挂在 CMake 里的目的只是让「改完 C++ 顺手刷新期望值」变成一条命令：
+#
+#     cmake --build build --target gen-golden
+#
+# 好处：不用记 4 条 g++ 命令和它们的 -I / -std 参数；探针链接的是 stope 静态
+# 库，改了 C++ 接口会**编译期报错**，不会静默沿用旧数据。
+#
+# 数据落点仍是 gdscript/test/data/ —— Godot 的 res:// 只认工程目录内的文件，
+# 挪到仓库根就读不到了。探针源码与产出数据分居两边，这是刻意的。
+# ---------------------------------------------------------------------------
+get_filename_component(STOPE_GD_DATA "${CMAKE_CURRENT_SOURCE_DIR}/../gdscript/test/data" ABSOLUTE)
+set(STOPE_GEN_DRIVER "${CMAKE_CURRENT_SOURCE_DIR}/cmake/run_gen.cmake")
+
+foreach(STOPE_GEN_PROBE golden golden_lex golden_binarr golden_stml golden_disasm)
+  add_executable(gen_${STOPE_GEN_PROBE} EXCLUDE_FROM_ALL "tools/${STOPE_GEN_PROBE}.cpp")
+  # 探针里写的是 `#include "compiler.hpp"` 这类裸名，所以除了 test/ 还要补 include/stope。
+  target_include_directories(gen_${STOPE_GEN_PROBE} PRIVATE test include/stope)
+  target_link_libraries(gen_${STOPE_GEN_PROBE} PRIVATE stope)
+endforeach()
+
+# 一次性重生成四份数据。custom target 每次都算"过期"，这正是想要的：
+# 它只描述动作，不参与增量判断。
+add_custom_target(gen-golden
+  COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:gen_golden>
+          -DOUT=${STOPE_GD_DATA}/golden.txt -P ${STOPE_GEN_DRIVER}
+  COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:gen_golden_lex>
+          -DOUT=${STOPE_GD_DATA}/golden_lex.txt -P ${STOPE_GEN_DRIVER}
+  COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:gen_golden_binarr>
+          -DOUT=${STOPE_GD_DATA}/golden_binarr.txt -P ${STOPE_GEN_DRIVER}
+  COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:gen_golden_stml>
+          -DOUT=${STOPE_GD_DATA}/golden_stml.txt
+          -DARGS=${STOPE_GD_DATA}/stml_cases.txt -P ${STOPE_GEN_DRIVER}
+  COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:gen_golden_disasm>
+          -DOUT=${STOPE_GD_DATA}/golden_disasm.txt -P ${STOPE_GEN_DRIVER}
+  DEPENDS gen_golden gen_golden_lex gen_golden_binarr gen_golden_stml gen_golden_disasm
+  # 注释用英文：MinGW Makefiles 下把中文写进 COMMENT 会按 GBK 解释成乱码。
+  COMMENT "Regenerating GDScript golden data (5 files)"
+  VERBATIM)

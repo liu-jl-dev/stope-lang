@@ -6,13 +6,13 @@
 - 计划版本：v1.3（2026-10-22）：**全部测试落地并全绿** ——
   53 个用例（C-01…C-52 + C-37b）/ 98 断言 / 0 失败，Opcode 覆盖 **33/33**；
   基类另有 `test_ast_visitor` 的 V 组 36 断言 / 0 失败；
-  另有 `test_vm` 的 VM 组 131 断言 / 0 失败；`ctest` **14/14**。
+  另有 `test_vm` 的 VM 组 156 断言 / 0 失败；`ctest` **14/14**。
   - v1.3 的变化只有一处：`Opcode` 新增 `PushValue`（编号 8），读变量与「当赋值
     目标」分成两条指令，见 §2.1 末尾。用例数与断言数不变，只是期望串里的读值位置
     由 `PushId` 改成 `PushValue`，覆盖口径 32 → 33。
 - 实测环境：g++ (MinGW-w64 x86_64-win32-seh) 15.2.0，`-std=c++20`
-- 参考实现（语义基准）：`gdscript/stope/stope_compiler.gd`（配 `stope.gd` 的 `Inst` / `has_a_param`、
-  `stope_asm.gd` 的收尾）
+- 参考实现（语义基准）：`gdscript/addons/stope/compiler.gd`（配 `opcode.gd` 的 `Opcode` / `has_a_param`、
+  `program.gd` 的收尾）
 - 上游依赖：`parser.hpp` + `lexer.hpp`（其测试计划见 `parser_test_plan.md` / `lexer_test_plan.md`）
 
 ---
@@ -53,7 +53,7 @@ struct Compiler : public ASTVisitor {            // 基类见 ast_visitor.hpp
 > 边界说明见 §4.5；基类的测试是 `test_ast_visitor.cpp`（V 组）。
 
 > **不要在 Compiler 里保存 Program 字段的副本**（2026-10-17 重写）。
-> 参考实现 `stope_compiler.gd` 的 `int_consts` / `float_consts` / `str_consts`
+> 参考实现 `compiler.gd` 的 `int_consts` / `float_consts` / `str_consts`
 > 都是 Reference 对象，收尾时把 `data` 交给 Program 是**零拷贝**；C++ 里照着写成
 > 成员 + 赋值就是真的复制一份。现在的实现**直接把指令写进 `out->opcodes`、
 > 把常量写进 `out->intConsts` 等池子**，编译器自己只留两类「Program 里没有对应
@@ -82,7 +82,7 @@ struct Compiler : public ASTVisitor {            // 基类见 ast_visitor.hpp
 | `Return` | 是 | 返回值个数 |
 | 自定义指令 | 仅变长时有 | 参数个数 |
 
-判断依据是 `gdscript/stope/stope.gd` 的 `Stope.has_a_param`；C++ 多出的 `PushBinArr`
+判断依据是 `gdscript/addons/stope/opcode.gd` 的 `StopeOpcode.has_a_param`；C++ 多出的 `PushBinArr`
 让后面所有阈值整体后移一位（见测试里的 `opHasParam`）。
 
 #### `PushId` 与 `PushValue` 的分工（2026-10-22 起）
@@ -118,7 +118,7 @@ struct Compiler : public ASTVisitor {            // 基类见 ast_visitor.hpp
 
 ## 3. 相对参考实现的偏离（CD-1…CD-5）
 
-仿照不等于照抄。参考实现 `stope_compiler.gd` 有几处在 C++ 侧会直接跑错或算错，
+仿照不等于照抄。参考实现 `compiler.gd` 有几处在 C++ 侧会直接跑错或算错，
 逐条登记如下，每条都有对应用例锁住。**改实现前先读这一节。**
 
 | 编号 | 参考实现的做法 | C++ 的做法 | 原因 | 锁定的用例 |
@@ -404,4 +404,4 @@ ctest --test-dir build --output-on-failure   # 全套（12 项）
 3. `requiredStackSize` 是线性记账的结果，`Return` 之后**没有**归零（沿用"偏大总比偏小安全"）。
    死代码会把这个数抬上去，属已知行为。
 4. `Compile()` 出错时会把 `out` 复原为空：任何依赖"半成品 Program"的下游逻辑都要先确认约定。
-5. 参考实现还在演进（`stope_compiler.gd` 若有改动），改之前比对 §3 的 CD 表。
+5. 参考实现还在演进（`compiler.gd` 若有改动），改之前比对 §3 的 CD 表。

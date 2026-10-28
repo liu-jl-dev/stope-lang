@@ -4,6 +4,7 @@
 
 | 想看 | 去哪 |
 | --- | --- |
+| 本目录总览（面向所有人，本文是面向开发者的） | `README.md`（本目录） |
 | 怎么在程序里嵌入 Stope | `quick-start.md`（本目录） |
 | 虚拟机的约定 | `basic_vm.md`（本目录） |
 | Lexer / Parser / Compiler / STML 的测试计划 | 四份 `*_test_plan.md`（本目录） |
@@ -20,7 +21,7 @@
 | 编译单元 | `src/` 9 个 `*.cpp`：`ast` `ast_visitor` `compiler` `expr_optim` `lexer` `parse_binarr` `parser` `stml_lexer` `stml_parser` |
 | 产物 | `add_library(stope STATIC ...)` → `build/libstope.a` |
 | 测试 | ctest **14/14**：`lexer` `parser` `compiler` `ast_visitor` `stml` `vm` 六个目标 + 8 组 `parser-depth-*` |
-| 示例 | `demo/01-quick-start.cpp` → 目标 `demo01`；`demo/02-custom-opcode.cpp` → `demo02`（都未接 ctest） |
+| 示例 | `demo/01-quick-start.cpp` → `demo01`；`demo/02-stml.cpp` → `demo02`；`demo/03-custom-opcode.cpp` → `demo03`（都未接 ctest） |
 | 依赖 | **零第三方**。C++20 |
 
 19 个头文件里，只有 **`basic_vm.hpp` 与 `debug.hpp` 是 header-only**（内部全是 `inline`）；
@@ -40,7 +41,14 @@ cmake -B build -G "MinGW Makefiles"
 cmake --build build
 ctest --test-dir build
 ./build/demo01.exe
+cmake --build build --target gen-golden   # 改了行为或加用例时才要
 ```
+
+`gen-golden` 重生成 `gdscript/test/data/` 下五份期望值（探针在
+`cpp/tools/`，链接 `stope` 库运行）。它**不在默认构建里**
+（`EXCLUDE_FROM_ALL`），也不进 ctest —— 日常构建和测试都不会碰它。原因见 §2.1 第 5 条。
+探针源码留在这边、产出数据落在 GDScript 工程里，是刻意的：期望值只能由权威实现
+产出，而 Godot 的 `res://` 只认工程目录内的文件。
 
 ### 2.1 五个坑（按踩到的频率排序）
 
@@ -55,8 +63,10 @@ ctest --test-dir build
    容易误判成「命令找不到」。要用 Windows 终端拿到
    `-1073741571`（0xC00000FD = STATUS_STACK_OVERFLOW），
    并给测试加 `setvbuf(stdout, nullptr, _IONBF, 0)` 才能看到崩溃前的进度。
-5. **行号相关**：Windows 上 C++ 重定向输出是 CRLF、Godot 写出是 LF，
-   golden 比对前要剥 `\r`。
+5. **行号相关**：Windows 上 C++ 重定向输出是 CRLF、Godot 写出是 LF。
+   跨实现比对的数据文件行尾**不要手工处理** —— `.gitattributes` 的 `* text=auto`
+   已经保证入库统一 LF、检出按平台转换，读侧（`test_util.gd` 的 `read_golden`）也兜底
+   剥 `\r`。GDScript 侧那五份 golden 由 `gen-golden` target 生成，不要手敲 `g++`。
 
 ### 2.2 深度阈值（实测，勿回退）
 
@@ -218,8 +228,8 @@ VSCode 里格式化按钮的等价效果，就是 `--style=file`（改完设置�
 | `expr_optim.md` | 常量折叠的规则总表 |
 | `basic_vm.md` | 虚拟机的语义约定 |
 | `quick-start.md` | 嵌入 Stope 的四步 |
-| `custom-opcode.md` | 自定义指令：注册 → 编译 → 反汇编 |
 | `stml.md` | STML 文档解析：回调决定内容模式 + 语法注意事项 |
+| `custom-opcode.md` | 自定义指令：注册 → 编译 → 反汇编 |
 | 本文 | 布局 / 构建 / ODR / 行尾 / **代码风格** / 文档约定 |
 
 跨实现文档里，**`../../docs/zh-cn/syntax-impl.md` §7.2** 记着 `ASTVisitor` 这副遍历骨架
@@ -300,7 +310,7 @@ clang-format 管不了的「风格」在这里定死，改接口前先对一遍�
 
 2026-10-21：`Compile(AST::Prog*, Program*, const CustomOpcodeConfig*)` 改成
 `Compile(AST::Prog&, Program&)`，并把 `custom` 收敛到构造函数。改这条时只有
-demo / `test_compiler.cpp` / `gdscript/test/tools/golden.cpp` 三处调用点 ——
+demo / `test_compiler.cpp` / `tools/golden.cpp` 三处调用点 ——
 接口虽然公开，但用的人少，趁早改比拖到以后便宜。
 
 同日：`Parser(Lexer*, ...)` 改成 `Parser(Lexer&, ...)`，`STML::Parser` 同步。

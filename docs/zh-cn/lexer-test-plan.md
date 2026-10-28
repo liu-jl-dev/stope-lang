@@ -4,10 +4,10 @@
 >
 > | 通用测试计划 | 覆盖范围 | C++ 侧 | GDScript 侧 |
 > | --- | --- | --- | --- |
-> | **lexer-test-plan.md（本文）** | 字符流 → Token 流 | `cpp/include/stope/lexer.hpp` | `gdscript/stope/stope_token.gd` |
-> | [parser-test-plan.md](parser-test-plan.md) | Token 流 → AST | `cpp/include/stope/parser.hpp` | `gdscript/stope/stope_parser.gd` |
-> | [compiler-test-plan.md](compiler-test-plan.md) | AST → Program | `cpp/include/stope/compiler.hpp` | `gdscript/stope/stope_compiler.gd` |
-| [stml-test-plan.md](stml-test-plan.md) | STML 文本 → 元素树 | `cpp/include/stope/stml_lexer.hpp` + `cpp/include/stope/stml_parser.hpp` | `gdscript/stope/stml_lexer.gd` + `gdscript/stope/stml_parser.gd` |
+> | **lexer-test-plan.md（本文）** | 字符流 → Token 流 | `cpp/include/stope/lexer.hpp` | `gdscript/addons/stope/lexer.gd` |
+> | [parser-test-plan.md](parser-test-plan.md) | Token 流 → AST | `cpp/include/stope/parser.hpp` | `gdscript/addons/stope/parser.gd` |
+> | [compiler-test-plan.md](compiler-test-plan.md) | AST → Program | `cpp/include/stope/compiler.hpp` | `gdscript/addons/stope/compiler.gd` |
+| [stml-test-plan.md](stml-test-plan.md) | STML 文本 → 元素树 | `cpp/include/stope/stml_lexer.hpp` + `cpp/include/stope/stml_parser.hpp` | `gdscript/addons/stope/stml_lexer.gd` + `gdscript/addons/stope/stml_parser.gd` |
 >
 > **权威实现：C++。** 两侧出现分歧时以 `cpp/include/stope/lexer.hpp` 的实测行为为准，
 > GDScript 侧按 §7 的差异清单整改；反向的分歧（C++ 落后于 GDScript 且确认是好的）
@@ -91,7 +91,7 @@ isStringLiteral(t)    isBinArrLiteral(t)
 ```
 
 C++ 侧直接用 `TokenType::Integer/Float/String/BinArr`；
-GDScript 侧由 `StopeToken.Type.Integer/Float/String/BinArr` 提供（本次整改新增，见 §7 GD-L-01）。
+GDScript 侧由 `StopeLexer.Token.Type.Integer/Float/String/BinArr` 提供（2026-10-18 整改新增，见 §7 GD-L-01）。
 
 ### 2.3 Token 种类清单（47 项，顺序不重要，集合必须一致）
 
@@ -105,17 +105,19 @@ If  Elif  Else  Let  Return  While  Break  Continue
 Null  False  True  Args  Argc  Export  Custom
 ```
 
-17 个关键字：`idiv if not and or elif else let return while break continue
+关键字：`idiv if not and or elif else let return while break continue
 null false true args argc export`。大小写敏感，且**关键字 > 自定义指令 > 标识符**。
+（`idiv` 在语法上写作运算符，词法上仍是关键字；旧文档按「17 个关键字 + `idiv`」计数，
+实际词法表是这 18 项。）
 
 ### 2.4 两侧 API 对照
 
 | 抽象 | C++ | GDScript |
 | --- | --- | --- |
-| 取下一个 token | `Lexer::NextToken(Token&, const CustomOpcodeConfig*)` | `StopeToken.Lexer.next_token() -> Token` |
-| 错误列表 | `Lexer::errors : vector<string>` | `StopeToken.Lexer.errors : Array[String]` |
-| 当前行号 | `Lexer::line : int` | `StopeToken.Lexer.line : int` |
-| Token 字段 | `type/line/lexeme/parsed/numberValue` | `type/line/literal/parsed/number_value` |
+| 取下一个 token | `Lexer::NextToken(Token&, const CustomOpcodeConfig*)` | `StopeLexer.Lexer.next_token(custom) -> StopeLexer.Token` |
+| 错误列表 | `Lexer::errors : vector<string>` | `StopeLexer.Lexer.errors : Array[String]` |
+| 当前行号 | `Lexer::line : int` | `StopeLexer.Lexer.line : int` |
+| Token 字段 | `type / line / lexeme / parsed / numberValue` | `type / line / literal / parsed / int_value / float_value`（`literal` 对应 `lexeme`，数值按整 / 浮分两个字段） |
 
 ---
 
@@ -384,7 +386,7 @@ lexer 相关：`test_lexer_number` / `test_lexer_ident` / `test_lexer_string` /
 ### GDScript
 
 ```bash
-"/d/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64.exe" \
+"/c/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/godot_console.exe" \
     --headless --path gdscript --script res://test/run_tests.gd
 ```
 

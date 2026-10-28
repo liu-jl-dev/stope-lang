@@ -16,7 +16,7 @@
 > - `cpp/include/stope/parse_binarr.hpp` —— 二进制数组字面量的内容解析
 > - `cpp/include/stope/token.hpp` / `common.hpp` / `custom_opcode.hpp` —— Token 种类、优先级、自定义指令配置
 >
-> 另有 GDScript 参考实现（`gdscript/stope/stope_parser.gd`），C++ 侧在**错误恢复**与**顶层 `}`**
+> 另有 GDScript 参考实现（`gdscript/addons/stope/parser.gd`），C++ 侧在**错误恢复**与**顶层 `}`**
 > 两处有意与之不同，差异集中列在 §7。
 > 行为细节以 `cpp/docs/parser_test_plan.md`、`cpp/docs/lexer_test_plan.md` 中的实测用例为准。
 > 文中所有边界行为（数字切分、转义、二进制数组、缺分号等）均于 **2026-10-16** 用探针实测核对过。
@@ -524,7 +524,7 @@ Parser p(lexer, &cfg);                                 // config 必须在构造
 
 ## 7. 与 GDScript 参考实现的差异
 
-参考实现位于 `gdscript/stope/stope_parser.gd`。C++ 侧在以下两处**有意偏离**，其余保持一致：
+参考实现位于 `gdscript/addons/stope/parser.gd`。C++ 侧在以下两处**有意偏离**，其余保持一致：
 
 | 场景 | 参考实现 | C++ 实现 |
 | --- | --- | --- |

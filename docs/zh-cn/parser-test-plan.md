@@ -4,10 +4,10 @@
 >
 > | 通用测试计划 | 覆盖范围 | C++ 侧 | GDScript 侧 |
 > | --- | --- | --- | --- |
-> | [lexer-test-plan.md](lexer-test-plan.md) | 字符流 → Token 流 | `cpp/include/stope/lexer.hpp` | `gdscript/stope/stope_token.gd` |
-> | **parser-test-plan.md（本文）** | Token 流 → AST | `cpp/include/stope/parser.hpp` | `gdscript/stope/stope_parser.gd` |
-> | [compiler-test-plan.md](compiler-test-plan.md) | AST → Program | `cpp/include/stope/compiler.hpp` | `gdscript/stope/stope_compiler.gd` |
-| [stml-test-plan.md](stml-test-plan.md) | STML 文本 → 元素树 | `cpp/include/stope/stml_lexer.hpp` + `cpp/include/stope/stml_parser.hpp` | `gdscript/stope/stml_lexer.gd` + `gdscript/stope/stml_parser.gd` |
+> | [lexer-test-plan.md](lexer-test-plan.md) | 字符流 → Token 流 | `cpp/include/stope/lexer.hpp` | `gdscript/addons/stope/lexer.gd` |
+> | **parser-test-plan.md（本文）** | Token 流 → AST | `cpp/include/stope/parser.hpp` | `gdscript/addons/stope/parser.gd` |
+> | [compiler-test-plan.md](compiler-test-plan.md) | AST → Program | `cpp/include/stope/compiler.hpp` | `gdscript/addons/stope/compiler.gd` |
+| [stml-test-plan.md](stml-test-plan.md) | STML 文本 → 元素树 | `cpp/include/stope/stml_lexer.hpp` + `cpp/include/stope/stml_parser.hpp` | `gdscript/addons/stope/stml_lexer.gd` + `gdscript/addons/stope/stml_parser.gd` |
 >
 > **权威实现：C++。** 两侧分歧以 `cpp/include/stope/parser.hpp` 的实测行为为准。
 >
@@ -339,7 +339,7 @@ parser 相关：`test_parser_stmt` / `test_parser_expr` / `test_parser_prec` /
 ### GDScript
 
 ```bash
-"/d/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64.exe" \
+"/c/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/godot_console.exe" \
     --headless --path gdscript --script res://test/run_tests.gd
 ```
 

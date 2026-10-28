@@ -3,7 +3,7 @@
 - 被测对象：`cpp/include/stope/lexer.hpp` — `Stope::Lexer`
 - 计划版本：v1（2026-10-15）
 - 实测环境：g++ (MinGW x86_64-win32-seh) 15.2.0，`-std=c++20`，C++20
-- 参考实现（语义基准）：`gdscript/stope/stope_token.gd`
+- 参考实现（语义基准）：`gdscript/addons/stope/lexer.gd`
 
 ---
 

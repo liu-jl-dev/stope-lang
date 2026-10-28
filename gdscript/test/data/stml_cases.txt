@@ -1,0 +1,134 @@
+# STML 用例清单 —— docs/zh-cn/stml-test-plan.md §4 的 121 条。
+#
+# 这一份是**唯一真源**：两侧都读它。
+#   · C++ 探针 cpp/tools/golden_stml.cpp 读它，dump 出 data/golden_stml.txt（期望值）；
+#   · GDScript 测试 test/test_stml.gd 读它 + golden_stml.txt，逐字段比对。
+# 加删用例**只改这一个文件**，然后重跑探针（命令见 gdscript/docs/testing.md）。
+#
+# 格式：一行一条，\t 分字段，key=value。
+#   KIND=lex   词法：ST 是初始状态（Xml/Text/Nevext/Stope）
+#   KIND=parse 语法：SF 是宿主回调（null=不传 / default=sto→Stope、nev→Nevext、p→Text、
+#                    其余 Xml / text=一律 Text）
+#   SRC        输入，转义规则：\\ \n \r \t（与 StopeTestUtil.unesc 一致）
+#   TIMES      SRC 重复几次（默认 1）
+ID=LEX-SX-01	KIND=lex	ST=Xml	SRC=<a>
+ID=LEX-SX-02	KIND=lex	ST=Xml	SRC=</a>
+ID=LEX-SX-03	KIND=lex	ST=Xml	SRC=<a/>
+ID=LEX-SX-04	KIND=lex	ST=Xml	SRC=<a id="x">
+ID=LEX-SX-05	KIND=lex	ST=Xml	SRC=<a id='x'>
+ID=LEX-SX-06	KIND=lex	ST=Xml	SRC=<!-- 注释 --><a>
+ID=LEX-SX-07	KIND=lex	ST=Xml	SRC=<!--\n跨行\n--><a>
+ID=LEX-SX-08	KIND=lex	ST=Xml	SRC=hello
+ID=LEX-SX-09	KIND=lex	ST=Xml	SRC=@
+ID=LEX-SX-10	KIND=lex	ST=Xml	SRC=<1>
+ID=LEX-SW-01	KIND=lex	ST=Xml	SRC=abc
+ID=LEX-SW-02	KIND=lex	ST=Xml	SRC=_x
+ID=LEX-SW-03	KIND=lex	ST=Xml	SRC=:ns
+ID=LEX-SW-04	KIND=lex	ST=Xml	SRC=a-b:c_9
+ID=LEX-SW-05	KIND=lex	ST=Xml	SRC=9a
+ID=LEX-SW-06	KIND=lex	ST=Xml	SRC=a>b
+ID=LEX-SW-07	KIND=lex	ST=Xml	SRC=a=b
+ID=LEX-SW-08	KIND=lex	ST=Xml	SRC=a.b
+ID=LEX-SS-01	KIND=lex	ST=Xml	SRC="abc"
+ID=LEX-SS-02	KIND=lex	ST=Xml	SRC=''
+ID=LEX-SS-03	KIND=lex	ST=Xml	SRC="a b"
+ID=LEX-SS-04	KIND=lex	ST=Xml	SRC="a>b"
+ID=LEX-SS-05	KIND=lex	ST=Xml	SRC="a\nb"
+ID=LEX-SS-06	KIND=lex	ST=Xml	SRC="abc
+ID=LEX-SS-07	KIND=lex	ST=Xml	SRC='abc
+ID=LEX-SS-08	KIND=lex	ST=Xml	SRC="a\\"b"
+ID=LEX-ST-01	KIND=lex	ST=Text	SRC=hello world</a>
+ID=LEX-ST-02	KIND=lex	ST=Text	SRC=hello world  \n  </a>
+ID=LEX-ST-03	KIND=lex	ST=Text	SRC=a\nb</a>
+ID=LEX-ST-04	KIND=lex	ST=Text	SRC=</a>
+ID=LEX-ST-05	KIND=lex	ST=Text	SRC=text<b/>more</a>
+ID=LEX-ST-06	KIND=lex	ST=Text	SRC=没有结束标签
+ID=LEX-SN-01	KIND=lex	ST=Nevext	SRC=windowSize 1280, 720;</nev>
+ID=LEX-SN-02	KIND=lex	ST=Nevext	SRC=a // 注释\nb;</n>
+ID=LEX-SN-03	KIND=lex	ST=Nevext	SRC=a /* 跨\n行 */ b;</n>
+ID=LEX-SN-04	KIND=lex	ST=Nevext	SRC=a /* 未闭合
+ID=LEX-SN-05	KIND=lex	ST=Nevext	SRC=x "a</b" 'p</q';</n>
+ID=LEX-SN-06	KIND=lex	ST=Nevext	SRC=x "a\\"b" 'c\\'d';</n>
+ID=LEX-SN-07	KIND=lex	ST=Nevext	SRC=x "abc;</n>
+ID=LEX-SN-08	KIND=lex	ST=Nevext	SRC=x "a\nb" c;</n>
+ID=LEX-SP-01	KIND=lex	ST=Stope	SRC=let a = 1;</sto>
+ID=LEX-SP-02	KIND=lex	ST=Stope	SRC=if a < b { c(); }</sto>
+ID=LEX-SP-03	KIND=lex	ST=Stope	SRC=let s = "a</b";</sto>
+ID=LEX-SP-04	KIND=lex	ST=Stope	SRC=let t = '01 02';</sto>
+ID=LEX-SP-05	KIND=lex	ST=Stope	SRC=let s = "a\\"b\\n";</sto>
+ID=LEX-SP-06	KIND=lex	ST=Stope	SRC=a // c\nb;</sto>
+ID=LEX-SP-07	KIND=lex	ST=Stope	SRC=a /* 未闭合
+ID=LEX-SP-08	KIND=lex	ST=Stope	SRC=let s = "abc;</sto>
+ID=LEX-SP-09	KIND=lex	ST=Stope	SRC=a < !- b;</sto>
+ID=LEX-SP-10	KIND=lex	ST=Stope	SRC=let a = 1;\nlet b = 2;\n</sto>
+ID=LEX-SL-01	KIND=lex	ST=Xml	SRC=<a>\n<b>\n</b>\n</a>
+ID=LEX-SL-02	KIND=lex	ST=Text	SRC=a\n\nb
+ID=LEX-SL-03	KIND=lex	ST=Text	SRC=a\r\nb
+ID=LEX-SE-01	KIND=lex	ST=Xml	SRC=@ $
+ID=LEX-SE-02	KIND=lex	ST=Xml	SRC=a\n@
+ID=LEX-SE-03	KIND=lex	ST=Xml	SRC=@
+ID=LEX-SR-01	KIND=lex	ST=Xml	SRC=
+ID=LEX-SR-02	KIND=lex	ST=Xml	SRC=   
+ID=LEX-SR-03	KIND=lex	ST=Xml	SRC=<!-- 未闭合的 xml 注释
+ID=LEX-SR-04	KIND=lex	ST=Xml	SRC=a	TIMES=5000
+ID=LEX-SR-05	KIND=lex	ST=Xml	SRC="	TIMES=200
+ID=LEX-SR-06	KIND=lex	ST=Xml	SRC=<!--
+ID=PARSE-PA-01	KIND=parse	SF=default	SRC=<a/>
+ID=PARSE-PA-02	KIND=parse	SF=default	SRC=<a></a>
+ID=PARSE-PA-03	KIND=parse	SF=default	SRC=  <a/>  
+ID=PARSE-PA-04	KIND=parse	SF=default	SRC=<a><b/></a>
+ID=PARSE-PA-05	KIND=parse	SF=default	SRC=<a><b><c/></b></a>
+ID=PARSE-PA-06	KIND=parse	SF=default	SRC=<a><b/><c/><d/></a>
+ID=PARSE-PA-07	KIND=parse	SF=default	SRC=<a><b></b><c> </c></a>
+ID=PARSE-PA-08	KIND=parse	SF=default	SRC=<a-b></a-b>
+ID=PARSE-PA-09	KIND=parse	SF=default	SRC=<a/><b/>
+ID=PARSE-PB-01	KIND=parse	SF=default	SRC=<a id="x"/>
+ID=PARSE-PB-02	KIND=parse	SF=default	SRC=<a id='x'/>
+ID=PARSE-PB-03	KIND=parse	SF=default	SRC=<a flag/>
+ID=PARSE-PB-04	KIND=parse	SF=default	SRC=<a id="x" flag/>
+ID=PARSE-PB-05	KIND=parse	SF=default	SRC=<a flag id="x"/>
+ID=PARSE-PB-06	KIND=parse	SF=default	SRC=<a z="1" a="2"/>
+ID=PARSE-PB-07	KIND=parse	SF=default	SRC=<a b="1" c="2" d/>
+ID=PARSE-PB-08	KIND=parse	SF=default	SRC=<a id=""/>
+ID=PARSE-PB-09	KIND=parse	SF=default	SRC=<a t="x>y"/>
+ID=PARSE-PB-10	KIND=parse	SF=default	SRC=<a x:y="1" z-w="2"/>
+ID=PARSE-PB-11	KIND=parse	SF=default	SRC=<a id="1"><b/></a>
+ID=PARSE-PC-01	KIND=parse	SF=default	SRC=<p>hello</p>
+ID=PARSE-PC-02	KIND=parse	SF=default	SRC=<p>  hello  </p>
+ID=PARSE-PC-03	KIND=parse	SF=default	SRC=<p></p>
+ID=PARSE-PC-04	KIND=parse	SF=default	SRC=<sto>let a = 1;</sto>
+ID=PARSE-PC-05	KIND=parse	SF=default	SRC=<nev>x 1, 2;</nev>
+ID=PARSE-PC-06	KIND=parse	SF=default	SRC=<sto>let s = "a</b";</sto>
+ID=PARSE-PC-07	KIND=parse	SF=default	SRC=<nev>x "a</b";</nev>
+ID=PARSE-PC-08	KIND=parse	SF=default	SRC=<sto>let a = 1;\nlet b = 2;</sto>
+ID=PARSE-PC-09	KIND=parse	SF=default	SRC=<p>a<b/>c</p>
+ID=PARSE-PC-10	KIND=parse	SF=default	SRC=<p>a <!-- b</p>
+ID=PARSE-PC-11	KIND=parse	SF=default	SRC=<a>text</a>
+ID=PARSE-PC-12	KIND=parse	SF=default	SRC=<nev>x "a\\"b";</nev>
+ID=PARSE-PL-01	KIND=parse	SF=default	SRC=<a>\n<b/>\n</a>
+ID=PARSE-PL-02	KIND=parse	SF=default	SRC=\n\n<a/>
+ID=PARSE-PL-03	KIND=parse	SF=default	SRC=<a>\n<b>\n<c/>\n</b>\n</a>
+ID=PARSE-PL-04	KIND=parse	SF=default	SRC=<sto>\nlet a = 1;\n</sto>
+ID=PARSE-PE-01	KIND=parse	SF=default	SRC=<>
+ID=PARSE-PE-02	KIND=parse	SF=default	SRC=a
+ID=PARSE-PE-03	KIND=parse	SF=default	SRC=
+ID=PARSE-PE-04	KIND=parse	SF=default	SRC=<a></b>
+ID=PARSE-PE-05	KIND=parse	SF=default	SRC=<a id=></a>
+ID=PARSE-PE-06	KIND=parse	SF=default	SRC=<a 1></a>
+ID=PARSE-PE-07	KIND=parse	SF=default	SRC=<a>
+ID=PARSE-PE-08	KIND=parse	SF=default	SRC=<a
+ID=PARSE-PE-09	KIND=parse	SF=default	SRC=<a></a
+ID=PARSE-PE-10	KIND=parse	SF=default	SRC=<a></a b>
+ID=PARSE-PE-11	KIND=parse	SF=default	SRC=<a id="x></a>
+ID=PARSE-PE-12	KIND=parse	SF=default	SRC=<a><b id=></b></a>
+ID=PARSE-PF-01	KIND=parse	SF=null	SRC=<a><b/></a>
+ID=PARSE-PF-02	KIND=parse	SF=null	SRC=<p>hello</p>
+ID=PARSE-PF-03	KIND=parse	SF=text	SRC=<any>hello</any>
+ID=PARSE-PF-04	KIND=parse	SF=default	SRC=<n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n><n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n></n>
+ID=PARSE-PF-05	KIND=parse	SF=default	SRC=<p>xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</p>
+ID=PARSE-PF-06	KIND=parse	SF=default	SRC=<a><!-- c --><b/></a>
+ID=PARSE-PF-07	KIND=parse	SF=default	SRC=<p><!-- c --></p>
+ID=PARSE-PH-01	KIND=parse	SF=default	SRC=<div class="box" hidden>\n<p>hello</p>\n<sto>let a = 1;</sto>\n<nev>windowSize 1280, 720;</nev>\n</div>
+ID=PARSE-PH-02	KIND=parse	SF=default	SRC=<sto>if a < b { s = "x</y"; t = '01 02'; /* c */ }</sto>
+ID=PARSE-PH-03	KIND=parse	SF=default	SRC=<nev>title "a\nb"; /* x\ny */ size 1;</nev>
+ID=PARSE-PH-04	KIND=parse	SF=default	SRC=<a><img src="i.png" alt=""/><p>cap</p></a>

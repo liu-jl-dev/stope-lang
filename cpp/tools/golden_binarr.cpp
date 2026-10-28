@@ -1,6 +1,8 @@
-// 临时探针：把 cpp/stope/parse_binarr.hpp 在 C++ 侧的事实行为 dump 成机器可读文本，
-// 供 GDScript 侧（stope_parse_binarr.gd）逐条比对 —— 期望值不手推。
+// golden 数据生成器：把 include/stope/parse_binarr.hpp 在 C++ 侧的事实行为 dump 成
+// 机器可读文本，供 GDScript 侧（stope_parse_binarr.gd）逐条比对 —— 期望值不手推。
 // 同时 dump 一批常量折叠用例：完整的 AST 形状串走 shapeExpr。
+//
+// 重生成（在 cpp/ 下）：cmake --build build --target gen-golden
 #include <cstdio>
 #include <string>
 #include <vector>

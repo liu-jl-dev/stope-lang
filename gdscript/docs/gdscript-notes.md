@@ -1,153 +1,238 @@
-# GDScript 编写注意
+# GDScript 侧实现笔记
 
-改 `gdscript/stope/` 下任何代码前先看这份。每一条都是实际踩出来的
-（报错原文照抄），不是猜的。
+这份文件记两件事：**GDScript 这门语言本身的坑**（写实现时踩过的），以及**本实现自定的
+代码约定**。语法语义不在这里 —— 那是 [`docs/zh-cn/syntax-reference.md`](../../docs/zh-cn/syntax-reference.md)
+的事。
 
-## 1. 内部类看不到外部脚本的静态函数
+> 本文面向**改实现**的人；只想用这个插件的话看 [`README.md`](README.md)。
 
-`class_name Xxx` 的脚本里，`class Inner` 内部**不能**裸调用脚本级的 `static func helper()`：
+---
 
-```gdscript
-class_name Foo
-static func helper() -> int: return 1
-class Inner:
-	func f() -> int:
-		return helper()        # ✗ Function "helper()" not found in base self
-		return Foo.helper()    # ✓ 必须用脚本类名限定
-```
+## 1. 语言坑
 
-`stope_ast.gd` 的格式化小工具（`esc / fmt_bytes / fmt_g / node_type_name / indent / _e /
-op_text`）必须在**所有内部类之前**声明 —— 顺序反了内部类同样看不到它们，
-内部类里一律写成 `StopeAst.xxx()`。
+### 1.1 没有异常，错误只能靠返回值 / 错误数组
 
-## 2. `const` 不能装 Callable
+GDScript 没有 `try/catch`。所以整条链路的错误模型是统一的：
 
-```gdscript
-const D := {1: some_method}   # ✗ Assigned value for constant isn't a constant expression
-```
+- 组件各自持有 `errors: Array[String]`，格式 `line N: msg`；
+- 出错后**尽量继续**（错误恢复），但 `errors` 非空就说明结果不可信；
+- 词法错误**不**合并进语法错误，语法错误**不**合并进编译器错误。调用方要三段一起看。
 
-`const` 里写不了函数引用，别指望 `const _PREFIX_FNS := {...}`。改成实例字段，在 `_init` 里注册：
+`push_error()` / `push_warning()` 只是往控制台 / 调试器发消息，**不会中断执行**，不能当
+抛异常用。插件里用 `push_warning` 报「实现不完整」，就是因为它不阻断加载。
 
-```gdscript
-var _prefix_fns:Dictionary = {}
-func _init(...) -> void:
-    _prefix_fns[SomeType.A] = parse_a_expr     # register_parse_fns() 里做
-```
+### 1.2 整数是 64 位有符号，溢出静默回绕
 
-`stope_parser.gd` 的 `register_parse_fns()` 与 `stope_compiler.gd` 的 `_register_visit_fns()`
-都是这么写的。**构造函数里注册，别放字段初始化器** —— 初始化器求值顺序不清，容易读到空表。
+`int` 恒为 `int64`，加减乘溢出**不报错**，直接回绕（和 C++ 的有符号溢出行为在实际结果上
+一致，但那是 UB vs 定义良好，别指望别的实现也一样）。因此：
 
-## 3. `Callable.call()` 的返回值没有类型
+- 词法器必须自己判整数溢出（`value > (I64_MAX - d) / base` 才安全）；
+- 常量折叠用 `mul_overflow` / `div_mod_overflow` 判断后再决定折不折；
+- **`-INT64_MIN` 会崩**（取负后仍溢出），`INT64_MIN / -1` 也会崩。折叠器里取负写成
+  `~a + 1` 而不是 `-a`，就是为了绕开这两个边界。
 
-```gdscript
-var x := dict[..].call(self)              # ✗ Cannot infer the type of "x" variable
-var x:StopeAst.Expr = dict[..].call(self) # ✓ 必须显式标注
-```
+`int()` 是**向零截断**，`floor()` 返回 `float`。做 `idiv` 时用 `int(a / b)` 与 C++ 的
+截断除法一致；别用 `floor`。
 
-同理，`optimize()` 这类返回 `Expr` 但实际子类多样的函数，返回类型标注要写到具体类，
-调用侧必要时 `as StopeAst.Expr`。
+另一个坑：**字面量形式的 `5 % 0` 是解析错误**（引擎在解析期就把常量折了，报
+`Modulo by zero error in operator %.`），所以测试里没法用字面量写除零用例，得走变量或
+直接构造 AST 节点 —— `test_parser.gd` 的折叠矩阵就是直接 `IntExpr.new(1, 0)`。
 
-## 4. `elif` 是关键字，不能做变量名
+### 1.3 字符串按 UTF-32 索引，C++ 按 UTF-16 码元
 
-```gdscript
-var elif := ...   # ✗ Expected variable name after "var"
-```
+GDScript 的 `String` 是 UTF-32：`s[i]` 是一个**码点**（类型还是 `String`，没有 char），
+`s.length()` 数的是码点。C++ 侧 `std::u16string` 数的是 UTF-16 码元。
 
-`stope_parser.gd` 里遍历 if 的 elif 分支时局部变量名叫 `ei`。
+- BMP 内的字符（含中文）两边一致；
+- 非 BMP（emoji、部分生僻字）在 C++ 是 2 个码元、GD 是 1 个码点 → 行号/列号、`At` 取
+  元素的结果都会不同。
 
-## 5. `for x in A, B, C:` 不支持
+当前测试用例全部在 BMP 内，所以没暴露。加非 BMP 用例前先决定以谁为准。
 
-```gdscript
-for t in A, B, C:            # ✗ Expected ":" after "for" condition
-for t in [A, B, C]:          # ✓ 数组字面量
-```
+另：`unicode_at(i)` 取码点（`int`），`substr(i, n)` 按码点切。词法器全程用 `substr`
+推进输入，等于按码点走。
 
-注意报错定位到的是 `for` 那一行，容易误判成别的问题。
+### 1.4 内层类必须写全名，类型标注也一样
 
-## 6. 类型化 Array 不能被整体赋 untyped Array
+`class_name` 只给**外层**脚本注册全局类。内层类没有全局名，任何地方都得写
+`StopeLexer.Lexer`、`StopeCompiler.Compiler`、`STML.Element`。
+
+最容易踩的是**静态函数的参数类型**：
 
 ```gdscript
-class Prog:
-	var stmts:Array[Stmt] = []
-# ...
-p.stmts = some_untyped_array   # ✗ Invalid assignment of property or key 'stmts'
+# 错：外层名不是类型，:= 推断不出来，报 "Cannot infer the type of ..."
+static func parse_ident_expr(p: StopeParser) -> StopeAst.Expr: ...
+
+# 对：必须写内层名
+static func parse_ident_expr(p: StopeParser.Parser) -> StopeAst.Expr: ...
 ```
 
-要逐个 `append`，或者把来源声明成同样的类型。
+解析器的前缀 / 中缀函数表全是静态函数、第一个参数都是 `p: Parser`，就是这个原因。
 
-## 7. `%` 不支持 `%g`，浮点的格式化得自己写
+### 1.5 `const` 里不能放 Callable
 
-GDScript 的 `%` 运算符不支持 `%g`，`String.num()` 也没有科学计数法分支。但形状串与
-`Program` 序列化里的浮点必须两侧一致 —— C++ 用的是 `printf("%g")`，所以 GD 侧得自己复刻。
+所以 C++ 那种「静态常量分发表」在 GD 侧只能改成**构造函数里注册的实例字段**
+（`_prefix_fns` / `_infix_fns`）。遍历骨架换个办法：表里存**方法名字符串**，用
+`call(fn, n)` 派发 —— 好处是 `call` 同样会走到子类的重写版本。
 
-`StopeAst.fmt_g()` 手工复刻了 `%g`（精度 6）的全部决策：先取十进制指数 X，
-`X < -4 或 X >= 6` 走科学计数法，否则走定点；两种都要去掉尾部多余的 0 与孤立的小数点；
-**舍入进位会让尾数变成 `10.00000`，此时 X 要 +1 再重新决策**（否则 `999999.9`
-会印成 `1e+06` 而另一个实现印 `100000`）。
+### 1.6 `@abstract` 类
 
-### 精度边界（实测）
+`basic_vm.gd` 的 `Arguments` 是抽象类：
 
-浮点发生器 dump 了 3166 个样本（10 的各次幂、0/1/1.5/边界值、1500 组随机尾数×随机二的幂、
-60 个次正规数），按比特位交给 Python 的 `"%g"` 逐位对照：**3127 条一致，39 条失配，
-失配的全部落在次正规区间（|v| < 2.2e-308）**。原因是 `pow(10.0, x)` 在这个区间本身只剩
-个位数有效比特，`a / pow(10.0, x)` 保不住 6 位有效数字。
+```gdscript
+@abstract class Arguments:
+	@abstract func at(index_or_key)
+	@abstract func num() -> int
+```
 
-⇒ **通用测试计划不把次正规数纳入比对**，选测试用例时要避开（Stope 的正常词法产物
-如 `1e-320` 会落到这一档）。
+子类必须实现全部抽象方法，否则实例化时报错。低版本 Godot 没有这个关键字（本仓库在
+4.7.2 上开发），拷到老版本会直接语法错误。
 
-### Godot 会折叠某些字面量
+### 1.7 `Dictionary` 是插入序，`std::map` 是键序
 
-`-0.0` 与 `5e-324` 这类写在源码里的字面量会被 Godot 直接折成 `0.0`。要构造这些值只能
-走「位模式往返」（`int` bits ↔ `float`），不能用字面量赋值。
+跨实现逐字节比对时会撞上：`Program.exports` 在 C++ 是 `std::map`（天然升序），GD 是插入序。
+`dump_program()` 因此显式排序再输出。**只影响序列化**，执行器不依赖遍历顺序。
 
-## 8. 整数会静默回绕
+属性表 `Element.attrs` 是 `Dictionary[String,String]`，同样不保证顺序 —— STML 测试计划
+`TD-2` 已经把「按字典序输出」定为跨实现约定（`test_stml.gd` 的 `shape_elem()` 会先
+`keys.sort()`；直接遍历 `attrs` 拿到的是插入序，见该计划 §7 的 GD-S-17）。
 
-GD 的 int 溢出不报错。`stope_expr_optim.gd` 自己实现了
-`add_overflow / sub_overflow / mul_overflow / neg_overflow / div_mod_overflow / int_pow`，
-全部返回 `[是否溢出, 结果]`。**凡是做算术折叠的地方都要先过溢出检查**，别依赖语言行为。
+### 1.8 浮点格式化没有 `%g`
 
-## 9. 换行符：C++ 探针产出 CRLF，Godot 写出 LF
+GDScript 的 `%` 运算符不支持 `%g`，`String.num()` 也没有科学计数法分支。C++ 的
+`printf("%g")` 只能手写复刻，见 `StopeAst.fmt_g()`：
 
-比对数据文件前必须先把两边拉到同一套行尾，否则会对出大量假失败。两个来源：
+- 先求十进制指数 `X`（`10^X <= |v| < 10^(X+1)`），**必须用循环校正**，因为
+  `log(a)/log(10)` 在边界上会差一位；
+- `X < -4` 或 `X >= 6` 走科学计数法，否则定点；
+- 舍入后尾数可能进位成 `10.00000`，此时 `X` 要 +1 重新决策，否则 `999999.9` 会打成
+  `1e+06` 而 glibc 打 `100000`；
+- `-0.0` 要单独判（`1.0 / v < 0`），否则打印成 `0`。
 
-- C++ 探针把 stdout 重定向到文件时，Windows 上是 **CRLF**；Godot 的 `FileAccess` 写出是 **LF**。
-  比对数据文件要么用 `diff --strip-trailing-cr`，要么在读取时把行尾的 `\r` 剥掉
-  （`test_util.gd` 的 `read_golden()` / `read_lines()` 已经这么做了）。
-  症状很好认：**所有行的最后一个字段都「看起来一样却判定不同」**。
-- `cpp/stope/*.hpp`、`cpp/test/*.cpp`、`cpp/stope/*.md` 目前都是 **LF** 行尾。
-  用脚本改写时用 Python 的 `io.open(..., newline='')`，并传【确切】的字符串 ——
-  在 shell heredoc 里写 `\n` 会被当成两个字符写进文件，曾经一次性破坏 21 个构造函数。
+已知精度边界：`|v| < 2.2e-308` 的次正规数与 Python 的 `%g` 有偏差（`pow(10, x)` 在这个
+区间本身就没剩几位有效比特）。通用测试计划**不**把次正规数纳入比对，选用例时要避开。
 
-## 10. 新建 / 删除带 `class_name` 的脚本后要先 import
+### 1.9 `RegEx` 的用法
 
-新建带 `class_name` 的脚本后，`--script` 直接跑会报
-`Identifier "Xxx" not declared in the current scope`，因为 `.godot/global_script_class_cache.cfg`
-还没更新。先跑：
+`RegEx.create_from_string(pattern)` 建对象，`search(s)` 返回 `RegExMatch` 或 `null`，
+`get_string(1)` 取第一个捕获组。词法器把它放在 `static var` 里只建一次 —— 正则编译不便宜，
+每条 token 都新建会很慢。
+
+`re_exp_part` 之类只用一次的正则，宁可写成 `static var` + 常量，也不要在函数里 `create`。
+
+### 1.10 读文件：CRLF 与 `split`
+
+`FileAccess.open(path, FileAccess.READ).get_as_text()` 不做换行归一化，`split('\n')` 之后
+每行末尾可能还挂着 `\r`。golden 数据是 Windows 上 C++ 重定向出来的，**必须剥**：
+
+```gdscript
+if raw.ends_with('\r'): raw = raw.substr(0, len(raw) - 1)
+```
+
+`FileAccess.open` 失败返回 `null`（不报异常），要自己 `push_error`。测试里读不到数据文件
+就是「整组没跑」，记成失败而不是静默跳过。
+
+### 1.11 测试入口是 `SceneTree` 脚本
+
+`run_tests.gd` 用 `extends SceneTree`，在 `_init()` 里跑完所有断言，最后
+`quit(0 或 1)` 退出。不要用 `extends Node` —— 那种要挂场景，headless 下还得等一帧。
+
+demo 反过来是普通 `Node` + `_ready()`，跑完主动 `get_tree().quit()`，否则 headless 会挂着。
+
+### 1.12 全局类缓存要手动刷新
+
+全局类列表缓存在 `.godot/global_script_class_cache.cfg`。**移动 / 改名 / 新增带
+`class_name` 的脚本后**，编辑器可能还在用旧表，表现为
+`Identifier "Xxx" not declared in the current scope` 或 `Could not find type "Xxx"`。
+
+修法：先跑一次导入再跑测试。
 
 ```bash
 godot --headless --path gdscript --import
 ```
 
-这个文件是 GDScript 全局类名的注册表，手改没有意义。删文件同理要重新 import。
+这条在 `addons/` 目录搬动之后尤其容易忘。
 
-## 11. 构造函数签名的约定
+---
 
-`stope_ast.gd` 里所有叶子 / 节点统一是 `func _init(line_:int = -1) -> void:`，
-这样可以用 `make_null(line)` 的方式构造，也为将来加字段留位置。叶子类在
-`_init` 里同时把 `line` 与 `value` 一次设完（如 `IntExpr.new(line, v)`）。
+## 2. 实现约定
 
-## 12. 与 C++ 对照时的命名映射
+### 2.1 命名：C++ 的 camelCase → GD 的 snake_case
 
-| C++ | GDScript |
-| --- | --- |
-| `leftExpr` | `left_expr` |
-| `rightExpr` | `right_expr` |
-| `keyExpr` / `keyExprs` | `key_expr` / `key_exprs` |
-| `firstProg` / `elseProg` | `first_prog` / `else_prog` |
-| `hasAssign` | `has_assign` |
-| `opcodeName` | `opcode_name` |
-| `onVisitLetStmt` | `on_visit_let_stmt` |
-| `parseLetStmt` | `parse_let_stmt` |
+一一对应，方便逐行对照：
 
-两侧的函数体刻意一行一行对得上。改一边**必须**同步改另一边，否则
-`godot --headless --path gdscript --script res://test/run_tests.gd` 会立刻告诉你。
+```
+leftExpr -> left_expr      rightExpr -> right_expr      keyExpr  -> key_expr
+keyExprs -> key_exprs      firstProg -> first_prog      elseProg -> else_prog
+opcodeName -> opcode_name  hasAssign -> has_assign      binArrConsts -> bin_arr_consts
+```
+
+钩子名是 C++ 的 `onVisitXxx` → `on_visit_xxx`；字段 / 类名保持 C++ 的语义不变。
+
+### 2.2 错误文案逐字照抄 C++
+
+包括**末尾那个空格和句号**（`invalid integer. `）。跨实现比对的是字符串，差一个空格就
+红一片。改文案要两边一起改，并且重生成 golden。
+
+### 2.3 序列化格式是跨实现契约
+
+`StopeAst.shape_*`、`StopeTestUtil.dump_program`、`STML.Element.to_str` 的输出格式都写在
+`docs/zh-cn/*-test-plan.md` 里，**不是调试用的随便格式**。改格式等于改测试基线。
+
+### 2.4 每个文件头部写清对应关系
+
+`addons/stope/*.gd` 每个文件开头都有注释说明对应哪个 C++ 头文件、有哪些有意的偏差。
+新增偏差时先在那里写清楚，再在测试计划 §7 登记。
+
+### 2.5 不要做「防御性兜底」
+
+执行器不在运算指令里解引用 `Identifier` —— 编译器产物错了就该暴露，兜底只会掩盖 bug。
+同理，`_binary_opcode` 末尾那个 `return Opcode.Pop` 是「到不了」的保险，不是正常路径。
+
+### 2.6 缩进用 Tab
+
+工程统一 Tab，与 Godot 默认一致。混用空格会报
+`Used space character for indentation instead of tab`。
+
+### 2.7 返回码只有一个枚举：`stope_result.gd`
+
+`StopeResult.Success / Error / UnknownError / DuplicateWithBuiltinOpcode` 对应 C++
+`common.hpp` 的 `Stope::Result`。**别在模块里另立一份** —— 以前 `compiler.gd` 内嵌 4 项、
+`stml_parser.gd` 内嵌 2 项，同名不同义，跨模块拿到返回值根本比不了。
+
+用匿名 `enum {}` 而不是 `enum Result {}`，引用才是 `StopeResult.Success`；写成后者会变成
+`StopeResult.Result.Success`。注意 `Success == 0`，**不要用真假判断**。
+
+### 2.8 性能敏感处允许写两份循环
+
+`BasicVM.State.run()` 与 `step()` 是两份独立实现，`run()` 不在循环里调 `step()`：
+GDScript 每次函数调用 + `Callable.call` 在热循环里都是实打实的开销。同理 `run()` 把
+`program.opcodes` 和它的长度提到循环外。
+
+代价是两处必须手工同步 —— 所以 `test/test_vm.gd` 拿同一程序跑两条路径逐项比对，
+改了一处忘了另一处，它会立刻红。**加性能捷径的前提是先有这条锁。**
+
+---
+
+## 3. 本机调试速查
+
+Godot 没进 PATH，本机（4.7.2 mono）写全路径：
+
+```bash
+GODOT="/c/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/godot_console.exe"
+
+"$GODOT" --headless --path gdscript --import                                     # 刷新全局类
+"$GODOT" --headless --path gdscript --script res://test/run_tests.gd            # 跑测试
+"$GODOT" --headless --path gdscript res://demo/demo_01.tscn                     # 跑 demo 01
+"$GODOT" --headless --path gdscript res://demo/demo_02.tscn                     # 跑 demo 02
+"$GODOT" --headless --path gdscript res://demo/demo_03.tscn                     # 跑 demo 03
+```
+
+重生成期望值不在这张表里 —— 它走 C++ 侧的 CMake target（数据已入库，跑测试不需要 C++）：
+
+```bash
+cmake --build cpp/build --target gen-golden
+```
+
+`godot_console.exe` 才保证有控制台输出；用 `Godot_v4.7.2-stable_mono_win64.exe`（GUI 版）
+在 Git Bash 里通常看不到 `print` 的结果。

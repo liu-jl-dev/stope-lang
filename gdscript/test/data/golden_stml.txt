@@ -1,0 +1,122 @@
+# 由 cpp/tools/golden_stml.cpp 从 gdscript/test/data/stml_cases.txt 生成，勿手工编辑。
+ID=LEX-SX-01	KIND=lex	TOKS=LAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=1:a	ERRN=0	ERRS=
+ID=LEX-SX-02	KIND=lex	TOKS=CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=1:a	ERRN=0	ERRS=
+ID=LEX-SX-03	KIND=lex	TOKS=LAngle(1) Word(1) CRAngle(1) Eof(1)	LEXS=1:a	ERRN=0	ERRS=
+ID=LEX-SX-04	KIND=lex	TOKS=LAngle(1) Word(1) Word(1) EQ(1) String(1) RAngle(1) Eof(1)	LEXS=1:a,2:id,4:x	ERRN=0	ERRS=
+ID=LEX-SX-05	KIND=lex	TOKS=LAngle(1) Word(1) Word(1) EQ(1) String(1) RAngle(1) Eof(1)	LEXS=1:a,2:id,4:x	ERRN=0	ERRS=
+ID=LEX-SX-06	KIND=lex	TOKS=LAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=1:a	ERRN=0	ERRS=
+ID=LEX-SX-07	KIND=lex	TOKS=LAngle(3) Word(3) RAngle(3) Eof(3)	LEXS=1:a	ERRN=0	ERRS=
+ID=LEX-SX-08	KIND=lex	TOKS=Word(1) Eof(1)	LEXS=0:hello	ERRN=0	ERRS=
+ID=LEX-SX-09	KIND=lex	TOKS=Invalid(1) Eof(1)	LEXS=	ERRN=1	ERRS=line 1: unexpected character. 
+ID=LEX-SX-10	KIND=lex	TOKS=LAngle(1) Invalid(1) RAngle(1) Eof(1)	LEXS=	ERRN=1	ERRS=line 1: unexpected character. 
+ID=LEX-SW-01	KIND=lex	TOKS=Word(1) Eof(1)	LEXS=0:abc	ERRN=0	ERRS=
+ID=LEX-SW-02	KIND=lex	TOKS=Word(1) Eof(1)	LEXS=0:_x	ERRN=0	ERRS=
+ID=LEX-SW-03	KIND=lex	TOKS=Word(1) Eof(1)	LEXS=0::ns	ERRN=0	ERRS=
+ID=LEX-SW-04	KIND=lex	TOKS=Word(1) Eof(1)	LEXS=0:a-b:c_9	ERRN=0	ERRS=
+ID=LEX-SW-05	KIND=lex	TOKS=Invalid(1) Word(1) Eof(1)	LEXS=1:a	ERRN=1	ERRS=line 1: unexpected character. 
+ID=LEX-SW-06	KIND=lex	TOKS=Word(1) RAngle(1) Word(1) Eof(1)	LEXS=0:a,2:b	ERRN=0	ERRS=
+ID=LEX-SW-07	KIND=lex	TOKS=Word(1) EQ(1) Word(1) Eof(1)	LEXS=0:a,2:b	ERRN=0	ERRS=
+ID=LEX-SW-08	KIND=lex	TOKS=Word(1) Invalid(1) Word(1) Eof(1)	LEXS=0:a,2:b	ERRN=1	ERRS=line 1: unexpected character. 
+ID=LEX-SS-01	KIND=lex	TOKS=String(1) Eof(1)	LEXS=0:abc	ERRN=0	ERRS=
+ID=LEX-SS-02	KIND=lex	TOKS=String(1) Eof(1)	LEXS=0:	ERRN=0	ERRS=
+ID=LEX-SS-03	KIND=lex	TOKS=String(1) Eof(1)	LEXS=0:a b	ERRN=0	ERRS=
+ID=LEX-SS-04	KIND=lex	TOKS=String(1) Eof(1)	LEXS=0:a>b	ERRN=0	ERRS=
+ID=LEX-SS-05	KIND=lex	TOKS=String(1) Eof(2)	LEXS=0:a\nb	ERRN=0	ERRS=
+ID=LEX-SS-06	KIND=lex	TOKS=Invalid(1) Eof(1)	LEXS=	ERRN=1	ERRS=line 1: unclosed string literal
+ID=LEX-SS-07	KIND=lex	TOKS=Invalid(1) Eof(1)	LEXS=	ERRN=1	ERRS=line 1: unclosed string literal
+ID=LEX-SS-08	KIND=lex	TOKS=String(1) Word(1) Invalid(1) Eof(1)	LEXS=0:a\\,1:b	ERRN=1	ERRS=line 1: unclosed string literal
+ID=LEX-ST-01	KIND=lex	TOKS=Text(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:hello world,2:a	ERRN=0	ERRS=
+ID=LEX-ST-02	KIND=lex	TOKS=Text(1) CLAngle(2) Word(2) RAngle(2) Eof(2)	LEXS=0:hello world,2:a	ERRN=0	ERRS=
+ID=LEX-ST-03	KIND=lex	TOKS=Text(1) CLAngle(2) Word(2) RAngle(2) Eof(2)	LEXS=0:a\nb,2:a	ERRN=0	ERRS=
+ID=LEX-ST-04	KIND=lex	TOKS=Text(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:,2:a	ERRN=0	ERRS=
+ID=LEX-ST-05	KIND=lex	TOKS=Text(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:text<b/>more,2:a	ERRN=0	ERRS=
+ID=LEX-ST-06	KIND=lex	TOKS=Text(1) Eof(1)	LEXS=0:??????	ERRN=0	ERRS=
+ID=LEX-SN-01	KIND=lex	TOKS=NevextSrc(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:windowSize 1280, 720;,2:nev	ERRN=0	ERRS=
+ID=LEX-SN-02	KIND=lex	TOKS=NevextSrc(1) CLAngle(2) Word(2) RAngle(2) Eof(2)	LEXS=0:a // ??\nb;,2:n	ERRN=0	ERRS=
+ID=LEX-SN-03	KIND=lex	TOKS=NevextSrc(1) CLAngle(2) Word(2) RAngle(2) Eof(2)	LEXS=0:a /* ?\n? */ b;,2:n	ERRN=0	ERRS=
+ID=LEX-SN-04	KIND=lex	TOKS=NevextSrc(1) Eof(1)	LEXS=0:a /* ???	ERRN=0	ERRS=
+ID=LEX-SN-05	KIND=lex	TOKS=NevextSrc(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:x \"a</b\" 'p</q';,2:n	ERRN=0	ERRS=
+ID=LEX-SN-06	KIND=lex	TOKS=NevextSrc(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:x \"a\\\"b\" 'c\\'d';,2:n	ERRN=0	ERRS=
+ID=LEX-SN-07	KIND=lex	TOKS=NevextSrc(1) Eof(1)	LEXS=0:x \"abc;</n>	ERRN=1	ERRS=line 1: unclosed string literal. 
+ID=LEX-SN-08	KIND=lex	TOKS=NevextSrc(1) CLAngle(2) Word(2) RAngle(2) Eof(2)	LEXS=0:x \"a\nb\" c;,2:n	ERRN=0	ERRS=
+ID=LEX-SP-01	KIND=lex	TOKS=StopeSrc(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:let a = 1;,2:sto	ERRN=0	ERRS=
+ID=LEX-SP-02	KIND=lex	TOKS=StopeSrc(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:if a < b { c(); },2:sto	ERRN=0	ERRS=
+ID=LEX-SP-03	KIND=lex	TOKS=StopeSrc(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:let s = \"a</b\";,2:sto	ERRN=0	ERRS=
+ID=LEX-SP-04	KIND=lex	TOKS=StopeSrc(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:let t = '01 02';,2:sto	ERRN=0	ERRS=
+ID=LEX-SP-05	KIND=lex	TOKS=StopeSrc(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:let s = \"a\\\"b\\n\";,2:sto	ERRN=0	ERRS=
+ID=LEX-SP-06	KIND=lex	TOKS=StopeSrc(1) CLAngle(2) Word(2) RAngle(2) Eof(2)	LEXS=0:a // c\nb;,2:sto	ERRN=0	ERRS=
+ID=LEX-SP-07	KIND=lex	TOKS=StopeSrc(1) Eof(1)	LEXS=0:a /* ???	ERRN=0	ERRS=
+ID=LEX-SP-08	KIND=lex	TOKS=StopeSrc(1) Eof(1)	LEXS=0:let s = \"abc;</sto>	ERRN=1	ERRS=line 1: unclosed string literal. 
+ID=LEX-SP-09	KIND=lex	TOKS=StopeSrc(1) CLAngle(1) Word(1) RAngle(1) Eof(1)	LEXS=0:a < !- b;,2:sto	ERRN=0	ERRS=
+ID=LEX-SP-10	KIND=lex	TOKS=StopeSrc(1) CLAngle(3) Word(3) RAngle(3) Eof(3)	LEXS=0:let a = 1;\nlet b = 2;,2:sto	ERRN=0	ERRS=
+ID=LEX-SL-01	KIND=lex	TOKS=LAngle(1) Word(1) RAngle(1) LAngle(2) Word(2) RAngle(2) CLAngle(3) Word(3) RAngle(3) CLAngle(4) Word(4) RAngle(4) Eof(4)	LEXS=1:a,4:b,7:b,10:a	ERRN=0	ERRS=
+ID=LEX-SL-02	KIND=lex	TOKS=Text(1) Eof(3)	LEXS=0:a\n\nb	ERRN=0	ERRS=
+ID=LEX-SL-03	KIND=lex	TOKS=Text(1) Eof(2)	LEXS=0:a\r\nb	ERRN=0	ERRS=
+ID=LEX-SE-01	KIND=lex	TOKS=Invalid(1) Invalid(1) Eof(1)	LEXS=	ERRN=2	ERRS=line 1: unexpected character. |line 1: unexpected character. 
+ID=LEX-SE-02	KIND=lex	TOKS=Word(1) Invalid(2) Eof(2)	LEXS=0:a	ERRN=1	ERRS=line 2: unexpected character. 
+ID=LEX-SE-03	KIND=lex	TOKS=Invalid(1) Eof(1)	LEXS=	ERRN=1	ERRS=line 1: unexpected character. 
+ID=LEX-SR-01	KIND=lex	TOKS=Eof(1)	LEXS=	ERRN=0	ERRS=
+ID=LEX-SR-02	KIND=lex	TOKS=Eof(1)	LEXS=	ERRN=0	ERRS=
+ID=LEX-SR-03	KIND=lex	TOKS=Eof(1)	LEXS=	ERRN=0	ERRS=
+ID=LEX-SR-04	KIND=lex	TOKS=Word(1) Eof(1)	LEXS=0:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa	ERRN=0	ERRS=
+ID=LEX-SR-05	KIND=lex	TOKS=String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) String(1) Eof(1)	LEXS=0:,1:,2:,3:,4:,5:,6:,7:,8:,9:,10:,11:,12:,13:,14:,15:,16:,17:,18:,19:,20:,21:,22:,23:,24:,25:,26:,27:,28:,29:,30:,31:,32:,33:,34:,35:,36:,37:,38:,39:,40:,41:,42:,43:,44:,45:,46:,47:,48:,49:,50:,51:,52:,53:,54:,55:,56:,57:,58:,59:,60:,61:,62:,63:,64:,65:,66:,67:,68:,69:,70:,71:,72:,73:,74:,75:,76:,77:,78:,79:,80:,81:,82:,83:,84:,85:,86:,87:,88:,89:,90:,91:,92:,93:,94:,95:,96:,97:,98:,99:	ERRN=0	ERRS=
+ID=LEX-SR-06	KIND=lex	TOKS=Eof(1)	LEXS=	ERRN=0	ERRS=
+ID=PARSE-PA-01	KIND=parse	SHAPE=Elem(a, L1, /)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PA-02	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PA-03	KIND=parse	SHAPE=Elem(a, L1, /)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PA-04	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(b, L1, /)])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PA-05	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(b, L1, C=[Elem(c, L1, /)])])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PA-06	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(b, L1, /) Elem(c, L1, /) Elem(d, L1, /)])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PA-07	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(b, L1) Elem(c, L1)])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PA-08	KIND=parse	SHAPE=Elem(a-b, L1)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PA-09	KIND=parse	SHAPE=Elem(a, L1, /)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-01	KIND=parse	SHAPE=Elem(a, L1, /, @id="x")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-02	KIND=parse	SHAPE=Elem(a, L1, /, @id="x")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-03	KIND=parse	SHAPE=Elem(a, L1, /, @flag)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-04	KIND=parse	SHAPE=Elem(a, L1, /, @flag, @id="x")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-05	KIND=parse	SHAPE=Elem(a, L1, /, @flag, @id="x")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-06	KIND=parse	SHAPE=Elem(a, L1, /, @a="2", @z="1")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-07	KIND=parse	SHAPE=Elem(a, L1, /, @b="1", @c="2", @d)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-08	KIND=parse	SHAPE=Elem(a, L1, /, @id)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-09	KIND=parse	SHAPE=Elem(a, L1, /, @t="x>y")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-10	KIND=parse	SHAPE=Elem(a, L1, /, @x:y="1", @z-w="2")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PB-11	KIND=parse	SHAPE=Elem(a, L1, @id="1", C=[Elem(b, L1, /)])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-01	KIND=parse	SHAPE=Elem(p, L1, T="hello")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-02	KIND=parse	SHAPE=Elem(p, L1, T="hello")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-03	KIND=parse	SHAPE=Elem(p, L1)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-04	KIND=parse	SHAPE=Elem(sto, L1, T="let a = 1;")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-05	KIND=parse	SHAPE=Elem(nev, L1, T="x 1, 2;")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-06	KIND=parse	SHAPE=Elem(sto, L1, T="let s = \"a</b\";")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-07	KIND=parse	SHAPE=Elem(nev, L1, T="x \"a</b\";")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-08	KIND=parse	SHAPE=Elem(sto, L1, T="let a = 1;\nlet b = 2;")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-09	KIND=parse	SHAPE=Elem(p, L1, T="a<b/>c")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-10	KIND=parse	SHAPE=Elem(p, L1, T="a <!-- b")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-11	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected \"<\" or \"</\". 	LEXERRN=0	LEXERRS=
+ID=PARSE-PC-12	KIND=parse	SHAPE=Elem(nev, L1, T="x \"a\\\"b\";")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PL-01	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(b, L2, /)])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PL-02	KIND=parse	SHAPE=Elem(a, L3, /)	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PL-03	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(b, L2, C=[Elem(c, L3, /)])])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PL-04	KIND=parse	SHAPE=Elem(sto, L1, T="let a = 1;")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-01	KIND=parse	SHAPE=Elem(, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected tag name. 	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-02	KIND=parse	SHAPE=Elem(, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected \"<\". 	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-03	KIND=parse	SHAPE=Elem(, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected \"<\". 	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-04	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Error	ERRN=1	ERRS=line 1: tag name mismatch. 	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-05	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected string. 	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-06	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected \">\" or \"/>\" or attribute. 	LEXERRN=1	LEXERRS=line 1: unexpected character. 
+ID=PARSE-PE-07	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected \"<\" or \"</\". 	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-08	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected \">\" or \"/>\" or attribute. 	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-09	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected \">\". 	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-10	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected \">\". 	LEXERRN=0	LEXERRS=
+ID=PARSE-PE-11	KIND=parse	SHAPE=Elem(a, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected string. 	LEXERRN=1	LEXERRS=line 1: unclosed string literal
+ID=PARSE-PE-12	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(b, L1)])	RESULT=Error	ERRN=2	ERRS=line 1: expected string. |line 1: tag name mismatch. 	LEXERRN=0	LEXERRS=
+ID=PARSE-PF-01	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(b, L1, /)])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PF-02	KIND=parse	SHAPE=Elem(p, L1)	RESULT=Error	ERRN=1	ERRS=line 1: expected \"<\" or \"</\". 	LEXERRN=0	LEXERRS=
+ID=PARSE-PF-03	KIND=parse	SHAPE=Elem(any, L1, T="hello")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PF-04	KIND=parse	SHAPE=Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1, C=[Elem(n, L1)])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PF-05	KIND=parse	SHAPE=Elem(p, L1, T="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PF-06	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(b, L1, /)])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PF-07	KIND=parse	SHAPE=Elem(p, L1, T="<!-- c -->")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PH-01	KIND=parse	SHAPE=Elem(div, L1, @class="box", @hidden, C=[Elem(p, L2, T="hello") Elem(sto, L3, T="let a = 1;") Elem(nev, L4, T="windowSize 1280, 720;")])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PH-02	KIND=parse	SHAPE=Elem(sto, L1, T="if a < b { s = \"x</y\"; t = '01 02'; /* c */ }")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PH-03	KIND=parse	SHAPE=Elem(nev, L1, T="title \"a\nb\"; /* x\ny */ size 1;")	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=
+ID=PARSE-PH-04	KIND=parse	SHAPE=Elem(a, L1, C=[Elem(img, L1, /, @alt, @src="i.png") Elem(p, L1, T="cap")])	RESULT=Success	ERRN=0	ERRS=	LEXERRN=0	LEXERRS=

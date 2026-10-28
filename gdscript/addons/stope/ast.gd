@@ -16,6 +16,7 @@ class_name StopeAst
 # 也没有科学计数法格式化。fmt_g() 手工复刻了 %g（精度 6）的全部决策，
 # 包含「舍入进位后指数 +1」的情形，详见函数上方注释。
 
+const TokenType = StopeLexer.Token.Type
 
 # 与 AST::NodeType 同序同值，共 28 项
 enum NodeType {
@@ -41,43 +42,43 @@ enum Precedence {
 }
 
 const binop_prec_map:Dictionary = {
-	StopeToken.Type.Or: Precedence.Or,
-	StopeToken.Type.And: Precedence.And,
-	StopeToken.Type.EQ: Precedence.Equals,
-	StopeToken.Type.NE: Precedence.Equals,
-	StopeToken.Type.LT: Precedence.LessGreater,
-	StopeToken.Type.LE: Precedence.LessGreater,
-	StopeToken.Type.GT: Precedence.LessGreater,
-	StopeToken.Type.GE: Precedence.LessGreater,
-	StopeToken.Type.Add: Precedence.AddSub,
-	StopeToken.Type.Sub: Precedence.AddSub,
-	StopeToken.Type.Mul: Precedence.MulDiv,
-	StopeToken.Type.Div: Precedence.MulDiv,
-	StopeToken.Type.IDiv: Precedence.MulDiv,
-	StopeToken.Type.Mod: Precedence.MulDiv,
-	StopeToken.Type.Pow: Precedence.Pow,
+	TokenType.Or: Precedence.Or,
+	TokenType.And: Precedence.And,
+	TokenType.EQ: Precedence.Equals,
+	TokenType.NE: Precedence.Equals,
+	TokenType.LT: Precedence.LessGreater,
+	TokenType.LE: Precedence.LessGreater,
+	TokenType.GT: Precedence.LessGreater,
+	TokenType.GE: Precedence.LessGreater,
+	TokenType.Add: Precedence.AddSub,
+	TokenType.Sub: Precedence.AddSub,
+	TokenType.Mul: Precedence.MulDiv,
+	TokenType.Div: Precedence.MulDiv,
+	TokenType.IDiv: Precedence.MulDiv,
+	TokenType.Mod: Precedence.MulDiv,
+	TokenType.Pow: Precedence.Pow,
 	# 调用 ()、取元素 [] 也是二元形式，优先级最高
-	StopeToken.Type.LParen: Precedence.Paren,
-	StopeToken.Type.LBrack: Precedence.Paren,
+	TokenType.LParen: Precedence.Paren,
+	TokenType.LBrack: Precedence.Paren,
 }
 
 # 运算符的显示文本（错误信息 / 调试用；节点里的 op 存的是 TokenType，不是这个字符串）
 const binop_literal_map:Dictionary = {
-	StopeToken.Type.Or: '||',
-	StopeToken.Type.And: '&&',
-	StopeToken.Type.EQ: '==',
-	StopeToken.Type.NE: '!=',
-	StopeToken.Type.LT: '<',
-	StopeToken.Type.LE: '<=',
-	StopeToken.Type.GT: '>',
-	StopeToken.Type.GE: '>=',
-	StopeToken.Type.Add: '+',
-	StopeToken.Type.Sub: '-',
-	StopeToken.Type.Mul: '*',
-	StopeToken.Type.Div: '/',
-	StopeToken.Type.IDiv: 'idiv',
-	StopeToken.Type.Mod: '%',
-	StopeToken.Type.Pow: '^',
+	TokenType.Or: '||',
+	TokenType.And: '&&',
+	TokenType.EQ: '==',
+	TokenType.NE: '!=',
+	TokenType.LT: '<',
+	TokenType.LE: '<=',
+	TokenType.GT: '>',
+	TokenType.GE: '>=',
+	TokenType.Add: '+',
+	TokenType.Sub: '-',
+	TokenType.Mul: '*',
+	TokenType.Div: '/',
+	TokenType.IDiv: 'idiv',
+	TokenType.Mod: '%',
+	TokenType.Pow: '^',
 }
 
 # ================================ 格式化小工具 ================================
@@ -149,9 +150,9 @@ static func node_type_name(t:int) -> String:
 static func indent(level:int) -> String: return "  ".repeat(level)
 static func _e(e) -> String: return e.to_str() if e else "<null>"
 static func op_text(op:int) -> String:
-	if op == StopeToken.Type.Sub: return '-'
-	if op == StopeToken.Type.Not: return '!'
-	return str(StopeToken.type_name(op), '(')
+	if op == TokenType.Sub: return '-'
+	if op == TokenType.Not: return '!'
+	return str(TokenType.keys()[op], '(')
 
 # ================================ 基类 ================================
 class Node_:
@@ -349,7 +350,7 @@ class ArgsExpr extends Expr:
 	func to_str(_level:int = 0) -> String: return str('args[', StopeAst._e(key_expr), ']')
 
 class UnaryOpExpr extends Expr:
-	var op:int = StopeToken.Type.Invalid	# TokenType
+	var op:int = TokenType.Invalid	# TokenType
 	var expr:Expr = null
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.UnaryOpExpr; line = line_
@@ -358,7 +359,7 @@ class UnaryOpExpr extends Expr:
 
 class BinaryOpExpr extends Expr:
 	var left_expr:Expr = null
-	var op:int = StopeToken.Type.Invalid	# TokenType
+	var op:int = TokenType.Invalid	# TokenType
 	var right_expr:Expr = null
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.BinaryOpExpr; line = line_
@@ -490,9 +491,9 @@ static func shape_expr(e) -> String:
 		if e.key_expr == null: return "Args(null)"
 		return "Args(" + shape_expr(e.key_expr) + ")"
 	elif t == NodeType.UnaryOpExpr:
-		return str("Unary(", StopeToken.type_name(e.op), ", ", shape_expr(e.expr), ")")
+		return str("Unary(", StopeLexer.Token.type_name(e.op), ", ", shape_expr(e.expr), ")")
 	elif t == NodeType.BinaryOpExpr:
-		return str("Bin(", StopeToken.type_name(e.op), ", ", shape_expr(e.left_expr),
+		return str("Bin(", StopeLexer.Token.type_name(e.op), ", ", shape_expr(e.left_expr),
 				", ", shape_expr(e.right_expr), ")")
 	elif t == NodeType.CallExpr:
 		var d := "Call(" + shape_expr(e.callee)

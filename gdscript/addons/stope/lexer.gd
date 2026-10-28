@@ -1,79 +1,74 @@
-class_name StopeToken
-
-# 与 cpp/stope/token.hpp 对齐：47 项，顺序一致。
-# 行为契约见 docs/zh-cn/lexer-test-plan.md。
-enum Type {
-	Invalid,	#  无效
-	Eof,		#  输入结尾
-	Ident,		#  标识符
-	Integer,	#  整数字面量
-	Float,		#  浮点字面量
-	String,		#  "..."  转义之后的文本在 parsed
-	BinArr,		#  '...'  二进制数组，词法阶段【不做】转义
-	Comma,		#  ,
-	Semi,		#  ;
-	LParen,		#  (
-
-	RParen,		#  )
-	LBrack,		#  [
-	RBrack,		#  ]
-	LBrace,		#  {
-	RBrace,		#  }
-	Assign,		#  =
-	Add,		#  +
-	Sub,		#  -
-	Mul,		#  *
-	Div,		#  /
-
-	IDiv,		#  idiv
-	Mod,		#  %
-	Pow,		#  ^
-	EQ,			#  ==
-	NE,			#  !=
-	LT,			#  <
-	LE,			#  <=
-	GT,			#  >
-	GE,			#  >=
-	Not,		#  not  !
-
-	And,		#  and  &&
-	Or,			#  or  ||
-	If,			#  if
-	Elif,		#  elif
-	Else,		#  else
-	Let,		#  let
-	Return,		#  return
-	While,		#  while
-	Break,		#  break
-	Continue,	#  continue
-
-	Null,		#  null
-	False,		#  false
-	True,		#  true
-	Args,		#  args
-	Argc,		#  argc
-	Export,		#  export
-	Custom,		#  自定义指令
-} # 共 47 个
-
-# TokenType -> 名字。两处会用到：调试/错误信息，以及测试用的 AST 形状串
-# （Unary(Sub, ..) / Bin(Add, ..) 里的运算符名，与 cpp/test/test_common.hpp 的
-# tokenName() 逐项对齐，两份实现的 shape 才能直接比字符串）。
-static func type_name(t:int) -> String:
-	return Type.keys()[t] if t >= 0 and t < Type.size() else str("?", t)
+class_name StopeLexer
 
 # 17 个关键字
 const key_words := {
-	'idiv':Type.IDiv,'if':Type.If,'not':Type.Not,'and':Type.And,'or':Type.Or,
-	'elif':Type.Elif,'else':Type.Else,'let':Type.Let,'return':Type.Return,'while':Type.While,
-	'break':Type.Break,'continue':Type.Continue,'null':Type.Null,'false':Type.False,'true':Type.True,
-	'args':Type.Args,'argc':Type.Argc,'export':Type.Export}
+	'idiv':Token.Type.IDiv,'if':Token.Type.If,'not':Token.Type.Not,'and':Token.Type.And,
+	'or':Token.Type.Or,'elif':Token.Type.Elif,'else':Token.Type.Else,'let':Token.Type.Let,
+	'return':Token.Type.Return,'while':Token.Type.While,'break':Token.Type.Break,'continue':Token.Type.Continue,
+	'null':Token.Type.Null,'false':Token.Type.False,'true':Token.Type.True,'args':Token.Type.Args,
+	'argc':Token.Type.Argc,'export':Token.Type.Export}
 
 const I64_MAX := 9223372036854775807
 # 浮点上溢 / 下溢的经验阈值：|指数| 超过它时 std::stod 会抛 out_of_range
 const DOUBLE_EXP_MAX := 308
 
 class Token:
+	enum Type {
+		Invalid,	#  无效
+		Eof,		#  输入结尾
+		Ident,		#  标识符
+		Integer,	#  整数字面量
+		Float,		#  浮点字面量
+		String,		#  "..."  转义之后的文本在 parsed
+		BinArr,		#  '...'  二进制数组，词法阶段【不做】转义
+		Comma,		#  ,
+		Semi,		#  ;
+		LParen,		#  (
+
+		RParen,		#  )
+		LBrack,		#  [
+		RBrack,		#  ]
+		LBrace,		#  {
+		RBrace,		#  }
+		Assign,		#  =
+		Add,		#  +
+		Sub,		#  -
+		Mul,		#  *
+		Div,		#  /
+
+		IDiv,		#  idiv
+		Mod,		#  %
+		Pow,		#  ^
+		EQ,			#  ==
+		NE,			#  !=
+		LT,			#  <
+		LE,			#  <=
+		GT,			#  >
+		GE,			#  >=
+		Not,		#  not  !
+
+		And,		#  and  &&
+		Or,			#  or  ||
+		If,			#  if
+		Elif,		#  elif
+		Else,		#  else
+		Let,		#  let
+		Return,		#  return
+		While,		#  while
+		Break,		#  break
+		Continue,	#  continue
+
+		Null,		#  null
+		False,		#  false
+		True,		#  true
+		Args,		#  args
+		Argc,		#  argc
+		Export,		#  export
+		Custom,		#  自定义指令
+	} # 共 47 个
+	static func type_name(t:int) -> String:
+		return Type.keys()[t] if t >= 0 and t < Type.size() else str("?", t)
+
 	var type:int = Type.Invalid
 	var line:int = 0
 	var literal:String = ''		# 原文切片
@@ -83,88 +78,62 @@ class Token:
 	func invalidate() -> void:
 		type = Type.Invalid
 
-class Result:
-	static var Ok = 0
-	static var Err = 1
-	var err:int
-	var val
-	func _init(e:int=0, v=null) -> void: err = e; val = v
-
 class Lexer:
-	var custom_insts:Dictionary[String,Stope.CustomInst] = {}
-	var input:String
-	var src:String		# 完整原文，仅用于回取 literal（原文切片）
+	var input:String	# **未消费的剩余**原文；每取一个 token 就左移一截
 	var line:int = 1
 	var errors:Array[String] = []
 	func _init(input_:String='') -> void: reset(input_)
 	func reset(input_:String) -> void:
 		input = input_
-		src = input_
 		line = 1
 		errors = []
-	func set_custom_insts(cis:Array[Stope.CustomInst]) -> Array[String]:
-		var errs:Array[String] = []
-		for ci in cis:
-			if ci.code <= Stope.Inst.Return:
-				errs.append(str("inst \"",ci.name,"\": custom inst code must be greater than ",
-					Stope.Inst.Return,". "))
-				continue
-			if ci.name in key_words:
-				errs.append(str("inst \"",ci.name,"\": is a duplicate of keyword \"",ci.name,"\". "))
-				continue
-			if ci.name in custom_insts: # 重复注册：不得静默覆盖
-				errs.append(str("inst \"",ci.name,"\": duplicate registration. "))
-				continue
-			if (not ci.variable_arg) and ci.arg_num < 0:
-				errs.append(str("inst \"",ci.name,"\": arg num must not be less than 0. "))
-				continue
-			custom_insts[ci.name] = ci
-		return errs
 
-	func next_token() -> Token:
+	# custom 可省。与 cpp/include/stope/lexer.hpp 一致：配置【不】存在词法器里，
+	# 每次取 token 时传进来 —— 换一张表不必重建词法器。
+	func next_token(custom:StopeOpcode.CustomOpcodeConfig = null) -> Token:
 		var token := Token.new()
 		skip_ws(); token.line = line
 		if len(input) <= 0:
-			token.type = Type.Eof
+			token.type = Token.Type.Eof
 		elif is_digit(input[0]) or input[0] == '.':
 			scan_number(token)
 		elif is_ident_begin(input[0]):
-			scan_ident(token)
+			scan_ident(token, custom)
 		elif input[0] == '\'':
 			scan_bin_arr(token)
 		elif input[0] == '"':
 			scan_string(token)
-		elif input[0] == ',': take(token, Type.Comma, 1)
-		elif input[0] == ';': take(token, Type.Semi, 1)
-		elif input[0] == '(': take(token, Type.LParen, 1)
-		elif input[0] == ')': take(token, Type.RParen, 1)
-		elif input[0] == '[': take(token, Type.LBrack, 1)
-		elif input[0] == ']': take(token, Type.RBrack, 1)
-		elif input[0] == '{': take(token, Type.LBrace, 1)
-		elif input[0] == '}': take(token, Type.RBrace, 1)
+		elif input[0] == ',': take(token, Token.Type.Comma, 1)
+		elif input[0] == ';': take(token, Token.Type.Semi, 1)
+		elif input[0] == '(': take(token, Token.Type.LParen, 1)
+		elif input[0] == ')': take(token, Token.Type.RParen, 1)
+		elif input[0] == '[': take(token, Token.Type.LBrack, 1)
+		elif input[0] == ']': take(token, Token.Type.RBrack, 1)
+		elif input[0] == '{': take(token, Token.Type.LBrace, 1)
+		elif input[0] == '}': take(token, Token.Type.RBrace, 1)
 		elif input[0] == '=':
-			if test('=', 1): take(token, Type.EQ, 2)
-			else: take(token, Type.Assign, 1)
-		elif input[0] == '+': take(token, Type.Add, 1)
-		elif input[0] == '-': take(token, Type.Sub, 1)
-		elif input[0] == '*': take(token, Type.Mul, 1)
-		elif input[0] == '/': take(token, Type.Div, 1)
-		elif input[0] == '%': take(token, Type.Mod, 1)
-		elif input[0] == '^': take(token, Type.Pow, 1)
+			if test('=', 1): take(token, Token.Type.EQ, 2)
+			else: take(token, Token.Type.Assign, 1)
+		elif input[0] == '+': take(token, Token.Type.Add, 1)
+		elif input[0] == '-': take(token, Token.Type.Sub, 1)
+		elif input[0] == '*': take(token, Token.Type.Mul, 1)
+		elif input[0] == '/': take(token, Token.Type.Div, 1)
+		elif input[0] == '%': take(token, Token.Type.Mod, 1)
+		elif input[0] == '^': take(token, Token.Type.Pow, 1)
 		elif input[0] == '!':
-			if test('=', 1): take(token, Type.NE, 2)
-			else: take(token, Type.Not, 1)
+			if test('=', 1): take(token, Token.Type.NE, 2)
+			else: take(token, Token.Type.Not, 1)
 		elif input[0] == '<':
-			if test('=', 1): take(token, Type.LE, 2)
-			else: take(token, Type.LT, 1)
+			if test('=', 1): take(token, Token.Type.LE, 2)
+			else: take(token, Token.Type.LT, 1)
 		elif input[0] == '>':
-			if test('=', 1): take(token, Type.GE, 2)
-			else: take(token, Type.GT, 1)
-		elif test('&&'): take(token, Type.And, 2)
-		elif test('||'): take(token, Type.Or, 2)
+			if test('=', 1): take(token, Token.Type.GE, 2)
+			else: take(token, Token.Type.GT, 1)
+		elif test('&&'): take(token, Token.Type.And, 2)
+		elif test('||'): take(token, Token.Type.Or, 2)
 		else:
 			# [通用契约 LEX-P-07] 未知字符必须消费，否则上层循环没有终止条件
-			take(token, Type.Invalid, 1)
+			take(token, Token.Type.Invalid, 1)
 			error("unknown token. ")
 		return token
 
@@ -181,19 +150,19 @@ class Lexer:
 		token.literal = input.substr(0, n)
 		input = input.substr(n)
 	func scan_bin_integer(token:Token) -> void:
-		token.type = Type.Integer
+		token.type = Token.Type.Integer
 		var n:int = 2
 		while n < len(input) and (input[n] == '_' or input[n] == '0' or input[n] == '1'):
 			n += 1
 		take_lexeme(token, n)
 	func scan_oct_integer(token:Token) -> void:
-		token.type = Type.Integer
+		token.type = Token.Type.Integer
 		var n:int = 2
 		while n < len(input) and (input[n] == '_' or (input[n] >= '0' and input[n] <= '7')):
 			n += 1
 		take_lexeme(token, n)
 	func scan_hex_integer(token:Token) -> void:
-		token.type = Type.Integer
+		token.type = Token.Type.Integer
 		var n:int = 2
 		while n < len(input) and (input[n] == '_' or is_digit(input[n])
 				or (input[n] >= 'a' and input[n] <= 'f')
@@ -201,19 +170,19 @@ class Lexer:
 			n += 1
 		take_lexeme(token, n)
 	func scan_dec_number(token:Token) -> void: # [_0-9]+(.[_0-9]*)?([eE][+-]?[0-9]+)?
-		token.type = Type.Integer
+		token.type = Token.Type.Integer
 		var n:int = 1 # 外层已保证第一个字符是数字
 		while n < len(input) and (input[n] == '_' or is_digit(input[n])):
 			n += 1
 		if n < len(input) and input[n] == '.':
-			token.type = Type.Float
+			token.type = Token.Type.Float
 			n += 1
 			while n < len(input) and (input[n] == '_' or is_digit(input[n])):
 				n += 1
 		n = scan_exponent(token, n)
 		take_lexeme(token, n)
 	func scan_dec_start_with_dot(token:Token) -> void: # .[_0-9]+([eE][+-]?[0-9]+)?
-		token.type = Type.Float
+		token.type = Token.Type.Float
 		var n:int = 1 # 外层已保证第一个字符是 .
 		while n < len(input) and (input[n] == '_' or is_digit(input[n])):
 			n += 1
@@ -221,7 +190,7 @@ class Lexer:
 		take_lexeme(token, n)
 	func scan_exponent(token:Token, n:int) -> int:
 		if n < len(input) and (input[n] == 'e' or input[n] == 'E'):
-			token.type = Type.Float
+			token.type = Token.Type.Float
 			n += 1
 			if n < len(input) and (input[n] == '+' or input[n] == '-'):
 				n += 1
@@ -238,7 +207,7 @@ class Lexer:
 		return [10, s]
 
 	func get_number_value(token:Token) -> void:
-		if token.type == Type.Integer:
+		if token.type == Token.Type.Integer:
 			var base_info:Array = number_base(token.parsed)
 			var base:int = base_info[0]
 			var body:String = base_info[1]
@@ -253,7 +222,7 @@ class Lexer:
 					error("invalid integer. "); token.invalidate(); return
 				value = value * base + d
 			token.int_value = value
-		elif token.type == Type.Float:
+		elif token.type == Token.Type.Float:
 			var s:String = token.parsed
 			if not re_float_form.search(s): # 形态上的消费完整性校验
 				error("invalid float. "); token.invalidate(); return
@@ -286,7 +255,7 @@ class Lexer:
 
 	# ---------------- 字符串 / 二进制数组 ----------------
 	func scan_string(token:Token) -> void: # 双引号
-		token.type = Type.String
+		token.type = Token.Type.String
 		input = input.substr(1)
 		var n:int = 0
 		while true:
@@ -305,7 +274,7 @@ class Lexer:
 		token.literal = input.substr(0, n)
 		input = input.substr(n)
 		if len(input) > 0: input = input.substr(1) # 跳过最后的引号
-		if token.type == Type.String: escape_string(token)
+		if token.type == Token.Type.String: escape_string(token)
 
 	const escape_map := {"'":"'",'"':'"','\\':'\\','b':'\b','f':'\f','n':'\n','r':'\r','t':'\t','v':'\v',}
 	# 注：非法转义时与 cpp/stope/lexer.hpp 的 escapeString() 一致 ——
@@ -327,7 +296,7 @@ class Lexer:
 				i += 1
 
 	func scan_bin_arr(token:Token) -> void: # 单引号，内容不做任何转义
-		token.type = Type.BinArr
+		token.type = Token.Type.BinArr
 		input = input.substr(1)
 		var n:int = 0
 		while true:
@@ -342,8 +311,8 @@ class Lexer:
 		if len(input) > 0: input = input.substr(1)
 
 	# ---------------- 标识符 ----------------
-	func scan_ident(token:Token) -> void: # ^[a-zA-Z_][a-zA-Z0-9_]*(:[a-zA-Z_][a-zA-Z0-9_]*)*
-		token.type = Type.Ident
+	func scan_ident(token:Token, custom:StopeOpcode.CustomOpcodeConfig) -> void: # ^[a-zA-Z_][a-zA-Z0-9_]*(:[a-zA-Z_][a-zA-Z0-9_]*)*
+		token.type = Token.Type.Ident
 		token.parsed = input.substr(0, 1); input = input.substr(1)
 		while len(input) > 0 and is_ident_char(input[0]):
 			token.parsed += input.substr(0, 1); input = input.substr(1)
@@ -357,12 +326,14 @@ class Lexer:
 			while len(input) > 0 and is_ident_char(input[0]):
 				token.parsed += input.substr(0, 1); input = input.substr(1)
 		token.literal = token.parsed
-		analyze_ident(token)
-	func analyze_ident(token:Token) -> void:
-		if token.type == Type.Invalid: return
+		analyze_ident(token, custom)
+	func analyze_ident(token:Token, custom:StopeOpcode.CustomOpcodeConfig) -> void:
+		if token.type == Token.Type.Invalid: return
+		# 顺序与 C++ 一致：关键字优先，其次才是自定义指令，
+		# 所以注册一个叫 if 的指令仍会按关键字处理。
 		if token.parsed in key_words: token.type = key_words[token.parsed]
-		elif token.parsed in custom_insts: token.type = Type.Custom
-		else: token.type = Type.Ident
+		elif custom != null and custom.opcodes.has(token.parsed): token.type = Token.Type.Custom
+		else: token.type = Token.Type.Ident
 
 	# ---------------- 空白与注释 ----------------
 	const white_chars:Dictionary = {' ':0,'\t':0,'\v':0,'\f':0,'\r':0}

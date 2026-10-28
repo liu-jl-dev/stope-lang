@@ -209,7 +209,7 @@ a[0] = 1;
 export x; if x < 3 { x = 1; } else { x = 2; }
 ```
 
-实测反汇编（`DumpProgramNoCustom` 输出，已删去常量池部分）：
+实测反汇编（`DisasmNoCustom` 输出，已删去常量池部分）：
 
 ```
 [0]     PushValue  0        // x 是读值 → PushValue
@@ -251,13 +251,16 @@ let i = 0; while i < 3 { i = i + 1; } return i;
 
 ### 6.3 记账方式由你决定
 
-参考实现的 `Run()` 是这样的：
+参考实现的 `Step()`（`Run()` 就是拿它循环）是这样的：
 
 ```cpp
-while (i < program->opcodes.size()) {
+Result State::Step() {                   // 一条指令一步
+  if (HasError()) return Result::Error;
+  if (i >= (int)program->opcodes.size()) return Result::Success;
   api->opFuncs[program->opcodes[i]](*api, *this);
   if (HasError()) return Result::Error;
-  ++i;                                   // ← 循环末尾统一推进
+  ++i;                                   // ← 每条指令末尾统一推进
+  return Result::Success;
 }
 ```
 
@@ -434,7 +437,7 @@ struct Arguments {
 ## 10. 实施步骤
 
 1. **先做 dump，别先写 VM。** 用 `cpp/include/stope/debug.hpp` 的
-   `DumpProgramNoCustom(program)`（或自己写一份），确认你能看懂真实产物的指令流。
+   `DisasmNoCustom(program)`（或自己写一份），确认你能看懂真实产物的指令流。
    §6.2 的两段反汇编就是这么来的。
 2. **值 + 栈 + 变量槽。** 只做 `Null` / 整数 / 浮点，先不管字符串与数组。
 3. **无跳转的指令。** `PushXxx`、`Assign`、算术、比较、一元运算。

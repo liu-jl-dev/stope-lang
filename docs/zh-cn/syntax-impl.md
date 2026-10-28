@@ -47,10 +47,10 @@
 | `cpp/docs/development.md` | 布局 / 构建 / ODR / 行尾 / 文档约定 | 动 `cpp/` 前必读 |
 | `cpp/docs/basic_vm.md` | 虚拟机的语义约定（句柄与引用计数、栈、宿主接口） | 动 VM 前必读 |
 | `cpp/docs/quick-start.md` | 在 C++ 里嵌入 Stope 的四步（编译 → 装配 → State → 运行） | 配 `cpp/demo/01-quick-start.cpp` 食用 |
-| `cpp/docs/custom-opcode.md` | 自定义指令：`CustomOpcodeConfig` → 编译 → `DumpProgram` 反汇编 | 配 `cpp/demo/02-custom-opcode.cpp` 食用 |
-| `cpp/docs/stml.md` | STML 上手：回调决定内容怎么切，含 12 条语法注意事项 | 配 `cpp/demo/03-stml.cpp` 食用 |
+| `cpp/docs/stml.md` | STML 上手：回调决定内容怎么切，含 12 条语法注意事项 | 配 `cpp/demo/02-stml.cpp` 食用 |
+| `cpp/docs/custom-opcode.md` | 自定义指令：`CustomOpcodeConfig` → 编译 → `Disasm` 反汇编 | 配 `cpp/demo/03-custom-opcode.cpp` 食用 |
 
-参考实现（GDScript）：`gdscript/stope/stope_parser.gd`。C++ 侧有两处**有意偏离**，见 §9.3。
+参考实现（GDScript）：`gdscript/addons/stope/parser.gd`。C++ 侧有两处**有意偏离**，见 §9.3。
 
 ---
 
@@ -619,7 +619,7 @@ void error(int line, const char* msg) {
 
 ### 9.3 与 GDScript 参考实现的差异（有意）
 
-| 场景 | 参考实现 `stope_parser.gd` | C++ 实现 |
+| 场景 | 参考实现 `parser.gd` | C++ 实现 |
 | --- | --- | --- |
 | 出错后是否推进 token | `parse_break_stmt` / `parse_args_expr` / `parse_call_expr` / `parse_custom_inst` 等出错后都 `next_token()`（吞掉后续内容） | 只报错、不推进（约定 2） |
 | 顶层孤立 `}` | `prog_end_tokens` 让解析静默结束，后续语句被丢弃 | 报错并跳过继续解析（约定 4） |

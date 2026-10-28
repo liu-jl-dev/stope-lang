@@ -1,5 +1,7 @@
-// 临时探针：把「通用测试计划」里每一条用例在 C++ 侧的真实输出 dump 成机器可读文本，
-// 供 GDScript 测试直接引用（期望值不手推）。
+// golden 数据生成器：把「通用测试计划」里每一条用例在 C++ 侧的真实输出 dump 成机器
+// 可读文本，供 GDScript 测试直接引用（期望值不手推）。
+//
+// 重生成（在 cpp/ 下）：cmake --build build --target gen-golden
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -43,37 +45,42 @@ static const char* opName(short v) {
     case 5: return "PushFloat";
     case 6: return "PushString";
     case 7: return "PushBinArr";
-    case 8: return "PushId";
-    case 9: return "Call";
-    case 10: return "At";
-    case 11: return "Pop";
-    case 12: return "Minus";
-    case 13: return "Not";
-    case 14: return "Pow";
-    case 15: return "Mul";
-    case 16: return "Div";
-    case 17: return "IDiv";
-    case 18: return "Mod";
-    case 19: return "Add";
-    case 20: return "Sub";
-    case 21: return "EQ";
-    case 22: return "NE";
-    case 23: return "LT";
-    case 24: return "LE";
-    case 25: return "GT";
-    case 26: return "GE";
-    case 27: return "If";
-    case 28: return "GoTo";
-    case 29: return "GetArg";
-    case 30: return "ArgNum";
-    case 31: return "Return";
+    case 8: return "PushValue";
+    case 9: return "PushId";
+    case 10: return "Call";
+    case 11: return "At";
+    case 12: return "Pop";
+    case 13: return "Minus";
+    case 14: return "Not";
+    case 15: return "Pow";
+    case 16: return "Mul";
+    case 17: return "Div";
+    case 18: return "IDiv";
+    case 19: return "Mod";
+    case 20: return "Add";
+    case 21: return "Sub";
+    case 22: return "EQ";
+    case 23: return "NE";
+    case 24: return "LT";
+    case 25: return "LE";
+    case 26: return "GT";
+    case 27: return "GE";
+    case 28: return "If";
+    case 29: return "GoTo";
+    case 30: return "GetArg";
+    case 31: return "ArgNum";
+    case 32: return "Return";
   }
   return "?";
 }
 
 static CustomOpcodeConfig* g_cfg = nullptr;
 
-static std::string dumpProgram(const Program& p) {
+// 单行比对格式（docs/zh-cn/compiler-test-plan.md §2.3）：
+//   code[PushId(0) PushInt(0) Assign] vars=1 stack=2 maxRet=0 ...
+// 只给测试比对用，不进库 —— 人读的反汇编是 debug.hpp 的 Disasm。GDScript 侧的
+// 对应物是 test/test_util.gd 的 dump_program（同样只在测试里）。
+static std::string dumpLine(const Program& p) {
   std::string s;
   s += "code[";
   size_t i = 0;
@@ -82,8 +89,8 @@ static std::string dumpProgram(const Program& p) {
     short op = p.opcodes[i];
     ++i;
     bool hasParam;
-    if (op > 31) {
-      s += "Inst(" + std::to_string(op) + ")";
+    if (op > 32) {
+      s += "Opcode(" + std::to_string(op) + ")";
       hasParam = false;
       for (auto& kv : g_cfg->opcodes) {
         if (kv.second.opcode == op) {
@@ -92,12 +99,12 @@ static std::string dumpProgram(const Program& p) {
         }
       }
     } else if (op <= 3) hasParam = false;
-    else if (op <= 10) hasParam = true;
-    else if (op <= 26) hasParam = false;
-    else if (op <= 28) hasParam = true;
-    else if (op <= 30) hasParam = false;
+    else if (op <= 11) hasParam = true;
+    else if (op <= 27) hasParam = false;
+    else if (op <= 29) hasParam = true;
+    else if (op <= 31) hasParam = false;
     else hasParam = true;
-    if (op <= 31) s += opName(op);
+    if (op <= 32) s += opName(op);
     if (hasParam && i < p.opcodes.size()) {
       s += "(" + std::to_string(p.opcodes[i]) + ")";
       ++i;
@@ -188,7 +195,7 @@ static void one(const char* id, const char* src, bool fold) {
          ps.errors.size(), lx.errors.size(), join(ps.errors).c_str(),
          join(lx.errors).c_str(),
          rc == Result::Success ? "OK" : "ERR",
-         E_(dumpProgram(out)).c_str(), join(c.errors).c_str());
+         E_(dumpLine(out)).c_str(), join(c.errors).c_str());
 }
 
 int main() {
@@ -198,7 +205,7 @@ int main() {
   cfg.addCustomOpcode(vop, 101, -1);
   g_cfg = &cfg;
 
-  printf("# C++ golden dump (2026-10-18) for docs/zh-cn/*.md case tables\n");
+  printf("# C++ golden dump (2026-10-28) for docs/zh-cn/*.md case tables\n");
 
   // ================= 语法分析计划 §4.1 S 语句层 =================
   const char* s_cases[] = {"",

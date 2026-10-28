@@ -5,6 +5,7 @@
 
 | 想看 | 去哪（相对本文件） |
 | --- | --- |
+| 本目录总览（面向所有人） | `README.md`（本目录） |
 | 语言的语法 | `../../docs/zh-cn/syntax-intro.md` |
 | 各模块的对外接口 | `../../docs/zh-cn/syntax-impl.md` |
 | 标准范围（为什么虚拟机不算标准） | `../../README.md` |
@@ -13,8 +14,8 @@
 | 布局 / 构建 / 行尾 / 文档约定 | `development.md`（本目录） |
 | API 参数与所有权约定 | `development.md` §7（本目录） |
 | 常量折叠的规则总表 | `expr_optim.md`（本目录） |
-| 给编译器加自定义指令 | `custom-opcode.md`（本目录） |
 | 解析 STML 文档 | `stml.md`（本目录） |
+| 给编译器加自定义指令 | `custom-opcode.md`（本目录） |
 
 依赖只有 C++20 编译器 + CMake，无第三方库。
 
@@ -139,7 +140,7 @@ parser.ParseProgram(tree);
 Compiler compiler;                 // 构造参：CustomOpcodeConfig*，默认 nullptr
 Program program;
 compiler.Compile(tree, program);  // AST 与 Program 都传引用
-cout << DumpProgramNoCustom(program) << endl;
+cout << DisasmNoCustom(program) << endl;
 ```
 
 注意点：
@@ -151,8 +152,8 @@ cout << DumpProgramNoCustom(program) << endl;
   约定见 `development.md` §7。
 - 词法/语法/编译的错误都不抛异常，分别进 `lexer.errors`、`parser.errors`；
   `Compile()` 失败时看返回值。
-- `DumpProgramNoCustom()` 来自 `debug.hpp`，把 `Program` 转成可读文本，方便核对。
-  产物里有自定义指令时改用 `DumpProgram(program, &config)`（见 §9 与 `demo/02-custom-opcode.cpp`）。
+- `DisasmNoCustom()` 来自 `debug.hpp`，把 `Program` 转成可读文本，方便核对。
+  产物里有自定义指令时改用 `Disasm(program, &config)`（见 §9 与 `demo/03-custom-opcode.cpp`）。
 
 这一节用到的五个类型（`Lexer` `Parser` `AST::Prog` `Compiler` `Program`）是**编译器接口**，
 它围绕的正是标准里规定的那一层 —— `Program` 的编码契约（`compiler_test_plan.md` §2），
@@ -178,8 +179,9 @@ BasicVM::API api;
 - **`ProgramConstants(alloc, program)`** 在构造时就把 `program` 的常量装进 `alloc`，
   所以**必须先有 `alloc`**。
 - **`API`** 持有 33 条内置指令的实现表（`static inline std::array<OpFunc, kOpCount> opFuncs`），
-  `State::Run()` 就是 `api->opFuncs[opcode](*api, *this)`。目前没有可替换的余地，
-  但 `SetAPI` 是必需的——漏了 `api` 就是空指针。
+  `State::Run()` 就是拿 `api->opFuncs[opcode](*api, *this)` 循环；想单步就改用
+  `State::Step()`（一条指令一步，终止条件自己用 `state.i` 判，见 `basic_vm.md` §1）。
+  目前没有可替换 `API` 的余地，但 `SetAPI` 是必需的——漏了 `api` 就是空指针。
 
 生命周期：`alloc` 要活得比 `constants` 和 `state` 都长。都在同一个作用域里时，
 按 `alloc` → `constants` → `state` 的顺序声明即可（析构是逆序）。
@@ -340,8 +342,8 @@ int main() {
 
 - 只想把 Stope 当表达式求值器：只用 step 1 的 `Compiler` + `debug.hpp` 就够。
 - 想加自己的指令：填 `CustomOpcodeConfig`，传给 `Parser` 与 `Compiler`。
-  `cpp/demo/02-custom-opcode.cpp` 是可编译的完整例子（只编译 + 反汇编），
-  它同时演示了 `DumpProgram(program, &config)` —— 产物含自定义指令时必须带
+  `cpp/demo/03-custom-opcode.cpp` 是可编译的完整例子（只编译 + 反汇编），
+  它同时演示了 `Disasm(program, &config)` —— 产物含自定义指令时必须带
   config，否则名字和变长指令后面那个参数个数都无从得知。
   **教程见 `custom-opcode.md`（本目录）**，规则见 `compiler_test_plan.md` §4.4。
 - 想换掉内置的虚拟机：读 `../../docs/zh-cn/vm-guide.md`。它讲的是「`Program` 的契约 +

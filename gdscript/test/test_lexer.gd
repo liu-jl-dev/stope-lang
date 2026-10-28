@@ -19,15 +19,15 @@ static func run(rep:StopeTestUtil.Report) -> void:
 			rep.check(id, k, c.get(k, ''), got[k])
 
 static func _one(src:String) -> Dictionary:
-	var T := StopeToken.Type
-	var lx := StopeToken.Lexer.new(src)
-	lx.set_custom_insts(StopeTestUtil.custom_insts())
+	var T := StopeLexer.Token.Type
+	var lx := StopeLexer.Lexer.new(src)
+	var cfg := StopeTestUtil.custom_config()
 	var toks := ''
 	var lexemes := ''
 	for i in range(10000):
-		var t := lx.next_token()
+		var t := lx.next_token(cfg)
 		if i > 0: toks += ' '
-		toks += str(StopeToken.type_name(t.type), '(', t.line, ')')
+		toks += str(StopeLexer.Token.type_name(t.type), '(', t.line, ')')
 		if t.parsed != '': toks += str('[', StopeTestUtil.esc_lex(t.parsed), ']')
 		if t.type == T.Integer: toks += str('=', t.int_value)
 		elif t.type == T.Float: toks += str('=', StopeAst.fmt_g(t.float_value))

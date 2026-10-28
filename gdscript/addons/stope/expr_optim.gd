@@ -17,6 +17,8 @@ class_name StopeExprOptim
 #   L0 两侧必须都是字面量常量 -> L1 and/or -> L2 任一侧 null -> L3 比较 -> L4 算术
 # 刻意【不】拆成 foldXxx 分派函数，保持「一个格子 = 一个分支」，方便两边对照。
 
+const TokenType = StopeLexer.Token.Type
+
 const INT64_MAX := 9223372036854775807
 const INT64_MIN := -9223372036854775807 - 1
 const MAX_REPEAT_ELEM := 1 << 20	# 串重复的元素数上限：1 M
@@ -98,33 +100,17 @@ static func truthy(e) -> bool:
 	return false
 
 # ==================== 有符号整数溢出检查 ====================
-# GD 的 int 溢出会【静默回绕】，必须自己挡；返回 [是否溢出, 结果]，溢出时结果为 0（作废）。
+# + - * 一律按 64 位回绕（与 C++ 的 intAdd/intSub/intMul 一致，GD 的 int 也是回绕），
+# 所以只有两类地方需要显式挡：除法/取模的 INT64_MIN / -1，以及快速幂的中间结果。
 static func div_mod_overflow(a:int, b:int) -> bool:
 	return a == INT64_MIN and b == -1	# 除法/取模唯一的溢出组合
 
-static func add_overflow(a:int, b:int) -> Array:
-	if b >= 0:
-		if a > INT64_MAX - b: return [true, 0]
-	else:
-		if a < INT64_MIN - b: return [true, 0]
-	return [false, a + b]
-
-static func sub_overflow(a:int, b:int) -> Array:
-	if b >= 0:
-		if a < INT64_MIN + b: return [true, 0]
-	else:
-		if a > INT64_MAX + b: return [true, 0]
-	return [false, a - b]
-
+# 整数乘的溢出检测，只给快速幂用（+ - * 本身按 64 位回绕，不检测）
 static func mul_overflow(a:int, b:int) -> Array:
 	if a == 0: return [false, 0]
 	if a == -1: return [true, 0] if b == INT64_MIN else [false, -b]
 	var r:int = a * b
 	return [r / a != b, r]
-
-static func neg_overflow(a:int) -> Array:
-	if a == INT64_MIN: return [true, 0]
-	return [false, -a]
 
 # 整数快速幂，exp >= 0；溢出返回 [true, 0]
 static func int_pow(base:int, exp:int) -> Array:
@@ -163,14 +149,14 @@ static func clone_const(line:int, e) -> StopeAst.Expr:
 	return r
 
 # 取负：Int/Float -> 同类型取负；Bool -> 转成 Int 取负。
-# 溢出或不可取负（null / 序列）返回 null。
+# 不可取负（null / 序列）返回 null。整数按 64 位回绕（-INT64_MIN == INT64_MIN），
+# 所以走 `~a + 1` 而不是 `-a`：后者在 GD 里对 INT64_MIN 会直接崩，前者等价且安全。
 static func negate_const(line:int, e) -> StopeAst.Expr:
 	match e.node_type:
 		StopeAst.NodeType.BoolExpr: return make_int(line, -1 if bool_val(e) else 0)
 		StopeAst.NodeType.IntExpr:
-			var r := neg_overflow(as_int(e))
-			if r[0]: return null	# -INT64_MIN 溢出 -> 不折叠
-			return make_int(line, r[1])
+			var v:int = as_int(e)
+			return make_int(line, ~v + 1)
 		StopeAst.NodeType.FloatExpr: return make_float(line, -double_val(e))
 	return null
 
@@ -187,9 +173,9 @@ static func repeat_seq(line:int, base, times:int) -> StopeAst.Expr:
 
 # `<` `<=` `>` `>=` 的四分支（整数与浮点共用一套）
 static func cmp_of(op:int, a, b) -> bool:
-	if op == StopeToken.Type.LT: return a < b
-	if op == StopeToken.Type.LE: return a <= b
-	if op == StopeToken.Type.GT: return a > b
+	if op == TokenType.LT: return a < b
+	if op == TokenType.LE: return a <= b
+	if op == TokenType.GT: return a > b
 	return a >= b
 
 # ==================== 一元 ====================
@@ -201,10 +187,10 @@ static func fold_unary(e) -> StopeAst.Expr:
 	if not is_const(ck): return e	# 非常量 -> 不折叠
 	# `!` 走 truthy；`-` 走 negate_const（Bool 折算成 Int，null / 序列不可取负 -> 不折叠）
 	var ret = null
-	if e.op == StopeToken.Type.Not:
+	if e.op == TokenType.Not:
 		if ck == ConstKind.Null or is_num_like(ck):
 			ret = make_bool(line, not truthy(inn))
-	elif e.op == StopeToken.Type.Sub:
+	elif e.op == TokenType.Sub:
 		ret = negate_const(line, inn)
 	return ret if ret else e
 
@@ -225,36 +211,26 @@ static func try_fold_binary(e) -> StopeAst.Expr:
 	if not is_const(lk) or not is_const(rk): return null
 
 	# ---------- L1 and / or：结果与类型无关，恒返回 Bool ----------
-	if op == StopeToken.Type.And:
+	if op == TokenType.And:
 		return make_bool(line, truthy(L) and truthy(R))
-	if op == StopeToken.Type.Or:
+	if op == TokenType.Or:
 		return make_bool(line, truthy(L) or truthy(R))
 
 	# ---------- L2 null 参与 ----------
-	# null 是加法的单位元、`-` 里的 0、`* / idiv % ^` 的吸收元，且只与 null 相等
+	# null 不是数字，也不参与算术：`+ - * / idiv % ^` 一律不折叠，交给后端报错
+	# （basic_vm 同样是报错）。只有 `==` `!=` 有确定结论：null 只与 null 相等。
+	# < <= > >= 本该是类型错误 -> 不折叠。
 	if lk == ConstKind.Null or rk == ConstKind.Null:
 		var both_null:bool = (lk == ConstKind.Null and rk == ConstKind.Null)
-		var other = R if lk == ConstKind.Null else L
-		if op == StopeToken.Type.Add:	# null + X == X + null == X
-			return clone_const(line, other)
-		elif op == StopeToken.Type.Sub:
-			# 两侧都是 null -> null；null - X == -X；X - null == X
-			if both_null: return StopeAst.NullExpr.new()
-			if lk == ConstKind.Null: return negate_const(line, other)
-			return clone_const(line, other)
-		elif (op == StopeToken.Type.Mul or op == StopeToken.Type.Div
-				or op == StopeToken.Type.IDiv or op == StopeToken.Type.Mod
-				or op == StopeToken.Type.Pow):	# 吸收元
-			return StopeAst.NullExpr.new()
-		elif op == StopeToken.Type.EQ:	# null 只与 null 相等
+		if op == TokenType.EQ:
 			return make_bool(line, both_null)
-		elif op == StopeToken.Type.NE:
+		elif op == TokenType.NE:
 			return make_bool(line, not both_null)
-		return null	# < <= > >= ：本该是类型错误 -> 不折叠
+		return null
 
 	# ---------- L3 相等与大小比较 ----------
 	# 到这里两侧都非 null；跨类型一律不折叠（强制转换规则未定，见 §4.5）
-	if op == StopeToken.Type.EQ or op == StopeToken.Type.NE:
+	if op == TokenType.EQ or op == TokenType.NE:
 		var decided := false
 		var eq := false
 		if lk == ConstKind.Bool and rk == ConstKind.Bool:
@@ -266,10 +242,10 @@ static func try_fold_binary(e) -> StopeAst.Expr:
 		elif is_seq(lk) and lk == rk:	# 串相等 / 字节相等
 			decided = true
 			eq = seq_equal(L, R)
-		if decided: return make_bool(line, eq if op == StopeToken.Type.EQ else not eq)
+		if decided: return make_bool(line, eq if op == TokenType.EQ else not eq)
 		return null
-	if (op == StopeToken.Type.LT or op == StopeToken.Type.LE
-			or op == StopeToken.Type.GT or op == StopeToken.Type.GE):
+	if (op == TokenType.LT or op == TokenType.LE
+			or op == TokenType.GT or op == TokenType.GE):
 		# Bool 与序列不参与数值比较 -> 两侧都必须是 Int / Float
 		if is_numeric(lk) and is_numeric(rk):
 			return make_bool(line, cmp_of(op, as_int(L), as_int(R)) if both_int(lk, rk)
@@ -280,29 +256,27 @@ static func try_fold_binary(e) -> StopeAst.Expr:
 	# 到这里两侧都非 null，左值只剩两类：数值（Bool 折算成 0/1）与序列
 	if is_num_like(lk):
 		# ===== L4a 左值是 Bool / Int / Float =====
-		if (op == StopeToken.Type.Add or op == StopeToken.Type.Sub
-				or op == StopeToken.Type.Mul):
+		if (op == TokenType.Add or op == TokenType.Sub
+				or op == TokenType.Mul):
 			if is_num_like(rk):
 				if both_num_int(lk, rk):	# 两侧都没有 Float -> 整数路径
 					var a:int = num_as_int(L)
 					var b:int = num_as_int(R)
-					var r:Array
-					if op == StopeToken.Type.Add: r = add_overflow(a, b)
-					elif op == StopeToken.Type.Sub: r = sub_overflow(a, b)
-					else: r = mul_overflow(a, b)
-					if r[0]: return null
-					return make_int(line, r[1])
+					# 整数溢出不检查，按 64 位回绕（与 C++ 的 intAdd/intSub/intMul 一致）
+					if op == TokenType.Add: return make_int(line, a + b)
+					elif op == TokenType.Sub: return make_int(line, a - b)
+					else: return make_int(line, a * b)
 				else:	# 任一侧是 Float -> 浮点路径
 					var x:float = as_double(L)
 					var y:float = as_double(R)
 					var v:float = 0.0
-					if op == StopeToken.Type.Add: v = x + y
-					elif op == StopeToken.Type.Sub: v = x - y
+					if op == TokenType.Add: v = x + y
+					elif op == TokenType.Sub: v = x - y
 					else: v = x * y
 					return make_float(line, v)
-			elif op == StopeToken.Type.Mul and is_seq(rk) and lk != ConstKind.Float:
+			elif op == TokenType.Mul and is_seq(rk) and lk != ConstKind.Float:
 				return repeat_seq(line, R, num_as_int(L))	# 数字 * 串 == 串重复
-		elif op == StopeToken.Type.Div:
+		elif op == TokenType.Div:
 			if is_num_like(rk):
 				if both_num_int(lk, rk):
 					var a:int = num_as_int(L)
@@ -314,13 +288,13 @@ static func try_fold_binary(e) -> StopeAst.Expr:
 				else:
 					var bb:float = as_double(R)
 					if bb != 0.0: return make_float(line, as_double(L) / bb)
-		elif op == StopeToken.Type.IDiv:
+		elif op == TokenType.IDiv:
 			if both_num_int(lk, rk):	# 含浮点 -> float->int 收窄，不折叠
 				var a:int = num_as_int(L)
 				var b:int = num_as_int(R)
 				if b != 0 and not div_mod_overflow(a, b):
 					return make_int(line, a / b)	# 向零取整
-		elif op == StopeToken.Type.Mod:
+		elif op == TokenType.Mod:
 			if is_num_like(rk):
 				if both_num_int(lk, rk):
 					var a:int = num_as_int(L)
@@ -331,7 +305,7 @@ static func try_fold_binary(e) -> StopeAst.Expr:
 				else:
 					var bb:float = as_double(R)
 					if bb != 0.0: return make_float(line, fmod(as_double(L), bb))
-		elif op == StopeToken.Type.Pow:
+		elif op == TokenType.Pow:
 			if is_num_like(rk):
 				var folded_as_int := false
 				if both_num_int(lk, rk):
@@ -346,13 +320,13 @@ static func try_fold_binary(e) -> StopeAst.Expr:
 
 	# ===== L4b 左值是序列（String / BinArr）=====
 	elif is_seq(lk):
-		if op == StopeToken.Type.Add:
+		if op == TokenType.Add:
 			if rk == lk:	# 同类才连接：字符串拼接 / 字节连接（跨类型不折）
 				var ret := make_seq(line, lk)
 				seq_append(ret, L)
 				seq_append(ret, R)
 				return ret
-		elif op == StopeToken.Type.Mul:
+		elif op == TokenType.Mul:
 			if rk == ConstKind.Int or rk == ConstKind.Bool:
 				return repeat_seq(line, L, num_as_int(R))	# 串 * 整数 == 串重复
 		# 其余运算符（`Sub` 等）对序列无定义 -> 不折叠

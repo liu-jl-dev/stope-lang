@@ -9,7 +9,7 @@
   PD-7（`^` 结合性）2026-10-16 定夺为左结合，**2026-10-22 又改为右结合**、残留项拆为 PD-18；未修见 §7。
   §6–§10 已按落地实况改写。
 - 实测环境：g++ (MinGW-w64 x86_64-win32-seh) 15.2.0，`-std=c++20`，默认 8 MB 线程栈
-- 参考实现（语义基准）：`gdscript/stope/stope_parser.gd`
+- 参考实现（语义基准）：`gdscript/addons/stope/parser.gd`
 - 上游依赖：`cpp/include/stope/lexer.hpp`（其测试计划与已知缺陷见 `lexer_test_plan.md`）
 
 ---
@@ -23,11 +23,11 @@
    `AST::NodeType`）**、**14 个 prefix 注册项 + 17 个 infix 注册项**、**34 处 `error()` 调用点**。
 2. 把"当前实际行为"固化成断言，使后续重构（拆 .cpp、改 AST、接入 compiler）能立刻发现行为漂移。
 3. 暴露并记录已确认的缺陷（见 §3），用 **已知失败清单（Known-Issue）** 管理，避免缺陷被测试"洗白"。
-4. 提供覆盖率与验收口径，作为 parser 可否交付给 `stope_compiler` 的依据。
+4. 提供覆盖率与验收口径，作为 parser 可否交付给 `addons/stope/compiler.gd` 的依据。
 
 ### 1.2 非目标
 
-- 不测试 lexer（另有 `lexer_test_plan.md`）；不测试语义分析、代码生成（`stope_compiler.gd` 的职责）。
+- 不测试 lexer（另有 `lexer_test_plan.md`）；不测试语义分析、代码生成（`compiler.gd` 的职责）。
 - 不做性能基准；只做"不死循环 / 不崩 / 不泄漏"的健壮性下限（见 §3 PD-12 / PD-13）。
 - 不验证"语义正确性"（如 `1 = 2;` 是否应判错），parser 层只记录现状（见 PD-10）。
 
@@ -200,6 +200,7 @@ struct Parser {
 cpp/
 ├─ CMakeLists.txt                  # 新增 test_parser / test_parser_depth 目标（见 4.3）
 ├─ docs/
+│  ├─ README.md                    # 本目录总览（面向所有人）
 │  ├─ lexer_test_plan.md           # lexer 的计划文档（计划文档统一放 docs/）
 │  ├─ parser_test_plan.md          # 本文档
 │  ├─ compiler_test_plan.md        # compiler 的计划文档（CD-1…CD-5 的对照表在 §3）

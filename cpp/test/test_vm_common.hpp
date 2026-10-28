@@ -19,6 +19,7 @@
 
 #include <stope/basic_vm.hpp>
 #include <stope/compiler.hpp>
+#include <stope/debug.hpp>  // OpcodeHasArg：算「指令条数」用，与反汇编同一判据
 #include <stope/lexer.hpp>
 #include <stope/parser.hpp>
 
@@ -63,6 +64,7 @@ struct VmResult {
   double retFloat = 0;
   std::string retStr;    // String / BinArr 的可见形式
   size_t stackLeft = 0;  // 跑完后栈上剩下的元素数
+  int finalI = 0;        // 停机时的指令指针（与 StepTrace 对照用）
 
   VmResult() = default;
   VmResult(const VmResult&) = delete;
@@ -113,6 +115,7 @@ inline void runSrc(std::u16string src, VmResult& r) {
   r.runError = (res == Result::Error);
   r.runErrors = state.errors;
   r.stackLeft = state.stack.size();
+  r.finalI = state.i;
 
   for (auto& v : state.returns) {
     BasicVM::Value copy;
@@ -143,6 +146,155 @@ inline void runSrc(std::u16string src, VmResult& r) {
     }
   }
   state.Clear();  // 显式释放：state 的析构也会做，但这让意图明确
+}
+
+// ---------------------------------------------------------------------------
+// Step() 对照实验：同一份源码改用 Step 逐条驱动，记录轨迹。
+// 装配部分与 runSrc 逐行相同（只是驱动方式不同），这样 V-31 起的断言比的就是
+// 「两条驱动路径」本身，而不是两套装配。
+// ---------------------------------------------------------------------------
+struct StepTrace {
+  BasicVM::Allocator alloc;  // 必须比 constants / state 活得久
+  BasicVM::ProgramConstants* constants = nullptr;
+  BasicVM::API api;
+  Program program;
+  bool compiled = false;
+  std::vector<std::string> compileErrors;
+
+  int instCount = 0;         // 指令条数（不含操作数）
+  int steps = 0;             // 成功执行的指令条数
+  int firstI = 0;            // 第一次 Step 之后的 i
+  int finalI = 0;            // 停机时的 i
+  bool hitError = false;     // 是否以 Result::Error 停下
+  int errorRepeatDelta = 0;  // 错误态再 Step 一次，errors 的增量（期望 0）
+  bool postEndNoop = false;  // 越界后连调两次 Step：都 Success 且 i 不变
+  std::vector<std::string> errors;
+  std::vector<BasicVM::Value> returns;
+  BasicVM::Value::Type retType = BasicVM::Value::Type::Null;
+  int64_t retInt = 0;
+  std::string retStr;
+  size_t stackLeft = 0;
+
+  StepTrace() = default;
+  StepTrace(const StepTrace&) = delete;
+  StepTrace& operator=(const StepTrace&) = delete;
+};
+
+// 指令条数：按「这条指令吃不吃一个操作数」跳读，与调试器的切分规则一致。
+inline int vmInstCount(const Program& p) {
+  int n = 0;
+  size_t k = 0;
+  while (k < p.opcodes.size()) {
+    short op = p.opcodes[k];
+    ++n;
+    ++k;
+    // 自定义指令（> 32）本组用例不涉及；内置的判据与 debug.hpp 同源
+    if (op >= 0 && op <= static_cast<short>(Opcode::Return) &&
+        OpcodeHasArg(static_cast<Opcode>(op)))
+      ++k;
+  }
+  return n;
+}
+
+inline void runSrcByStep(std::u16string src, StepTrace& t) {
+  Lexer lexer(src);
+  Parser parser(lexer);
+  AST::Prog tree;
+  parser.ParseProgram(tree);
+  Compiler compiler;
+  compiler.Compile(tree, t.program);
+  t.compileErrors = compiler.errors;
+  if (!compiler.errors.empty())
+    return;
+  t.compiled = true;
+
+  std::unique_ptr<BasicVM::ProgramConstants> constants(
+      new BasicVM::ProgramConstants(t.alloc, t.program));
+  t.constants = constants.get();
+
+  BasicVM::State state;
+  state.SetAPI(t.api);
+  state.SetAllocator(t.alloc);
+  state.SetProgramConstants(*constants);
+  state.SetProgram(t.program);
+  state.variables.resize(t.program.variableNum);
+  for (auto& kv : t.program.exports) {
+    auto& v = state.variables[kv.second];
+    if (v.type == BasicVM::Value::Type::Null) {
+      v.type = BasicVM::Value::Type::HostFunction;
+      v.data.hostFuncPtr = nullptr;
+    }
+  }
+
+  VmNoArgs noargs;
+  state.SetArguments(noargs);
+
+  t.instCount = vmInstCount(t.program);
+
+  const int size = static_cast<int>(t.program.opcodes.size());
+  while (state.i < size && state.Step() == Result::Success) {
+    ++t.steps;
+    if (t.steps == 1)
+      t.firstI = state.i;
+  }
+  t.hitError = state.HasError();
+  t.finalI = state.i;
+  t.errors = state.errors;
+  t.stackLeft = state.stack.size();
+
+  if (t.hitError) {
+    // 错误态再调一次：Step 的预检应当直接返回 Error，不执行、不追加错误
+    size_t before = state.errors.size();
+    state.Step();
+    t.errorRepeatDelta = static_cast<int>(state.errors.size() - before);
+  } else {
+    // 越界之后再调两次：Success 且什么也不做（这就是「终止条件必须用 i 判」）
+    int iBefore = state.i;
+    Result r1 = state.Step();
+    Result r2 = state.Step();
+    t.postEndNoop = (r1 == Result::Success && r2 == Result::Success &&
+                     state.i == iBefore && !state.HasError());
+  }
+
+  for (auto& v : state.returns) {
+    BasicVM::Value copy;
+    BasicVM::Value::Copy(t.alloc, v, copy);
+    t.returns.push_back(std::move(copy));
+  }
+  if (!t.returns.empty()) {
+    auto& v = t.returns[0];
+    t.retType = v.type;
+    switch (v.type) {
+      case BasicVM::Value::Type::Integer:
+        t.retInt = v.data.integer;
+        break;
+      case BasicVM::Value::Type::String:
+        t.retStr = vmAscii(t.alloc.GetString(v.data.handle));
+        break;
+      default:
+        break;
+    }
+  }
+  state.Clear();
+}
+
+inline std::string vmStepDetail(const StepTrace& t) {
+  std::string d;
+  d += "compiled=" + std::string(t.compiled ? "y" : "n");
+  d += " inst=" + std::to_string(t.instCount);
+  d += " steps=" + std::to_string(t.steps);
+  d += " firstI=" + std::to_string(t.firstI);
+  d += " finalI=" + std::to_string(t.finalI);
+  d += " hitError=" + std::string(t.hitError ? "y" : "n");
+  d += " errRepeat+" + std::to_string(t.errorRepeatDelta);
+  d += " postEndNoop=" + std::string(t.postEndNoop ? "y" : "n");
+  d += " retInt=" + std::to_string(t.retInt);
+  d += " stackLeft=" + std::to_string(t.stackLeft);
+  for (auto& e : t.compileErrors)
+    d += "\n         compile: [" + e + "]";
+  for (auto& e : t.errors)
+    d += "\n         step: [" + e + "]";
+  return d;
 }
 
 inline std::string vmDetail(const VmResult& r) {

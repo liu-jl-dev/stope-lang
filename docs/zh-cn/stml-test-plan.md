@@ -4,10 +4,10 @@
 >
 > | 通用测试计划 | 覆盖范围 | C++ 侧 | GDScript 侧 |
 > | --- | --- | --- | --- |
-> | [lexer-test-plan.md](lexer-test-plan.md) | 字符流 → Token 流 | `cpp/include/stope/lexer.hpp` | `gdscript/stope/stope_token.gd` |
-> | [parser-test-plan.md](parser-test-plan.md) | Token 流 → AST | `cpp/include/stope/parser.hpp` | `gdscript/stope/stope_parser.gd` |
-> | [compiler-test-plan.md](compiler-test-plan.md) | AST → Program | `cpp/include/stope/compiler.hpp` | `gdscript/stope/stope_compiler.gd` |
-> | **stml-test-plan.md（本文）** | STML 文本 → 元素树 | `cpp/include/stope/stml_lexer.hpp` + `cpp/include/stope/stml_parser.hpp` | `gdscript/stope/stml_lexer.gd` + `gdscript/stope/stml_parser.gd` |
+> | [lexer-test-plan.md](lexer-test-plan.md) | 字符流 → Token 流 | `cpp/include/stope/lexer.hpp` | `gdscript/addons/stope/lexer.gd` |
+> | [parser-test-plan.md](parser-test-plan.md) | Token 流 → AST | `cpp/include/stope/parser.hpp` | `gdscript/addons/stope/parser.gd` |
+> | [compiler-test-plan.md](compiler-test-plan.md) | AST → Program | `cpp/include/stope/compiler.hpp` | `gdscript/addons/stope/compiler.gd` |
+> | **stml-test-plan.md（本文）** | STML 文本 → 元素树 | `cpp/include/stope/stml_lexer.hpp` + `cpp/include/stope/stml_parser.hpp` | `gdscript/addons/stope/stml_lexer.gd` + `gdscript/addons/stope/stml_parser.gd` |
 >
 > **权威实现：C++。** 两侧出现分歧时以 `cpp/include/stope/stml_*.hpp` 的实测行为为准，
 > GDScript 侧按 §7 的差异清单整改；反向的分歧（C++ 落后于 GDScript 且确认是好的）
@@ -104,7 +104,7 @@ errors = lexer.errors          # 累加，不清空
 | 10 | `NevextSrc` | `NevSrc` | Nevext 代码段 | 有 |
 | 11 | `StopeSrc` | `StoSrc` | Stope 代码段 | 有 |
 
-**集合必须完全一致**（12 项，不多不少）。名字允许不同（见 §7 GD-S-03），
+**集合必须完全一致**（12 项，不多不少），名字也已对齐（见 §7 GD-S-03），
 但**种类划分**必须能对上：例如不能把 `Text` 合并进 `Word`。
 
 ### 2.4 词法状态机（4 态）
@@ -211,12 +211,12 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | --- | --- | --- |
 | 词法器构造 | `STML::Lexer lx(u16string_view)` | `STMLLexer.Lexer.new(String)` |
 | 取一个 token | `lx.NextToken(Token&)` | `lx.next_token() -> STML.Token` |
-| 状态字段 | `lx.state : LexerState`（4 态） | `lx.state : int`（3 态，**无 Text**，GD-S-01） |
+| 状态字段 | `lx.state : LexerState`（4 态） | `lx.state : int`（4 态，枚举值相同） |
 | 语法器构造 | `STML::Parser p(lx)` | `STMLParser.Parser.new(lex)` |
-| 解析入口 | `p.Parse(Element& root, LexerStateFunc) -> Result` | `p.parse_element() -> STML.Element` |
-| 内容状态决策 | `LexerStateFunc(tag, attrs)` 回调 | 硬编码 `tag == 'nev'` / `'sto'`（`asm` 属性走 Nevext），GD-S-11 |
+| 解析入口 | `p.Parse(Element& root, LexerStateFunc) -> Result` | `p.parse(root, state_func) -> int` |
+| 内容状态决策 | `LexerStateFunc(tag, attrs)` 回调 | 宿主 `Callable(tag, attrs) -> int`；传 `Callable()` 等价于 `nullptr` |
 | 错误 | `lx.errors` / `p.errors`，**两者不合并** | `lx.errors` / `p.errors`，同样不合并 |
-| 结果枚举 | `Stope::Result::Success / Error` | 无（只看 `errors` 是否为空） |
+| 结果枚举 | `Stope::Result::Success / Error` | `StopeResult.Success / Error`（与编译器共用同一份，见 gdscript/docs/usage.md 开头） |
 
 ---
 
@@ -483,7 +483,9 @@ Elem(div, L1, @class="box", @hidden, C=[Elem(p, L2, T="hello") Elem(sto, L3, T="
 **跨实现一致性怎么验。** 两侧各自跑一遍本文全部用例，
 把 `kind + line + lexeme + errors.size()` 与元素形状串导成可比对的文本，
 一份输入都不能差。C++ 侧由 `ctest` 承担（`test_stml`）；
-GDScript 侧待补 runner（见 §6 与 §7）。
+GDScript 侧由 `test/test_stml.gd` 承担，且它的期望值不是手写的 ——
+`data/stml_cases.txt` 这份用例清单两侧共用，C++ 探针 `cpp/tools/golden_stml.cpp`
+读它 dump 出 `data/golden_stml.txt`（见 §6）。
 
 ---
 
@@ -513,13 +515,26 @@ ctest --test-dir build          # 13 项，其中 stml 是新增的那一项
 
 ### GDScript
 
-STML 的 GDScript 侧用例**尚未建立**（§7 的差异比另两份计划大得多，
-需要先整改实现再落测试）。整改完成后按另两份计划的惯例放到 `gdscript/test/`：
+121 条用例全部落地在 `gdscript/test/`，随其它三组一起跑：
 
 ```bash
-"/d/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64.exe" \
+"/c/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/godot_console.exe" \
     --headless --path gdscript --script res://test/run_tests.gd
 ```
+
+输出里 `[4/4] STML` 那一段就是本组，602 条断言（62 × 4 + 59 × 6）。
+
+与另三组不同，这一组**用例清单本身也是数据文件**，因为两侧要跑同一批输入：
+
+| 文件 | 谁写 | 作用 |
+| --- | --- | --- |
+| `gdscript/test/data/stml_cases.txt` | 手写 | §4 的 121 条：ID / `KIND` / `ST`（词法初始状态）/ `SF`（宿主回调）/ `SRC` / `TIMES` |
+| `cpp/tools/golden_stml.cpp` | 手写 | C++ 侧探针。读清单 → dump 期望值 |
+| `gdscript/test/data/golden_stml.txt` | **机器生成** | 期望值，勿手工编辑 |
+| `gdscript/test/test_stml.gd` | 手写 | GDScript 侧 runner。读清单 + golden，逐字段比对 |
+
+加删用例**只改 `stml_cases.txt`**，然后重跑探针：`cmake --build cpp/build --target gen-golden`
+（详见 `gdscript/docs/testing.md` §3.3）。
 
 ---
 
@@ -527,23 +542,32 @@ STML 的 GDScript 侧用例**尚未建立**（§7 的差异比另两份计划大
 
 > `GD-S-n` = GDScript 侧相对 C++ 基准的差异，按顺序编号，修一条划一条（保留记录）。
 > `TD-n` = 两侧共有的缺陷/定夺，完整清单见 `cpp/docs/stml_test_plan.md` §3。
+>
+> **2026-10-28**：GDScript 侧 STML 整体重写 —— 词法补 `Text` 态与 Xml 注释、语法改成宿主
+> 回调并逐分支照抄 C++、错误文案换成 §3 那 10 条；同日又把 `Token.Type` 的三个枚举项改名
+> 对齐 C++ 并删掉 `type_name()` 映射层（GD-S-03）。原有 16 条里 15 条已修，整改后又发现
+> 两条（GD-S-17/18）。
 
 | ID | 现象（GDScript 侧） | C++ 基准 | 状态 |
 | --- | --- | --- | --- |
-| **GD-S-01** | `State` 枚举只有 `Xml / Nevext / Stope` 三态，**没有 `Text`**；元素内文本是在 `Xml` 状态下由 `scan_text()` 产出的 `Text` token，且遇到任意 `<`（不只是 `</`）就停 | 有独立的 `Text` 状态，只认 `</` | 未修 |
-| **GD-S-02** | `Xml` 状态下任何既非标点又非 Word 首字符的字符，都走 `else: scan_text()` 开一段文本，**不报** `unexpected character.` | 报 `Invalid` + 错误，消费 1 个码元 | 未修 |
-| **GD-S-03** | Token 类型名不同：`Str` / `NevSrc` / `StoSrc` | `String` / `NevextSrc` / `StopeSrc`（种类划分一致即可） | 可接受，测试侧做名字映射 |
-| **GD-S-04** | `Lexer` 里从未调用 `skip_xml_comment()`（该函数存在但是死代码），`<!-- -->` **完全不支持** | `skipWs()` 在 `Xml` 状态下跳过注释 | 未修 |
-| **GD-S-05** | `skip_xml_comment()` 写 `src.substr(3)`（`<!--` 是 4 个字符） | `remove_prefix(4)` | 未修（与 GD-S-04 一起改） |
-| **GD-S-06** | `scan_stope()` 直接 `return scan_nevext()`：Stope 的单引号 BinArr 也按转义串处理 | `scanStopeString` 对 `'` 不转义（§2.5） | 未修 |
-| **GD-S-07** | `skip_src_str()` 对 `'` `"` 一律转义，且不区分 Nevext / Stope | 同上 | 未修（与 GD-S-06 一起改） |
-| **GD-S-08** | `is_word_char()` 只含 `[a-zA-Z_:]0-9`，**缺 `-`** | 续字符集含 `-` | 未修 |
-| **GD-S-09** | 元素内文本**多段拼接**：`ele.text = str(ele.text,'\n',cur_token.lexeme)` | 只有一段，不拼接（TD-3） | 未修 |
-| **GD-S-10** | 错误文案是另一套句式：`expected "<" for an element, but got <TypeName>. ` | §3 表格里的 10 条固定文案 | 未修 |
-| **GD-S-11** | 内容状态由标签名**硬编码**：`nev` → Nevext、`sto` → Stope（`sto` 带 `asm` 属性时走 Nevext） | `LexerStateFunc(tag, attrs)` 回调，宿主决定 | 未修 |
-| **GD-S-12** | `Element` 有额外的 `text_begin_line` 字段 | 无该字段（元素只有一个 `line`） | 未修 |
-| **GD-S-13** | 属性值缺失时 `ele.attrs[name] = ''` **不报错**并继续；属性循环遇到非 Word/非 EQ 时 `break` 而非报错 | 报 `expected string.` / `expected ">" or "/>" or attribute.` 并 return | 未修 |
+| **GD-S-01** | `State` 枚举只有 `Xml / Nevext / Stope` 三态，**没有 `Text`**；元素内文本是在 `Xml` 状态下由 `scan_text()` 产出的 `Text` token，且遇到任意 `<`（不只是 `</`）就停 | 有独立的 `Text` 状态，只认 `</` | ✅ 已修 2026-10-28（补 `Text` 状态） |
+| **GD-S-02** | `Xml` 状态下任何既非标点又非 Word 首字符的字符，都走 `else: scan_text()` 开一段文本，**不报** `unexpected character.` | 报 `Invalid` + 错误，消费 1 个码元 | ✅ 已修 2026-10-28（`Invalid` + `unexpected character. ` 并消费 1 个字符） |
+| **GD-S-03** | Token 类型名不同：`Str` / `NevSrc` / `StoSrc` | `String` / `NevextSrc` / `StopeSrc`（种类划分一致即可） | ✅ 已修 2026-10-28（枚举项直接改名，`type_name()` 那层映射已删） |
+| **GD-S-04** | `Lexer` 里从未调用 `skip_xml_comment()`（该函数存在但是死代码），`<!-- -->` **完全不支持** | `skipWs()` 在 `Xml` 状态下跳过注释 | ✅ 已修 2026-10-28（`skip_ws` 在 Xml 态跳过注释） |
+| **GD-S-05** | `skip_xml_comment()` 写 `src.substr(3)`（`<!--` 是 4 个字符） | `remove_prefix(4)` | ✅ 已修 2026-10-28（改 `substr(4)`） |
+| **GD-S-06** | `scan_stope()` 直接 `return scan_nevext()`：Stope 的单引号 BinArr 也按转义串处理 | `scanStopeString` 对 `'` 不转义（§2.5） | ✅ 已修 2026-10-28（单引号不转义） |
+| **GD-S-07** | `skip_src_str()` 对 `'` `"` 一律转义，且不区分 Nevext / Stope | 同上 | ✅ 已修 2026-10-28（拆成 `scan_nevext_str` / `scan_stope_str`） |
+| **GD-S-08** | `is_word_char()` 只含 `[a-zA-Z_:]0-9`，**缺 `-`** | 续字符集含 `-` | ✅ 已修 2026-10-28（续字符集补 `-`） |
+| **GD-S-09** | 元素内文本**多段拼接**：`ele.text = str(ele.text,'\n',cur_token.lexeme)` | 只有一段，不拼接（TD-3） | ✅ 已修 2026-10-28 |
+| **GD-S-10** | 错误文案是另一套句式：`expected "<" for an element, but got <TypeName>. ` | §3 表格里的 10 条固定文案 | ✅ 已修 2026-10-28（改用 §3 的 10 条固定文案） |
+| **GD-S-11** | 内容状态由标签名**硬编码**：`nev` → Nevext、`sto` → Stope（`sto` 带 `asm` 属性时走 Nevext） | `LexerStateFunc(tag, attrs)` 回调，宿主决定 | ✅ 已修 2026-10-28（宿主 `Callable` 回调） |
+| **GD-S-12** | `Element` 有额外的 `text_begin_line` 字段 | 无该字段（元素只有一个 `line`） | ✅ 已修 2026-10-28（删掉 `text_begin_line`） |
+| **GD-S-13** | 属性循环出错后**不 return**，只是 `break` 出循环继续往下走（违反 B-14）。实测 `<a name 5 />`、`<a flag>`（缺结束标签）都会在随后的内容循环里**挂死** | 报 `expected string.` / `expected ">" or "/>" or attribute.` 后**提前 return** | ✅ 已修 2026-10-28（每个错误分支提前 return） |
 | **GD-S-14** | 词法与语法的 `errors` 都不含行号以外的统一格式约定（均为 `line N: msg`，此项一致） | 同 | 一致，无需改 |
+| **GD-S-15** | 元素内出现裸文本时，`parse_element()` 的 `else` 分支**只报错不推进**，`while true` 卡在同一个 token 上：`<a name="x">plain</a>` 实测**永不返回** | 报错后推进，或把文本切成 `Text` 交给上层 | ✅ 已修 2026-10-28（`else` 报错后 return，不再空转） |
+| **GD-S-16** | `scan_text()` / `scan_nevext()` / `scan_stope()` **不去尾部空白**：`<sto>let a=1;\n   </sto>` 实测 text = `let a=1;\n   ` | B-8：`Text` / 代码段的 lexeme **不含尾部空白**（`trimTrailingWs`） | ✅ 已修 2026-10-28（加 `trim_trailing_ws`） |
+| **GD-S-17** | `Element.attrs` 是 `Dictionary`，**遍历顺序是插入序**（源码顺序）；形状串能对齐是因为 `shape_elem()` 先 `keys.sort()` | `std::map`，遍历顺序是键的字典序 | 未修（直接遍历 `attrs` 的宿主代码会看到不同顺序；要用顺序就自己排序） |
+| **GD-S-18** | `String` 按**码点**推进，非 BMP 字符（emoji）一次吃掉整个字符 | `char16_t` 按 **UTF-16 码元**推进，非 BMP 字符会被当成两个 `Invalid` | 未修。§4 的用例不含非 BMP 字符，所以 121 条全绿也覆盖不到 |
 
 ### TD 编号索引
 
@@ -551,7 +575,7 @@ STML 的 GDScript 侧用例**尚未建立**（§7 的差异比另两份计划大
 | --- | --- | --- |
 | TD-1 | `Word` 字符集的注释曾声明含 `.`，实现不支持 | [已修 2026-10-18] 改注释（LEX-SW-08 锁行为） |
 | TD-2 | 属性装在 `std::map`，**顺序不保证** | 定夺：测试按字典序输出 |
-| TD-3 | 元素内文本只有一段，不拼接 | 定夺（GD 侧待跟进 GD-S-09） |
+| TD-3 | 元素内文本只有一段，不拼接 | 定夺（GD 侧已跟进，2026-10-28） |
 | TD-4 | `Text` 状态只认 `</`，`<b/>` 会被当文本 | 未修 |
 | TD-5 | 顶层只解析一个元素，忽略尾部内容 | 未修 |
 | TD-6 | `lexer.errors` 不合并进 `parser.errors` | 未修（与 Stope 主语言的 PD-14 同源） |

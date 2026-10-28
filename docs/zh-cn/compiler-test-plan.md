@@ -4,10 +4,10 @@
 >
 > | 通用测试计划 | 覆盖范围 | C++ 侧 | GDScript 侧 |
 > | --- | --- | --- | --- |
-> | [lexer-test-plan.md](lexer-test-plan.md) | 字符流 → Token 流 | `cpp/include/stope/lexer.hpp` | `gdscript/stope/stope_token.gd` |
-> | [parser-test-plan.md](parser-test-plan.md) | Token 流 → AST | `cpp/include/stope/parser.hpp` | `gdscript/stope/stope_parser.gd` |
-> | **compiler-test-plan.md（本文）** | AST → Program | `cpp/include/stope/compiler.hpp` | `gdscript/stope/stope_compiler.gd` |
-| [stml-test-plan.md](stml-test-plan.md) | STML 文本 → 元素树 | `cpp/include/stope/stml_lexer.hpp` + `cpp/include/stope/stml_parser.hpp` | `gdscript/stope/stml_lexer.gd` + `gdscript/stope/stml_parser.gd` |
+> | [lexer-test-plan.md](lexer-test-plan.md) | 字符流 → Token 流 | `cpp/include/stope/lexer.hpp` | `gdscript/addons/stope/lexer.gd` |
+> | [parser-test-plan.md](parser-test-plan.md) | Token 流 → AST | `cpp/include/stope/parser.hpp` | `gdscript/addons/stope/parser.gd` |
+> | **compiler-test-plan.md（本文）** | AST → Program | `cpp/include/stope/compiler.hpp` | `gdscript/addons/stope/compiler.gd` |
+| [stml-test-plan.md](stml-test-plan.md) | STML 文本 → 元素树 | `cpp/include/stope/stml_lexer.hpp` + `cpp/include/stope/stml_parser.hpp` | `gdscript/addons/stope/stml_lexer.gd` + `gdscript/addons/stope/stml_parser.gd` |
 >
 > **权威实现：C++。** 两侧分歧以 `cpp/include/stope/compiler.hpp` 的实测行为为准。
 >
@@ -36,7 +36,7 @@
 
 **非目标**
 
-- 不测试 VM 怎么执行指令（`gdscript/stope/stope.gd` 的行为不属于本文）。
+- 不测试 VM 怎么执行指令（`gdscript/addons/stope/basic_vm.gd` 的行为不属于本文）。
   Stope **不制定虚拟机的规范**；要自己写执行器见 [vm-guide.md](vm-guide.md)。
 - 不测试自定义指令的业务含义，只测试「编译出什么指令、什么操作数、怎么记账」。
 - 不做性能基准。
@@ -88,9 +88,10 @@
 > 表达式里的变量、被调用者、被索引的容器、条件、`return` 的值。
 > 详见 `cpp/docs/compiler_test_plan.md` §2.1。
 
-> ⚠ 下表 CM 组（§5）记录的是 **GDScript 参考实现**的产物，那边**没有** `PushValue`
-> 这条指令，所以 CM 组的期望串里读变量仍是 `PushId`。C++ 侧的对应期望见
-> `cpp/docs/compiler_test_plan.md` §5，两边编号相同、只用词不同。
+> ⚠ CM 组（§5）的期望串与 C++ 侧**完全一致**：两侧现在都有 `PushValue`，读变量用
+> `PushValue`，只有 `let` 的目标和「等号左侧恰好是裸标识符」用 `PushId`。
+> 2026-10-28 之前 GDScript 侧没有 `PushValue`，当时的记录已按本表改正；
+> 若在别处看到「CM 组期望里读变量仍是 `PushId`」的说法，那是过期信息。
 
 ### 2.3 Program 序列化格式（跨实现比较用）
 
@@ -166,10 +167,10 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 | CM-01 | `let a;` | `code[] vars=1 stack=0 maxRet=0`（全过程为空） |
 | CM-02 | `let a, b, c;` | `code[] vars=3 stack=0 maxRet=0` |
 | CM-03 | `let a = 1;` | `code[PushId(0) PushInt(0) Assign] vars=1 stack=2 maxRet=0 ints=[1]` |
-| CM-04 | `a;` | `code[PushId(0) Pop] vars=1 stack=1 maxRet=0 exports=[a:0]` |
+| CM-04 | `a;` | `code[PushValue(0) Pop] vars=1 stack=1 maxRet=0 exports=[a:0]` |
 | CM-05 | `a = 1;` | `code[PushId(0) PushInt(0) Assign] vars=1 stack=2 ints=[1] exports=[a:0]` |
-| CM-06 | `a[0] = 1;` | `code[PushId(0) PushInt(0) At(1) PushInt(1) Assign] vars=1 stack=2 ints=[0,1] exports=[a:0]` |
-| CM-07 | `a; a;` | `code[PushId(0) Pop PushId(0) Pop] vars=1 stack=1 exports=[a:0]` |
+| CM-06 | `a[0] = 1;` | `code[PushValue(0) PushInt(0) At(1) PushInt(1) Assign] vars=1 stack=2 ints=[0,1] exports=[a:0]` |
+| CM-07 | `a; a;` | `code[PushValue(0) Pop PushValue(0) Pop] vars=1 stack=1 exports=[a:0]` |
 | CM-08 | `let a; a = 1;` | `code[PushId(0) PushInt(0) Assign] vars=1 stack=2 ints=[1] exports=[]`（已声明 → **不导出**） |
 | CM-09 | `{ let a; } { let b; }` | `code[] vars=1 stack=0`（索引被回收复用） |
 | CM-10 | `export a, b;` | `code[] vars=2 exports=[a:0,b:1]` |
@@ -196,7 +197,7 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 | CM-21 | `argc;` | `code[ArgNum Pop]` | `stack=1` |
 | CM-22 | `args[0];` | `code[PushInt(0) GetArg Pop]` | `ints=[0]` `stack=1` |
 | CM-23 | `-1;` | `code[PushInt(0) Minus Pop]` | 一元是 `Minus` |
-| CM-24 | `!a;` | `code[PushId(0) Not Pop]` | `stack=1` |
+| CM-24 | `!a;` | `code[PushValue(0) Not Pop]` | `stack=1` |
 
 ### 4.3 CM-25…CM-36 二元运算符
 
@@ -206,23 +207,23 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 | CM-26 | `1 - 2 - 3;` | `code[PushInt(0) PushInt(1) Sub PushInt(2) Sub Pop]` | 2 |
 | CM-27 | `2 ^ 3 ^ 2;` | `code[PushInt(0) PushInt(1) PushInt(0) Pow Pow Pop]` `ints=[2,3]` | 3 |
 | CM-28 | `1 < 2 == true;` | `code[PushInt(0) PushInt(1) LT PushTrue EQ Pop]` | 2 |
-| CM-29 | `-a * b;` | `code[PushId(0) Minus PushId(1) Mul Pop]` | 2 |
+| CM-29 | `-a * b;` | `code[PushValue(0) Minus PushValue(1) Mul Pop]` | 2 |
 | CM-30 | `1 - -2;` | `code[PushInt(0) PushInt(1) Minus Sub Pop]` `ints=[1,2]` | 2 |
-| CM-31 | `a idiv b % c;` | `code[PushId(0) PushId(1) IDiv PushId(2) Mod Pop]` | 2 |
-| CM-32 | `a \|\| b && c;` | `code[PushId(0) If(7) PushTrue GoTo(25) PushId(1) If(18) PushId(2) If(18) PushTrue GoTo(19) PushFalse If(24) PushTrue GoTo(25) PushFalse Pop]` `vars=3 exports=[a:0,b:1,c:2]` | **1**（B-3） |
-| CM-33 | `a && b \|\| c;` | `code[PushId(0) If(11) PushId(1) If(11) PushTrue GoTo(12) PushFalse If(17) PushTrue GoTo(25) PushId(2) If(24) PushTrue GoTo(25) PushFalse Pop]` | **1** |
-| CM-34 | `a \|\| b;` | `code[PushId(0) If(7) PushTrue GoTo(15) PushId(1) If(14) PushTrue GoTo(15) PushFalse Pop]` `vars=2 exports=[a:0,b:1]` | 1 |
-| CM-35 | `a && b;` | `code[PushId(0) If(11) PushId(1) If(11) PushTrue GoTo(12) PushFalse Pop]` `vars=2 exports=[a:0,b:1]` | 1 |
+| CM-31 | `a idiv b % c;` | `code[PushValue(0) PushValue(1) IDiv PushValue(2) Mod Pop]` | 2 |
+| CM-32 | `a \|\| b && c;` | `code[PushValue(0) If(7) PushTrue GoTo(25) PushValue(1) If(18) PushValue(2) If(18) PushTrue GoTo(19) PushFalse If(24) PushTrue GoTo(25) PushFalse Pop]` `vars=3 exports=[a:0,b:1,c:2]` | **1**（B-3） |
+| CM-33 | `a && b \|\| c;` | `code[PushValue(0) If(11) PushValue(1) If(11) PushTrue GoTo(12) PushFalse If(17) PushTrue GoTo(25) PushValue(2) If(24) PushTrue GoTo(25) PushFalse Pop]` | **1** |
+| CM-34 | `a \|\| b;` | `code[PushValue(0) If(7) PushTrue GoTo(15) PushValue(1) If(14) PushTrue GoTo(15) PushFalse Pop]` `vars=2 exports=[a:0,b:1]` | 1 |
+| CM-35 | `a && b;` | `code[PushValue(0) If(11) PushValue(1) If(11) PushTrue GoTo(12) PushFalse Pop]` `vars=2 exports=[a:0,b:1]` | 1 |
 
 ### 4.4 CM-36…CM-44 调用 / 索引 / return
 
 | ID | 输入 | 输出（code 段） | 附加 |
 | --- | --- | --- | --- |
-| CM-36 | `f();` | `code[PushId(0) Call(0) Pop]` | `vars=1 stack=1 exports=[f:0]` |
-| CM-37 | `f(1, 2);` | `code[PushId(0) PushInt(0) PushInt(1) Call(2) Pop]` `ints=[1,2]` | `stack=3` |
-| CM-38 | `f()();` | `code[PushId(0) Call(0) Call(0) Pop]` | `stack=1` |
-| CM-39 | `a[0];` | `code[PushId(0) PushInt(0) At(1) Pop]` | `stack=2` |
-| CM-40 | `a[0, 1];` | `code[PushId(0) PushInt(0) PushInt(1) At(2) Pop]` | `stack=3` |
+| CM-36 | `f();` | `code[PushValue(0) Call(0) Pop]` | `vars=1 stack=1 exports=[f:0]` |
+| CM-37 | `f(1, 2);` | `code[PushValue(0) PushInt(0) PushInt(1) Call(2) Pop]` `ints=[1,2]` | `stack=3` |
+| CM-38 | `f()();` | `code[PushValue(0) Call(0) Call(0) Pop]` | `stack=1` |
+| CM-39 | `a[0];` | `code[PushValue(0) PushInt(0) At(1) Pop]` | `stack=2` |
+| CM-40 | `a[0, 1];` | `code[PushValue(0) PushInt(0) PushInt(1) At(2) Pop]` | `stack=3` |
 | CM-41 | `return;` | `code[Return(0)]` | `stack=0 maxRet=0` |
 | CM-42 | `return 1;` | `code[PushInt(0) Return(1)]` | `stack=1 maxRet=1` |
 | CM-43 | `return 1, 2, 3;` | `code[PushInt(0) PushInt(1) PushInt(2) Return(3)]` `ints=[1,2,3]` | `stack=3 maxRet=3` |
@@ -232,29 +233,29 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 
 | ID | 输入 | 输出（code 段） | stack |
 | --- | --- | --- | --- |
-| CM-45 | `if a { }` | `code[PushId(0) If(6) GoTo(6)]` | 1 |
-| CM-46 | `if a { } else { }` | `code[PushId(0) If(6) GoTo(6)]` | 1 |
-| CM-47 | `if a { } elif b { }` | `code[PushId(0) If(6) GoTo(12) PushId(1) If(12) GoTo(12)]` | 1 |
+| CM-45 | `if a { }` | `code[PushValue(0) If(6) GoTo(6)]` | 1 |
+| CM-46 | `if a { } else { }` | `code[PushValue(0) If(6) GoTo(6)]` | 1 |
+| CM-47 | `if a { } elif b { }` | `code[PushValue(0) If(6) GoTo(12) PushValue(1) If(12) GoTo(12)]` | 1 |
 | CM-48 | `if a { } elif b { } else { }` | 同 CM-47 | 1 |
 | CM-49 | `while { }` | `code[GoTo(0)]`（**不得回填 code[0]**，B-5） | 0 |
-| CM-50 | `while a { }` | `code[PushId(0) If(6) GoTo(0)]` | 1 |
-| CM-51 | `while a { break; }` | `code[PushId(0) If(8) GoTo(8) GoTo(0)]` | 1 |
-| CM-52 | `while a { continue; }` | `code[PushId(0) If(8) GoTo(0) GoTo(0)]` | 1 |
-| CM-53 | `while a { if b { break; } else { continue; } }` | `code[PushId(0) If(16) PushId(1) If(12) GoTo(16) GoTo(14) GoTo(0) GoTo(0)]` | 1 |
+| CM-50 | `while a { }` | `code[PushValue(0) If(6) GoTo(0)]` | 1 |
+| CM-51 | `while a { break; }` | `code[PushValue(0) If(8) GoTo(8) GoTo(0)]` | 1 |
+| CM-52 | `while a { continue; }` | `code[PushValue(0) If(8) GoTo(0) GoTo(0)]` | 1 |
+| CM-53 | `while a { if b { break; } else { continue; } }` | `code[PushValue(0) If(16) PushValue(1) If(12) GoTo(16) GoTo(14) GoTo(0) GoTo(0)]` | 1 |
 | CM-54 | `{ }` | `code[]`（空块不产任何指令） | 0 |
 
 ### 4.6 CM-55…CM-62 自定义指令
 
 | ID | 输入 | 输出（code 段） | stack |
 | --- | --- | --- | --- |
-| CM-55 | `myop(1, 2);` | `code[PushInt(0) PushInt(1) Inst(100) Pop]` `ints=[1,2]` | **2** |
-| CM-56 | `vop();` | `code[Inst(101)(0) Pop]` | **0**（B-4 + B-10：dec 不改变最大值） |
-| CM-57 | `vop(1, 2, 3);` | `code[PushInt(0) PushInt(1) PushInt(2) Inst(101)(3) Pop]` | 3 |
-| CM-58 | `myop(1, 2) + vop(1);` | `code[PushInt(0) PushInt(1) Inst(100) PushInt(0) Inst(101)(1) Add Pop]` `ints=[1,2]` | 2 |
-| CM-59 | `f(myop(1, 2));` | `code[PushId(0) PushInt(0) PushInt(1) Inst(100) Call(1) Pop]` | 3 |
-| CM-60 | `myop(1);` | **编译失败** | `custom instruction "myop" expected 2 args, but got 1.` |
-| CM-61 | `myop() + 1;` | **编译失败** | `custom instruction "myop" expected 2 args, but got 0.` |
-| CM-62 | `undefined_op(1);` | `code[PushId(0) PushInt(0) Call(1) Pop] exports=[undefined_op:0]` | 2（未注册 → 普通调用） |
+| CM-55 | `myop(1, 2);` | `code[PushInt(0) PushInt(1) Opcode(100) Pop]` `ints=[1,2]` | **2** |
+| CM-56 | `vop();` | `code[Opcode(101)(0) Pop]` | **0**（B-4 + B-10：dec 不改变最大值） |
+| CM-57 | `vop(1, 2, 3);` | `code[PushInt(0) PushInt(1) PushInt(2) Opcode(101)(3) Pop]` | 3 |
+| CM-58 | `myop(1, 2) + vop(1);` | `code[PushInt(0) PushInt(1) Opcode(100) PushInt(0) Opcode(101)(1) Add Pop]` `ints=[1,2]` | 2 |
+| CM-59 | `f(myop(1, 2));` | `code[PushValue(0) PushInt(0) PushInt(1) Opcode(100) Call(1) Pop]` | 3 |
+| CM-60 | `myop(1);` | **编译失败** | `custom opcode "myop" expected 2 args, but got 1.` |
+| CM-61 | `myop() + 1;` | **编译失败** | `custom opcode "myop" expected 2 args, but got 0.` |
+| CM-62 | `undefined_op(1);` | `code[PushValue(0) PushInt(0) Call(1) Pop] exports=[undefined_op:0]` | 2（未注册 → 普通调用） |
 
 > `Inst(100)` 的形状：opcode 值是宿主注册时的数。定长指令**不带**操作数；
 > 变长指令带一个「实参个数」操作数（CM-56 的 `(0)`）。
@@ -278,7 +279,7 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 | --- | --- | --- | --- |
 | CM-69 | `1 + 2;` | `code[PushInt(0) Pop]` | `ints=[3]`（没有 `Add`） |
 | CM-70 | `"ab" + "cd";` | `code[PushString(0) Pop]` | `strs=[abcd]` |
-| CM-71 | `f(1 + 2);` | `code[PushId(0) PushInt(0) Call(1) Pop]` | `ints=[3]`，Call 保留 |
+| CM-71 | `f(1 + 2);` | `code[PushValue(0) PushInt(0) Call(1) Pop]` | `ints=[3]`，Call 保留 |
 | CM-72 | `1 / 0;` | `code[PushInt(0) PushInt(1) Div Pop]` | `ints=[1,0]`，除零不折 |
 
 ---
@@ -311,7 +312,7 @@ compiler 相关：`test_compiler`（C 组 98 条）、`test_ast_visitor`（V 组
 ### GDScript
 
 ```bash
-"/d/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/Godot_v4.7.2-stable_mono_win64.exe" \
+"/c/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/godot_console.exe" \
     --headless --path gdscript --script res://test/run_tests.gd
 ```
 
