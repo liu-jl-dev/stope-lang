@@ -8,3 +8,7 @@ gdscript/.godot
 csharp/**/bin
 csharp/**/obj
 csharp/.vs
+
+# Python：字节码缓存（别用 *.pyc —— 有的仓库会故意入库预编译产物）
+__pycache__/
+*.py[cod]
