@@ -22,8 +22,9 @@ namespace Stope.Demo;
 /// <item>产物里就只是一串整数 —— 编号什么含义、谁来执行，全由宿主决定。</item>
 /// </list>
 /// <para>
-/// 本 demo 不运行程序：自定义指令在内置执行器里没有实现，也不该有 —— 它只是内置示例
-/// 执行器，不是标准的一部分。自定义指令的意义正在于此：宿主自己定义、自己执行。
+/// 本 demo 不运行程序：自定义指令在内置执行器里没有实现，也不该有 —— 它是内置的基础
+/// 虚拟机（会一直维护，但不是标准的一部分），默认只装内置那 33 项。自定义指令的意义
+/// 正在于此：宿主自己定义、自己执行。
 /// </para>
 /// <para>两条硬约束（见 <c>docs/zh-cn/compiler-test-plan.md</c> §4.4）：</para>
 /// <list type="bullet">
@@ -66,11 +67,8 @@ internal static class Demo03
         config.AddCustomOpcode("my:add", OpcodeLimits.FirstCustomOpcode + 0, 2);
         config.AddCustomOpcode("my:log", OpcodeLimits.FirstCustomOpcode + 1, -1);
         config.AddCustomOpcode("my:halt", OpcodeLimits.FirstCustomOpcode + 2, 0);
-        // 打印时按编号排序：Opcodes 是 Dictionary（插入序），而 C++ 侧是 std::map（名字序）。
-        // 显式排序，两边的输出才一致。
-        var registered = new List<KeyValuePair<string, CustomOpcode>>(config.Opcodes);
-        registered.Sort((a, b) => a.Value.Opcode.CompareTo(b.Value.Opcode));
-        foreach (var (name, info) in registered)
+        // 打印顺序就是登记顺序 —— 各实现按自己的容器顺序打印即可。
+        foreach (var (name, info) in config.Opcodes)
         {
             string kind = info.IsVarArg ? "（变长）" : $"（定长 {info.ArgNum} 参）";
             Console.WriteLine($"  {name} -> #{info.Opcode}{kind}");

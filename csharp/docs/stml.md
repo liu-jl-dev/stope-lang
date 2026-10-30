@@ -6,7 +6,7 @@ STML 是「Stope 标记语言」：一份文档里既有树形结构（标签、
 > **语义权威是 [`cpp/docs/stml.md`](../../cpp/docs/stml.md)。** 本文只讲 C# 侧怎么用，
 > 以及本实现与另外三套真的不一样的地方；与语言无关的 12 条语法细节不重复。
 
-## 1. 先跑起来：`demo/02` 的六段
+## 1. 先跑起来：`demo/02` 的四段
 
 ```bash
 dotnet run --project csharp/demo/02-stml
@@ -28,21 +28,16 @@ dotnet run --project csharp/demo/02-stml
 [4] <func> 里的 Stope 代码段：
 let a = 1;
   return a + argc;
-[5] 同一段代码，交给 Stope 词法器扫一遍 token 数：
-  10 个 token
-[6] Parse() 的返回值：Success
 ```
 
 输入是 `demo/02-stml/Program.cs` 里的 `Doc` 常量（原始字符串字面量，**开头没有换行**，
-所以行号从 1 起）。六段各讲什么：
+所以行号从 1 起）。四段各讲什么：
 
 | 段 | 在干什么 | 本文哪节 |
 | --- | --- | --- |
 | `[1]` | 根元素的标签名与属性 | §5 属性 |
 | `[2]` `[3]` | 按 `Children` 遍历树，`SelfClosing` 区分自闭合 | §4 读树 |
 | `[4]` | 把 `<func stope>` 的内容**原样**切出来 | §4 读树 |
-| `[5]` | 同一段文本交给 Stope 词法器（证明「切得出来」） | §9 下一步 |
-| `[6]` | `Parse` 的返回码 | §3 解析 |
 
 ## 2. 第一步：写一个回调
 

@@ -4,8 +4,8 @@
 所有类型都在 `namespace Stope` 下（STML 在 `Stope.Stml`）。
 
 > **稳定性**：§1–§6 是**编译器接口**（相对稳定，`Program` 的编码契约属标准）；
-> §7 起是**内置的基础虚拟机**，不是标准 —— 换执行器可以完全不长这样。分界线见
-> [`quick-start.md`](quick-start.md) §0 与根 README「标准范围」。
+> §7 起是**内置的基础虚拟机** —— 会一直维护、接口不随意调整，但不是标准，换执行器可以
+> 完全不长这样。分界线见 [`quick-start.md`](quick-start.md) §0 与根 README「标准范围」。
 
 ## 1. 返回码 `Result`
 

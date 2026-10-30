@@ -7,7 +7,7 @@ STML 是 Stope 的标记语言：**树**由 `StmlParser` 管（标签名、属�
 STML 的**语义权威**在 [`cpp/docs/stml.md`](../../cpp/docs/stml.md)（12 条语法注意事项都在那），
 本文只讲「Python 侧怎么上手 + 本实现与另外四套的差异」。
 
-## 1. 先跑起来：`demo/02` 的六段
+## 1. 先跑起来：`demo/02` 的四段
 
 ```bash
 python python/demo/02-stml.py
@@ -26,16 +26,13 @@ python python/demo/02-stml.py
 [4] <func> 里的 Stope 代码段：
 let a = 1;
   return a + argc;
-[5] 同一段代码，交给 Stope 词法器扫一遍 token 数：
-  10 个 token
-[6] Parse() 的返回值：Success
 ```
 
 - `[1]` 属性是 `dict`：`root.attrs["package"]`，没有就 `.get()` 拿 `None`。
 - `[3]` `self_closing` 是布尔值 —— `/>` 这种写法不产生子元素，也不会去等结束标签。
 - `[4]` 代码段是**原样**的一整段 `str`：换行是真换行、缩进保留，只有尾部空白被词法裁掉。
-- `[5]` 拿到 `text` 之后交给 `stope.Lexer` 就能编译它 —— 但**这一步不是必须的**，
-  STML 不关心你的代码写得对不对。
+  拿到 `text` 之后交给 `stope.Lexer` 就能编译它 —— 但**这一步不是必须的**，
+  STML 不关心你的代码写得对不对（demo 就到此为止）。
 
 ## 2. 第一步：写一个回调
 

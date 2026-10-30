@@ -4,7 +4,7 @@
 > 本文逐段讲 `cpp/demo/02-stml.cpp`（可以直接编译运行），最后给出一份可复制的最小骨架。
 >
 > STML **是** Stope 标准三件套之一（Stope 语言 / STML / `Program` 的产物格式），
-> 所以本文的接口比虚拟机那些示例 API 稳定得多，可以照着写。
+> 所以本文的接口属于标准、可以照着写；虚拟机那一层是内置实现，不在标准里。
 
 | 想看 | 去哪（相对本文件） |
 | --- | --- |
@@ -12,7 +12,7 @@
 | STML 的行为契约（跨实现，以它为准） | `../../docs/zh-cn/stml-test-plan.md` |
 | C++ 侧的实现笔记与缺陷流水 | `stml-test-plan.md`（本目录） |
 | Nevext 语言本身 | <https://github.com/liu-jl-dev/nevext> |
-| 标准范围（哪些是标准、哪些只是示例） | `../../README.md` |
+| 标准范围（哪些是标准、哪些不是） | `../../README.md` |
 | Stope 程序的编译与运行 | `quick-start.md`（本目录） |
 | 给编译器加自定义指令 | `custom-opcode.md`（本目录） |
 | 构建 / 格式化 / 行尾 / 文档约定 | `development.md`（本目录） |
@@ -55,15 +55,19 @@ cmake --build build                      # 产出 build/libstope.a 与各 demo
 ```
 
 `demo02` **只解析**，不编译也不执行 —— 接过内容之后干什么完全是宿主的事
-（要把 Stope 代码跑起来看 `quick-start.md`）。它的完整输出就这么几行：
+（要把 Stope 代码跑起来看 `quick-start.md`）。它的完整输出：
 
 ```
-config
-func
-class
-property
-property
-method
+[1] 根元素 <stml>，属性 package="MyPkg"
+[2] 它的直接子元素：
+  config
+  func
+  class
+[3] <class> 的子元素：
+  property(自闭合)
+  property(自闭合)
+  method(自闭合)
+[4] <func> 里的 Stope 代码段：
 let a = 1;
   return a + argc;
 ```

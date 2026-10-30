@@ -195,9 +195,10 @@ warning: custom opcode "my:steal" uses #20, which collides with Add; builtin dec
 
 ## 6. 怎么真的执行（demo 之外）
 
-`stope.basic_vm` **不该**实现你的指令 —— 它是内置示例执行器，不是标准。但 Python 侧比
-C++ 多一个方便：`Api.set_opcode(n, fn)` 会把中间补齐再装上你的处理函数（C++ 的分派表是
-定长 `std::array`，扩不了；GD/JS/C# 要自己 `resize` / `Add`）。
+`stope.basic_vm` **不该**实现你的指令 —— 它是内置的基础虚拟机（会一直维护，但不是标准），
+默认只有内置那 33 项。但 Python 侧比 C++ 多一个方便：`Api.set_opcode(n, fn)` 会把中间补齐
+再装上你的处理函数（C++ 的分派表是定长 `std::array`，扩不了；GD/JS/C# 要自己 `resize` /
+`Add`）。
 
 下面这段是**真跑过的**（`return a, b;` 会带回两个返回值）：
 
@@ -276,6 +277,6 @@ print(state.returns)      # [3, 6]
 
 ## 8. 下一步
 
-- **STML 文档里的代码段想执行**：看 [`stml.md`](stml.md) §1 的 `[5]` 段。
+- **STML 文档里的代码段想执行**：看 [`stml.md`](stml.md) §1 的 `[4]` 段。
 - **每个 API 的签名**：看 [`usage.md`](usage.md)。
 - **语义权威**：[`cpp/docs/custom-opcode.md`](../../cpp/docs/custom-opcode.md)。

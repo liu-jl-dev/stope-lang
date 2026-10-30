@@ -1,19 +1,25 @@
 # Python 版快速上手
 
 照这份文档走一遍，你会得到：一份能编译、能跑、能改的宿主程序骨架，以及「哪些 API 可以
-依赖、哪些只是内置示例」的分界线。
+依赖、哪些不属于标准（但同样会维护）」的分界线。
 
 完整可运行的版本是 [`demo/01-quick-start.py`](../demo/01-quick-start.py)，本文逐段讲它。
 
 ## 0. 先分清哪些能依赖
 
 Stope 的标准只覆盖三件事：**语言**、**STML**、**编译器的产物 `Program`**。
-所以同一份 demo 里的代码有两种稳定性：
+所以同一份 demo 里的代码要分两层看 —— 差别不在「会不会改」（两层都会维护），而在
+「算不算标准」：
 
 | 段落 | 用到的东西 | 稳定性 |
 | --- | --- | --- |
-| step 1（编译） | `Lexer` / `Parser` / `Compiler` / `Program` | **编译器接口**，相对稳定。`Program` 的编码契约（指令编号、操作数、跳转目标是指令下标）是标准的，宿主可以依赖、可以复制 |
-| step 2–4（运行） | `Api` / `State` / `Arguments` | **内置的基础虚拟机，不是标准**。值的表示、栈布局、宿主函数绑定、错误上报全是实现细节，换一个执行器可以完全不长这样 |
+| step 1（编译） | `Lexer` / `Parser` / `Compiler` / `Program` | **编译器接口**，相对稳定（标准的一部分）。`Program` 的编码契约（指令编号、操作数、跳转目标是指令下标）是标准的，宿主可以依赖、可以复制 |
+| step 2–4（运行） | `Api` / `State` / `Arguments` | **内置的基础虚拟机**：会一直维护、接口不随意调整，但**不属于标准**。值的表示、栈布局、宿主函数绑定、错误上报是这份实现自己的选择，换一个执行器可以完全不长这样 |
+
+**「不是标准」不等于「随手写的样例」**：这台会跟着语言与产物一起维护 —— bug 会修、
+`Program` 演进时同步、与另外四份实现语义对齐；接口也**不会随意调整**，改名或增删参数只会
+为了修 bug 或跟进 `Program`，不会为了换个风格而做。所以边界内的用法可以放心依赖，只是别把
+它的类型签名当规范引用（标准里没有它们）。
 
 本文把这条分界线标在每一段开头。要自己写执行器，看
 [`docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)。
@@ -26,8 +32,8 @@ python python/demo/02-stml.py            # 只解析 STML
 python python/demo/03-custom-opcode.py   # 自定义指令：只编译 + 反汇编
 ```
 
-三个 demo 的输出与 C++ / GDScript / Node.js / C# **逐字节相同**（同一份源码产出同一份
-字节码）。`01` 的完整输出：
+三个 demo 的目的是**教用法**：输出以可读为准，不追求与另外四套实现逐字节相同。
+`01` 的输出：
 
 ```
 [0]     PushId     0
@@ -75,7 +81,7 @@ required stack size: 3
 result: 15
 ```
 
-前一半是 `disasm_no_custom(program)` 的输出（由 step 1 打印），后一半是执行器真跑出来的。
+前一半是 `disasm(program)` 的输出（在编译段打印），后一半是执行器真跑出来的。
 几个读法：
 
 - 方括号里是**指令在 `program.opcodes` 里的下标**，不是行号；带操作数的指令下一格就是
@@ -98,7 +104,7 @@ compiler = Compiler()
 program = Program()
 compiler.compile(tree, program)
 
-# 2-4. 执行：Program -> 结果（内置示例，不是标准）
+# 2-4. 执行：Program -> 结果（内置基础 VM：会维护，但不属于标准）
 state = State()
 state.reset(Api(), program, args)          # args 是实现了 Arguments 的宿主对象
 state.variables[program.exports["fmt:println"]] = println
@@ -159,7 +165,7 @@ if rc != Result.Success:
 
 ## 4. 第二步：装配执行器
 
-> 稳定性：内置示例，不是标准。
+> 稳定性：内置的基础虚拟机 —— 会维护、接口不随意改，但不属于标准。
 
 ```python
 from stope import Api, State
@@ -204,7 +210,7 @@ class MyArgs(Arguments):
 
 ## 5. 第三步：绑宿主函数
 
-> 稳定性：内置示例，不是标准。
+> 稳定性：内置的基础虚拟机 —— 会维护、接口不随意改，但不属于标准。
 
 宿主函数在产物里就是**「某个变量槽里的一个值」**（C++ 的 `Value::Type::HostFunction`）。
 编译器把未声明的 `fmt:println` 当外部变量登记进 `exports`，宿主按名字取槽位填上即可：
@@ -325,7 +331,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyt
 | `isinstance(True, int)` 是 `True` | `bool` 是 `int` 子类。判「整数」一律 `stope.basic_vm.is_int`（它排掉了 `bool`） |
 | Stope 里 `true + 0` 得 `1`，Python 里 `True + 0` 得 `True` | 宿主函数返回 `bool` 会被归一成 `1`/`0`；自己拼值的时候也要注意 |
 | `"😀"[0]` 得 `128512` | Python 的下标是**码点**，C++ 的 `u16string` 是**码元**（要 `55357`）。`basic_vm` 先转 UTF-16 再取 |
-| 打印中文乱码 / 输出的换行与另外几份不同 | Windows 控制台默认按本地代码页编码，文本模式还会把 `\n` 变 `\r\n`。demo 开头统一 `sys.stdout.reconfigure(encoding="utf-8", newline="\n")` |
+| 打印中文乱码 | Windows 控制台默认按本地代码页编码，demo 开头 `sys.stdout.reconfigure(encoding="utf-8")` 统一成 UTF-8 |
 | `RecursionError: maximum recursion depth exceeded` | 深度用例要构造 600/12000 层嵌套，每层 3 个栈帧。`tests/run_tests.py` 开头 `sys.setrecursionlimit(30000)` |
 | `parse_program` 之后 `tree.stmts` 是空的 | 传的是 `AST.Prog()` 吗？`ASTVisitor` 靠 `node_type` 分发，传错会静默跳过 |
 | `state.variables[slot] = fn` 之后仍报 `"Call" can only call a function. ` | 槽位号写死了 / 在 `reset()` 之前赋的值（`reset` 会重建列表） |

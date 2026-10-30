@@ -37,9 +37,10 @@ func demo() -> void:
 	var lexer := STMLLexer.Lexer.new(DOC)
 	var parser := STMLParser.Parser.new(lexer)
 	var root := STML.Element.new()
-	var result:int = parser.parse(root, _state_func)
-	for e in lexer.errors: print('[lex] ', e)
-	for e in parser.errors: print('[parse] ', e)
+	if parser.parse(root, _state_func) != StopeResult.Success:
+		for e in lexer.errors: print('[lex] ', e)
+		for e in parser.errors: print('[parse] ', e)
+		return
 
 	print('[1] 根元素 <', root.tag, '>，属性 package="', root.attrs['package'], '"')
 	print('[2] 它的直接子元素：')
@@ -53,20 +54,9 @@ func demo() -> void:
 		print('  ', c.tag, '(自闭合)' if c.self_closing else '')
 
 	# 代码段原样切出来：换行是真的换行，缩进也保留（尾部空白已被词法裁掉）。
+	# 拿到它交给 StopeLexer 就能编译执行（见 demo_01.gd）—— STML 不管代码写得对不对。
 	print('[4] <func> 里的 Stope 代码段：')
 	print(func_ele.text)
-
-	# 想执行它就把 text 交给 StopeLexer（见 demo_01.gd）。这里只演示"切得出来"。
-	print('[5] 同一段代码，交给 Stope 词法器扫一遍 token 数：')
-	var stope_lexer := StopeLexer.Lexer.new(func_ele.text)
-	var n := 0
-	while true:
-		var t := stope_lexer.next_token()
-		if t.type == StopeLexer.Token.Type.Eof: break
-		n += 1
-	print('  ', n, ' 个 token')
-	print('[6] parse() 的返回值：',
-		'Success' if result == StopeResult.Success else 'Error')
 
 # 宿主回调：与 C++ demo 的 lexerStateFunc 一一对应。
 #   <config>            -> Nevext 代码

@@ -29,7 +29,7 @@ Stope 只规定三件事：
 直接遍历 AST、转译成 C / 宿主语言的闭包，都合规。宿主程序完全可以用自己的执行器替代，
 只要它能消费编译器产出的 `Program`。
 
-本项目**会维护**一台内置虚拟机：`cpp/include/stope/basic_vm.hpp`（反汇编在同目录的
+本项目**会维护**内置虚拟机 —— 下面这五份实现语义彼此对齐，改一处要同步其余四处：`cpp/include/stope/basic_vm.hpp`（反汇编在同目录的
 `debug.hpp`）、GDScript 侧 `gdscript/addons/stope/basic_vm.gd` 的 `StopeBasicVM.State` / `Api`、
 Node.js 侧 `nodejs/src/basic_vm.js` 的 `BasicVM.State` / `Api`、
 C# 侧 `csharp/Stope/BasicVm.cs` 的 `State` / `Api`、
@@ -41,9 +41,11 @@ Python 侧 `python/stope/basic_vm.py` 的 `State` / `Api`。它是**基础虚拟
 | 33 条内置指令、变量槽与栈、`exports`、宿主函数、`argc` / `args[i]`、单步 `Step()` | **自定义指令**：分派表只有内置的那 33 项，产物里 ≥ 33 的编号没有实现，直接跑会越界（C++ 是未定义行为） |
 | 空、整数、浮点、字符串、二进制数组、宿主函数 —— 布尔以整数 1 / 0 表示 | **自定义数据类型**：不能注册新的值类型，也没有对象、结构体、类 |
 
-「会维护」指的是：bug 会修、编译器产物演进时同步、五份实现的语义彼此对齐。但它
-**不承诺接口稳定** —— `BasicVM::*` / `StopeBasicVM.*` / `BasicVM.*` 这些名字只属于这几份实现，
-换一个执行器可能一个都不存在。要执行自定义指令只有两条路：自己扩指令表（C++ 的
+「会维护」指的是：bug 会修、编译器产物演进时同步、五份实现的语义彼此对齐；接口**不会
+随意调整** —— 改名、增删参数这类改动只为修 bug 或跟进 `Program`，不会为了换个风格而做，
+所以边界内的用法可以放心依赖。它只是**不属于标准**：`BasicVM::*` / `StopeBasicVM.*` /
+`BasicVM.*` 这些名字只属于这几份实现，宿主换一台执行器时本来就不存在它们。
+要执行自定义指令只有两条路：自己扩指令表（C++ 的
 `API::opFuncs` 是定长 `std::array`，扩不了；GDScript / Node.js / C# 的是动态数组，可以扩；
 Python 侧另有 `Api.set_opcode(n, fn)`，会先把中间补齐再装），
 或者干脆自写执行器 —— 见 [cpp/docs/custom-opcode.md](cpp/docs/custom-opcode.md) §6 与

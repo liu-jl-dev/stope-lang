@@ -42,7 +42,7 @@ class HostFns:
 		print('[Host] ', ''.join(parts))
 		return null
 
-	# C++ 的 cout << double 会把 15.0 打成 "15"，这里对齐一下，输出才可比
+	# 浮点按 %g 的样子打（15.0 -> "15"），读起来清楚
 	static func _fmt(v) -> String:
 		if v is float and v == floor(v) and abs(v) < 1e15:
 			return str(int(v))
@@ -70,7 +70,8 @@ func demo() -> void:
 	print(StopeDebug.disasm(program))	# 对齐 cpp/demo/01-quick-start.cpp 的 DisasmNoCustom
 
 	# ---------------- step 2-3: 装配执行器 ----------------
-	# 稳定性：内置示例执行器（不是标准）。换一个执行器，这段可以整个换掉。
+	# 稳定性：内置的基础虚拟机 —— 会维护、接口不随意改，但不属于标准。
+	# 换一个执行器，这一段可以整个换掉。
 	var api := StopeBasicVM.Api.new()
 	var host := HostFns.new()
 	var args := MyArgs.new([1.0, 2.0, 3.0, 4.0, 5.0])

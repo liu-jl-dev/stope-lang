@@ -12,7 +12,8 @@ extends Node
 #   3. 产物里就只是一串 int —— 编号什么含义、谁来执行，全由宿主决定。
 #
 # 本 demo 不运行程序：自定义指令在 StopeBasicVM 里没有实现，也不该有 ——
-# BasicVM 只是内置示例执行器，不是标准的一部分（见 docs/zh-cn/vm-guide.md）。
+# BasicVM 是内置的基础虚拟机（会一直维护，但不是标准的一部分，见
+# docs/zh-cn/vm-guide.md），默认只装内置那 33 项。
 # 自定义指令的意义正在于此：宿主自己定义、自己执行。
 #
 # 两条硬约束（见 docs/zh-cn/compiler-test-plan.md §4.4）：
@@ -38,11 +39,9 @@ func demo() -> void:
 	config.add_custom_opcode('my:log', StopeOpcode.FIRST_CUSTOM_OPCODE + 1, -1)
 	config.add_custom_opcode('my:halt', StopeOpcode.FIRST_CUSTOM_OPCODE + 2, 0)
 	print('[1] 登记自定义指令：')
-	var items:Array[StopeOpcode.CustomOpcode] = []
-	for k in config.opcodes: items.append(config.opcodes[k])
-	items.sort_custom(func(a:StopeOpcode.CustomOpcode, b:StopeOpcode.CustomOpcode) -> bool:
-		return a.opcode < b.opcode)
-	for info in items:
+	# 打印顺序就是登记顺序（Dictionary 是插入序）—— 各实现按自己的容器顺序打印即可。
+	for key in config.opcodes:
+		var info := config.opcodes[key]
 		print('  ', info.name, ' -> #', info.opcode,
 			'（变长）' if info.arg_num < 0 else str('（定长 ', info.arg_num, ' 参）'))
 

@@ -17,8 +17,7 @@
 //
 // 运行：node demo/01-quick-start.js
 //
-// 输出与 cpp/demo/01-quick-start.cpp、gdscript/demo/demo_01.gd 逐字节相同 ——
-// 三方对同一份源码产出同一份字节码。
+// demo 的输出以可读为准，不追求与其它实现逐字节相同。
 
 import {
   Lexer,
@@ -112,7 +111,8 @@ console.log(DisasmNoCustom(program))
 
 // ---------------- step 2-4: 装配执行器 ----------------
 //
-// 稳定性：内置示例，不是标准。换一个执行器，这段可以整个换掉。
+// 稳定性：内置的基础虚拟机 —— 会维护、接口不随意改，但不属于标准。
+// 换一个执行器，这一段可以整个换掉。
 const api = new BasicVM.Api()
 const args = new MyArgs([1.0, 2.0, 3.0, 4.0, 5.0])
 

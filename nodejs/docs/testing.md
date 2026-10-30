@@ -30,7 +30,7 @@ npm run check     # 只做语法检查（node --check src/index.js）
 > ⚠ **780 是「用例（it）数」，不是断言条数**。一个 `test()` 里可以有好几条 `assert`。
 > GDScript（3153）与 C#（3154）报的是断言条数 —— 三个数字口径不同，不能横向比大小。
 
-跑 demo（三个，输出与 C++ / GDScript 逐字节相同）：
+跑 demo（三个；输出给人看，不必与其它实现逐字节相同）：
 
 ```bash
 node demo/01-quick-start/main.js
@@ -76,7 +76,7 @@ nodejs/test/
 ```
 
 数据**不在本目录**，在 `../../gdscript/test/data/`（`test/golden.js` 的 `dataDir`），
-仓库里只有这一份，四份实现都读它。
+仓库里只有这一份，五份实现都读它。
 
 | 文件 | 条数 | 谁用 |
 | --- | --- | --- |
@@ -120,7 +120,7 @@ C++）。nodejs 只负责产出同格式文本再逐字段比对。手推期望�
 | `golden_lex.txt` | — | 本实现不读 |
 
 **`dumpProgram` 不在库里**：「单行产物格式」（`docs/zh-cn/compiler-test-plan.md` §2.3）
-只为比对存在，四份实现各写一份、都不进库（C++ 是 `tools/golden.cpp` 的私有 `dumpLine`，
+只为比对存在，五份实现各写一份、都不进库（C++ 是 `tools/golden.cpp` 的私有 `dumpLine`，
 GD 是 `test_util.gd` 的 `dump_program`，C# 是 `Data.DumpProgram`，本实现是
 `test/golden.js` 的 `dumpProgram`）。三处细节要一致：
 
@@ -232,7 +232,7 @@ VM 不是标准，错误串前缀各实现自定（nodejs 是 `<i>: msg`，GD �
 
 **自写的两组**（lexer / vm）直接在测试文件里加一条 `test()` 即可 —— 但改 lexer 用例时要
 同步 [`lexer-test-plan.md`](lexer-test-plan.md) §3 的清单，改 vm 用例时想清楚这条语义在
-另外三份实现里是不是也要测（那里没有共用清单，靠人工对齐）。
+另外四份实现里是不是也要测（那里没有共用清单，靠人工对齐）。
 
 ## 7. 排错
 

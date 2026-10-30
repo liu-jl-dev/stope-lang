@@ -108,8 +108,9 @@ max return num: 1
 required stack size: 2
 ```
 
-这份输出与 C++ 的 `demo03` **逐字节一致**（除 `[4]` 段那句「opcodes 剩 N 个 number / short」里
-的类型名）—— 产物格式是同一个契约。
+输出的格式（指令表 + 常量池）各实现一致 —— 那是 `Program` 的编码契约；demo 本身
+**不追求**逐字节相同，所以 `[4]` 段那句「opcodes 剩 N 个 number / short」里用哪个类型名
+随本语言的写法（Node.js 用 `number`）。
 
 ---
 
@@ -353,7 +354,7 @@ demo 到此为止 —— 再往下就是执行器，而项目**不规定虚拟�
 `Api.opMap` 是**稠密的 `function[]`，下标就是编号**，`Run()` / `Step()` 直接
 `opMap[opcode](state)` 取 —— 所以注册 N 号就必须让数组长度 ≥ N+1，且 0…N 每一格都是
 **有效函数**。默认只有 33 项：把带自定义编号的产物直接扔给内置执行器，会在
-`undefined is not a function` 上抛 `TypeError`。所以内置执行器只是「基础虚拟机」——
+`undefined is not a function` 上抛 `TypeError`。所以内置执行器是「基础虚拟机」——
 它**不自带**任何自定义指令，能跑的前提是你自己把表扩了。
 
 ```js

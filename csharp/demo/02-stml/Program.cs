@@ -74,9 +74,12 @@ internal static class Demo02
         var lexer = new Stml.Lexer(Doc);
         var parser = new Stml.Parser(lexer);
         var root = new Stml.Element();
-        var result = parser.Parse(root, StateFunc);
-        foreach (var e in lexer.Errors) Console.Error.WriteLine("[lex] " + e);
-        foreach (var e in parser.Errors) Console.Error.WriteLine("[parse] " + e);
+        if (parser.Parse(root, StateFunc) != Result.Success)
+        {
+            foreach (var e in lexer.Errors) Console.Error.WriteLine("[lex] " + e);
+            foreach (var e in parser.Errors) Console.Error.WriteLine("[parse] " + e);
+            return 1;
+        }
 
         Console.WriteLine($"[1] 根元素 <{root.Tag}>，属性 package=\"{root.Attrs.GetValueOrDefault("package", "")}\"");
         Console.WriteLine("[2] 它的直接子元素：");
@@ -92,22 +95,9 @@ internal static class Demo02
         }
 
         // 代码段原样切出来：换行是真的换行，缩进也保留（尾部空白已被词法裁掉）。
+        // 拿到它交给 Lexer 就能编译执行（见 01-quick-start）—— STML 不管代码写得对不对。
         Console.WriteLine("[4] <func> 里的 Stope 代码段：");
         Console.WriteLine(funcEle?.Text ?? "");
-
-        // 想执行它就把 Text 交给 Lexer（见 01-quick-start）。这里只演示「切得出来」。
-        Console.WriteLine("[5] 同一段代码，交给 Stope 词法器扫一遍 token 数：");
-        var stopeLexer = new Lexer(funcEle?.Text ?? "");
-        int n = 0;
-        for (;;)
-        {
-            var t = stopeLexer.NextToken();
-            if (t.Type == TokenType.Eof) break;
-            n += 1;
-        }
-        Console.WriteLine("  " + n + " 个 token");
-
-        Console.WriteLine($"[6] Parse() 的返回值：{(result == Result.Success ? "Success" : "Error")}");
         return 0;
     }
 }

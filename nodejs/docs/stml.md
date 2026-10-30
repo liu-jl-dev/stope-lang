@@ -15,7 +15,7 @@
 | 写文档时的 12 条语法坑 | C++ 那篇的 §6 |
 | STML 的行为契约（跨实现，以它为准） | [`../../docs/zh-cn/stml-test-plan.md`](../../docs/zh-cn/stml-test-plan.md) |
 | 给编译器加自定义指令（另一种宿主扩展） | [`custom-opcode.md`](custom-opcode.md) |
-| 标准范围（哪些是标准、哪些只是示例） | [`../../README.md`](../../README.md) |
+| 标准范围（哪些是标准、哪些不是） | [`../../README.md`](../../README.md) |
 
 依赖只有 **Node >= 20**，零第三方依赖。
 
@@ -47,7 +47,7 @@ nodejs/src/stml_parser.js  Parser + 回调约定
 
 ---
 
-## 1. 先跑起来：demo 的六段
+## 1. 先跑起来：demo 的四段
 
 ```bash
 node demo/02-stml.js
@@ -69,12 +69,9 @@ node demo/02-stml.js
 [4] <func> 里的 Stope 代码段：
 let a = 1;
   return a + argc;
-[5] 同一段代码，交给 Stope 词法器扫一遍 token 数：
-  10 个 token
-[6] Parse() 的返回值：Success
 ```
 
-六个编号就是 `demo/02-stml.js` 里的六段，本文后面每一节都对得上号：
+四个编号就是 `demo/02-stml.js` 里的四段，本文后面每一节都对得上号：
 
 | demo 段 | 那段代码在干什么 | 本文 |
 | --- | --- | --- |
@@ -82,8 +79,6 @@ let a = 1;
 | `[2]` | `for (const c of root.children) console.log('  ' + c.tag)` | §4（读树） |
 | `[3]` | 用 `childByTag(root, 'class')` 取 `<class>`，再遍历子元素、标出自闭合 | §4 |
 | `[4]` | `console.log(funcEle.text)` —— 把 `<func>` 的代码段原样打出来 | §4 |
-| `[5]` | 把 `funcEle.text` 交给 `Lexer` 数一遍 token | §3 末尾 |
-| `[6]` | ``console.log(`[6] Parse() 的返回值：${result === Result.Success ? 'Success' : 'Error'}`)`` | §3 |
 
 输入就是 `demo/02-stml.js` 里那份 `doc`（模板字符串，**开头有一个换行**，所以行号整体 +1）：
 
@@ -180,19 +175,19 @@ function stateFunc(tag, attrs) {
 
 ---
 
-## 3. 第二步：解析 —— demo 的 `[6]` 段
+## 3. 第二步：解析
 
-demo 开头这几行就是全部（`[6]` 打印的是它的返回值）：
+demo 开头这几行就是全部：
 
 ```js
 const lexer = new StmlLexer(doc)
 const parser = new StmlParser(lexer)
 const root = new StmlElement()
-const result = parser.Parse(root, stateFunc)
-for (const e of lexer.errors) console.error('[lex] ' + e)
-for (const e of parser.errors) console.error('[parse] ' + e)
-...
-console.log(`[6] Parse() 的返回值：${result === Result.Success ? 'Success' : 'Error'}`)
+if (parser.Parse(root, stateFunc) !== Result.Success) {
+  for (const e of lexer.errors) console.error('[lex] ' + e)
+  for (const e of parser.errors) console.error('[parse] ' + e)
+  process.exit(1)
+}
 ```
 
 `import` 那行是为了单独抄这段（`demo/02-stml.js` 在文件顶部统一 import）：
@@ -215,8 +210,8 @@ demo 里那两行 `console.error('[lex] …')` / `('[parse] …')` 就是干这�
 > `Parse()` 用的是全局那一份 `Result`（与编译器共用），不是独立枚举。
 > 所以别写 `if (r)` 当成功 —— `Success === 0`，`if (r)` 判断的是「失败」。
 
-**`[5]` 段接着证明「内容是什么，Parser 完全不管」**：它把 `[4]` 打出来的那段文本原样交给
-Stope 词法器，数出 10 个 token —— 同一份文本在这一步之前只是 `StmlElement.text` 里的一个字符串。
+**`text` 就是一段普通字符串 —— 「内容是什么，Parser 完全不管」。** 想验证这点，把
+`funcEle.text` 交给 Stope 词法器扫一遍，数出 10 个 token：
 
 ```js
 const stopeLexer = new Lexer(funcEle.text)
@@ -226,7 +221,7 @@ for (;;) {
   if (t.type === TokenType.Eof) break
   n += 1
 }
-console.log('  ' + n + ' 个 token')
+console.log('  ' + n + ' 个 token')   // 10 —— demo 里没有这一步，留给你自己试
 ```
 
 ---
@@ -345,7 +340,7 @@ C++ 那篇的 **§6 一共 12 条**（内容模式选错、没有字符实体、
 
 ## 7. 最小骨架（可直接复制）
 
-把 `demo/02-stml.js` 压成一份能贴进自己项目的脚本：`doc` 缩成一行、去掉六段打印、
+把 `demo/02-stml.js` 压成一份能贴进自己项目的脚本：`doc` 缩成一行、去掉四段打印、
 `stateFunc` 原样保留、`childByTag` 换成通用的递归 `walk()`。
 （这份骨架是独立跑的，输出与 `demo/02` 的 `[1]`–`[4]` 是同一棵树。）
 
@@ -416,7 +411,7 @@ walk(root, 0)
 | 拿 `attrs['x']` 得到 `undefined` | 同上：`Map` 不支持下标的键访问 | §5 |
 | 属性顺序跟 C++ 对不上 | 正常：JS 是插入序，C++ 是字典序 | §5、GD-S-17 |
 | 文档后半段凭空消失 | 只解析一个顶层元素，或注释没闭合 | C++ §6.7、§6.4 |
-| 想执行 `<func>` 里的 Stope 代码 | Parser 不管这些，把 `text` 交给 `Lexer` | [`quick-start.md`](quick-start.md)、`demo/02` 第 5 段 |
+| 想执行 `<func>` 里的 Stope 代码 | Parser 不管这些，把 `text` 交给 `Lexer` | [`quick-start.md`](quick-start.md) |
 
 ---
 

@@ -8,9 +8,10 @@
 //      Custom token（查不到就只是普通标识符），Compiler 靠它查编号与参数个数；
 //   3. 产物里就只是一串 short —— 编号什么含义、谁来执行，全由宿主决定。
 //
-// 本 demo 不运行程序：自定义指令在 BasicVM 里没有实现，也不该有 —— BasicVM
-// 只是内置示例执行器，不是标准的一部分（见 01-quick-start.cpp 开头与
-// docs/zh-cn/vm-guide.md）。自定义指令的意义正在于此：宿主自己定义、自己执行。
+// 本 demo 不运行程序：自定义指令在 BasicVM 里没有实现，也不该有 —— BasicVM 是
+// 内置的基础虚拟机（会一直维护，但不是标准的一部分，见 01-quick-start.cpp 开头与
+// docs/zh-cn/vm-guide.md），默认只装内置那 33 项。自定义指令的意义正在于此：
+// 宿主自己定义、自己执行。
 //
 // 两条硬约束（见 docs/compiler-test-plan.md §4.4）：
 //   * 编号必须 > Opcode::Return。opcodes 是 short 混排序列，撞号以后与内置指令

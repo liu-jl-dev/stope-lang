@@ -33,8 +33,8 @@ dotnet build csharp/Stope.slnx      # 库 + 测试跑器 + 三个 demo，0 警�
 dotnet run --project csharp/demo/01-quick-start
 ```
 
-它们的输出与 C++ / Node.js 的对应 demo 逐字节相同，是唯一能看出「跑起来对不对」的地方
-（golden 数据只锁中间产物，锁不住 demo 的打印格式）。
+它们是唯一能看出「跑起来对不对」的地方（golden 数据只锁中间产物，锁不住 demo 的打印格式）。
+各实现的 demo 输出**不必逐字节相同** —— demo 是给人读的，不是比对基准。
 
 三条命令可以横向对照 —— 分组顺序与输出格式刻意做成一致：
 
@@ -88,7 +88,7 @@ csharp/Stope.Tests/
 它们必须链接 `stope` 库才算出得来期望值，所以留在 C++ 那边；本工程只读它们。
 
 **没有 NuGet 测试包**（不是 xunit / NUnit）。理由有两层：一是保持「零第三方依赖」；
-二是要和其他三份实现的汇总格式对齐，自己写 40 行的 `Report` 比配 adapter 省事。
+二是要和其他四份实现的汇总格式对齐，自己写 40 行的 `Report` 比配 adapter 省事。
 
 ## 3. 期望值不是手写的
 
@@ -141,7 +141,7 @@ STML 两组合计 **602**。余下两组（深度 21、执行器 88）不读数�
 code[PushInt(0) Assign(2) ...] vars=3 stack=2 maxRet=1 ints=[1,2] floats=[1.5] strs=[a] binarrs=[[01,02]] exports=[f:0]
 ```
 
-四份实现各写一份、都不进库：C++ 是 `cpp/tools/golden.cpp` 的私有 `dumpLine`，
+五份实现各写一份、都不进库：C++ 是 `cpp/tools/golden.cpp` 的私有 `dumpLine`，
 GD 是 `test/test_util.gd` 的 `dump_program`，nodejs 是 `test/golden.js` 的 `dumpProgram`，
 C# 是 `Data.DumpProgram`。三处细节要一致，否则比对毫无意义：
 
@@ -186,7 +186,7 @@ cd cpp && cmake --build build --target gen-golden
 2. 重跑 §3.3 的 `gen-golden` 刷新 `data/*.txt`；
 3. 必要时同步更新 `docs/zh-cn/*.md` 的 §4 用例清单表；
 4. `dotnet run --project csharp/Stope.Tests` —— 新用例会被自动比对，不用改测试代码。
-   **另外三份实现同样不用改**，只是要各自跑一遍。
+   **另外四份实现同样不用改**，只是要各自跑一遍。
 
 两种例外：
 

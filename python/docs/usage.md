@@ -3,6 +3,11 @@
 逐模块列出对外的东西：类、方法、字段、返回码、容易踩的地方。签名一律按源码抄，
 方法名是 **snake_case**（对应 C++ 的 PascalCase，见每节的「C++」列）。
 
+> **稳定性**：`common` … `stml_*` 这些模块是**编译器 / 解析器接口**（相对稳定，
+> `Program` 的编码契约属标准）；`basic_vm` 是**内置的基础虚拟机** —— 会一直维护、
+> 接口不随意调整，但不是标准。分界线见 [`quick-start.md`](quick-start.md) §0 与
+> 根 README「标准范围」。
+
 约定：
 
 - **不抛异常**。词法 / 语法 / 编译器 / 执行器都把错误记进自己的 `errors: list[str]`，
@@ -278,7 +283,11 @@ rc = ps.parse(root, state_func)           # state_func(tag, attrs) -> StmlState
 
 ---
 
-## `basic_vm` —— 参考执行器（**不是标准**）
+## `basic_vm` —— 内置基础虚拟机（**不是标准，但会一直维护**）
+
+会一直维护：bug 会修、跟 `Program` 演进同步、与其他四份实现语义对齐；接口不会随意调整
+（改名、增删参数只为修 bug 或跟进 `Program`）。标准里没有它的位置，所以别把这些签名当
+规范引用。能力边界见根 README「标准范围」的表格。
 
 ```python
 from stope import Api, Arguments, State

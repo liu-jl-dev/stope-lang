@@ -17,16 +17,15 @@ namespace Stope.Demo;
 /// <list type="bullet">
 /// <item>step 1 (compile): Lexer / Parser / Compiler / Program —— 编译器接口，相对稳定。
 /// <c>Program</c> 有明确的编码契约，宿主可以依赖这一段。</item>
-/// <item>step 2-4 (run): <see cref="Api"/> / <see cref="State"/> —— <b>内置示例执行器</b>，
-/// 不是标准。值的表示、栈布局、宿主函数绑定、错误上报全是实现细节，换一个执行器可以
-/// 长得完全不一样。见 <c>docs/zh-cn/vm-guide.md</c>。</item>
+/// <item>step 2-4 (run): <see cref="Api"/> / <see cref="State"/> —— <b>内置的基础虚拟机</b>：
+/// 会一直维护、接口不随意调整，但不属于标准。值的表示、栈布局、宿主函数绑定、错误上报是
+/// 这份实现自己的选择，换一个执行器可以长得完全不一样。见 <c>docs/zh-cn/vm-guide.md</c>。</item>
 /// </list>
 /// <para>
 /// 运行：<c>dotnet run --project csharp/demo/01-quick-start</c>
 /// </para>
 /// <para>
-/// 输出与 <c>cpp/demo/01-quick-start.cpp</c>、<c>gdscript/demo/demo_01.gd</c>、
-/// <c>nodejs/demo/01-quick-start.js</c> 逐字节相同 —— 四方对同一份源码产出同一份字节码。
+/// demo 的输出以可读为准，不追求与其它实现逐字节相同。
 /// </para>
 /// </summary>
 internal static class Demo01
@@ -129,7 +128,8 @@ return result;
 
         // ---------------- step 2-4: 装配执行器 ----------------
         //
-        // 稳定性：内置示例，不是标准。换一个执行器，这段可以整个换掉。
+        // 稳定性：内置的基础虚拟机 —— 会维护、接口不随意改，但不属于标准。
+        // 换一个执行器，这一段可以整个换掉。
         var api = new Api();
         var args = new MyArgs(new object?[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
 

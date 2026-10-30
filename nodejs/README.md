@@ -14,7 +14,7 @@ Stope 语言的 Node.js 实现。**零第三方依赖**，测试用 Node 内置�
 | 编译 | `Compiler` → `Program` |
 | 反汇编 | `Disasm` / `DisasmNoCustom` |
 | STML | `StmlLexer` / `StmlParser` / `StmlElement` |
-| 内置基础 VM（**不是标准**：无自定义指令 / 自定义数据类型） | `BasicVM.Api` / `State` / `Arguments` |
+| 内置基础 VM（会维护，**不是标准**：无自定义指令 / 自定义数据类型） | `BasicVM.Api` / `State` / `Arguments` |
 
 ## 使用
 
@@ -28,9 +28,9 @@ node demo/02-stml.js            # 只解析 STML，不编译不执行
 node demo/03-custom-opcode.js   # 自定义指令：只编译 + 反汇编
 ```
 
-`01` 的输出与 `cpp/demo/01-quick-start.cpp`、`gdscript/demo/demo_01.gd` **逐字节相同**
-（现场 `diff` 过）；`02` / `03` 对齐的是 GDScript 那版（在 C++ 版基础上加了编号与说明），
-差异只有各自语言的写法 —— `Parse()` vs `parse()`、`number` vs `int`。
+demo 的输出以可读为准，不追求跨实现逐字节相同 —— 五份 demo 现在大致一致，但那是
+「照着一个思路写」的结果，不是契约（`02` 的输出各实现都带 `[1]`–`[4]` 编号，`03` 里
+`short` / `number` 这类用词也各按本语言的类型叫）。
 
 文档：[`docs/quick-start.md`](docs/quick-start.md)（四步上手，逐段讲 `demo/01`）、
 [`docs/usage.md`](docs/usage.md)（每个模块的签名、字段、返回码、错误总表）、
@@ -53,7 +53,7 @@ const program = new Program()
 if (compiler.Compile(tree, program) !== Result.Success) throw new Error(compiler.errors.join(''))
 console.log(Disasm(program))
 
-// 2. 跑（这一段是内置示例，不是标准）
+// 2. 跑（内置基础 VM：会维护，但不属于标准）
 const state = new BasicVM.State()
 state.Reset(new BasicVM.Api(), program, null)
 if (state.Run() !== Result.Success) throw new Error(state.errors.join(''))
@@ -202,11 +202,13 @@ describe('Lexer', () => {
 - **整数用 `BigInt`**：C++ 是 int64，GDScript 是 64 位 int，JS 只有 BigInt 能对齐。
 - **字符串是 UTF-16**（JS 原生），所以 `"ab"[i]` 取到的是**码元** —— 与 C++ 的
   `u16string` 一致，与 GDScript（UTF-32 码点）不同。
-- **执行器不是标准，且是一台基础虚拟机**：`BasicVM` 只是能跑通 `Program` 的示例，
-  接口随时可能变。能力边界：**不支持自定义指令**（`Api.opMap` 默认 33 项，产物里 ≥ 33 的
-  编号会抛 `TypeError`，要执行得自己扩表，见 [`docs/custom-opcode.md`](docs/custom-opcode.md) §6）、
+- **执行器不是标准，但会一直维护**：`BasicVM` 是能跑通 `Program` 的内置基础虚拟机 ——
+  修 bug、跟 `Program` 演进同步、五份实现语义对齐；接口不会随意调整（改名、增删参数只为
+  修 bug 或跟进 `Program`），边界内的用法可以放心依赖，只是别当规范引用。能力边界：
+  **默认不支持自定义指令**（`Api.opMap` 默认 33 项，产物里 ≥ 33 的编号会抛 `TypeError`，
+  要执行得自己扩表，见 [`docs/custom-opcode.md`](docs/custom-opcode.md) §6）、
   **不支持自定义数据类型**（值只有 `null` / BigInt / Number / string / `Uint8Array`
-  一类的二进制数组 / 函数，布尔用整数表示）。它会跟着实现维护，但接口不承诺稳定。
+  一类的二进制数组 / 函数，布尔用整数表示）。
   自己写执行器看 [`docs/zh-cn/vm-guide.md`](../docs/zh-cn/vm-guide.md)。
 
 ## 发布

@@ -9,14 +9,18 @@
 //                         documented encoding contract, so this part can be
 //                         relied on (and copied) in host programs.
 //   step 2-4 (run)   : BasicVM::* from <stope/basic_vm.hpp>
-//                      -> a BUILT-IN EXAMPLE executor, not part of the
-//                         standard. Value representation, stack layout, host
-//                         function binding and error reporting are all
-//                         implementation details; another executor may not
-//                         look like this at all. See docs/zh-cn/vm-guide.md.
+//                      -> the BUILT-IN BASIC VM: maintained (bugs get fixed,
+//                         it is kept in sync with `Program`, and its semantics
+//                         are aligned across the five implementations) and its
+//                         interface is not changed casually -- but it is NOT
+//                         part of the standard. Value representation, stack
+//                         layout, host function binding and error reporting
+//                         are this implementation's own choices, so another
+//                         executor may not look like this at all.
+//                         See docs/zh-cn/vm-guide.md.
 //
-// In other words: keep step 1, treat step 2-4 as one possible way to run the
-// `Program` produced above.
+// In other words: keep step 1; step 2-4 is one way to run the `Program`
+// produced above, and it is safe to rely on within its documented limits.
 
 #ifdef _WIN32
 #include <Windows.h>

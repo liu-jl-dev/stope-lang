@@ -11,9 +11,10 @@
 //      Custom token（查不到就只是普通标识符），Compiler 靠它查编号与参数个数；
 //   3. 产物里就只是一串 number —— 编号什么含义、谁来执行，全由宿主决定。
 //
-// 本 demo 不运行程序：自定义指令在 BasicVM 里没有实现，也不该有 —— BasicVM
-// 只是内置示例执行器，不是标准的一部分（见 01-quick-start.js 开头与
-// docs/zh-cn/vm-guide.md）。自定义指令的意义正在于此：宿主自己定义、自己执行。
+// 本 demo 不运行程序：自定义指令在 BasicVM 里没有实现，也不该有 —— BasicVM 是
+// 内置的基础虚拟机（会一直维护，但不是标准的一部分，见 01-quick-start.js 开头与
+// docs/zh-cn/vm-guide.md），默认只装内置那 33 项。自定义指令的意义正在于此：
+// 宿主自己定义、自己执行。
 //
 // 两条硬约束（见 docs/zh-cn/compiler-test-plan.md §4.4）：
 //   * 编号必须 >= kFirstCustomOpcode（= Opcode.Return + 1）。opcodes 是混排序列，
@@ -61,10 +62,8 @@ console.log('[1] 登记自定义指令：')
 config.addCustomOpcode('my:add', kFirstCustomOpcode + 0, 2)
 config.addCustomOpcode('my:log', kFirstCustomOpcode + 1, -1)
 config.addCustomOpcode('my:halt', kFirstCustomOpcode + 2, 0)
-// 打印时按编号排序：config.opcodes 是 Map（插入序），而 C++ 侧是 std::map（名字序）。
-// 显式排序，两侧的输出才一致。
-const registered = [...config.opcodes.entries()].sort((a, b) => a[1].opcode - b[1].opcode)
-for (const [name, info] of registered) {
+// 打印顺序就是登记顺序（Map 是插入序）—— 各实现按自己的容器顺序打印即可。
+for (const [name, info] of config.opcodes) {
   const kind = info.isVarArg ? '（变长）' : `（定长 ${info.argNum} 参）`
   console.log(`  ${name} -> #${info.opcode}${kind}`)
 }

@@ -23,29 +23,34 @@
 
 ---
 
-## 0. 先说清楚：哪些 API 是稳定的
+## 0. 先说清楚：哪些 API 属于标准
 
 Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program`**（见仓库根
-[`README.md`](../../README.md)）。**它不规定虚拟机**，所以本文示例里的接口分两类，
-稳定性完全不同：
+[`README.md`](../../README.md)）。**它不规定虚拟机**，所以本文示例里的接口分两类 ——
+差别不在「会不会改」（两层都会维护），而在「算不算标准」：
 
 | 部分 | 稳定性 | 涉及的类 |
 | --- | --- | --- |
-| 编译环节（§3） | **相对稳定** | `Lexer` `Parser` `AST` `Compiler` `Program` `CustomOpcodeConfig` |
-| 虚拟机环节（§4–§6） | **只是内置示例** | `BasicVM.Api` `State` `Arguments` |
+| 编译环节（§3） | **相对稳定**（标准的一部分） | `Lexer` `Parser` `AST` `Compiler` `Program` `CustomOpcodeConfig` |
+| 虚拟机环节（§4–§6） | **会维护，接口不随意调整**（但不是标准） | `BasicVM.Api` `State` `Arguments` |
 
 **编译环节**跟着编译器规格走：`Program` 有明确的编码契约（指令编号、操作数、跳转目标都是
 `opcodes` 下标，见 [`compiler-test-plan.md`](../../docs/zh-cn/compiler-test-plan.md) §2），
 改接口要同步改规格与测试，所以可以照着写。它今天叫「相对稳定」而不是「稳定」，是因为
 `Program` 的字段仍在演进。
 
-**虚拟机环节**是 `src/basic_vm.js` 这一份实现的接口，**不是规范**：值怎么表示（这里直接用
-JS 的原生类型）、栈怎么布局、宿主函数怎么注册、错误怎么报，全都属于实现者自由。
-换一个执行器，`BasicVM.*` 这些名字可能一个都不存在。
+**虚拟机环节**是 `src/basic_vm.js` 这一份实现的接口。它**会一直维护** —— bug 会修、
+`Program` 演进时同步、五份实现的语义彼此对齐；接口也**不会随意调整**，改名或增删参数只会
+为了修 bug 或跟进 `Program`，不会为了换个风格而做，所以边界内的用法可以放心依赖。
 
-内置这台还是**基础虚拟机**：`Api.opMap` 只有 33 项，**不支持自定义指令**（跑 ≥ 33 的编号
-会抛 `TypeError: ... is not a function`），也**不支持自定义数据类型**（值只有 `null` /
-BigInt / Number / string / 二进制数组 / 函数）。它会随实现维护，但接口不承诺稳定。
+它只是**不属于标准**：标准只覆盖语言、STML 和 `Program`，所以宿主换一台执行器时，
+`BasicVM.*` 这些名字本来就不存在 —— 值怎么表示（这里直接用 JS 的原生类型）、栈怎么布局、
+宿主函数怎么注册、错误怎么报，全由执行器自己定。
+
+内置这台还是**基础虚拟机**：`Api.opMap` 默认只有 33 项，**不支持自定义指令**（跑 ≥ 33 的
+编号会抛 `TypeError: ... is not a function`），也**不支持自定义数据类型**（值只有 `null` /
+BigInt / Number / string / 二进制数组 / 函数）。这是能力边界，不是「临时凑合」——
+边界内的行为会一直维护下去。
 
 要自己写执行器，读 [`../../docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)，
 那是**指南**（讲一种可行解），不是要照抄的规范。
@@ -111,8 +116,8 @@ result: 15
 ```
 
 前一半是 `DisasmNoCustom(program)` 的反汇编，后一半是执行器真正跑出来的结果。
-**这份输出与 `cpp/demo/01-quick-start.cpp`、`gdscript/demo/demo_01.gd` 逐字节相同**
-（现场 `diff` 过）—— 三方对同一份源码产出同一份字节码，是这套实现的核心承诺。
+demo 的输出**不必**与其它实现逐字节相同：真正要对齐的是字节码本身（`Program` 属于标准），
+不是打印格式。
 
 ---
 
@@ -136,9 +141,9 @@ Program ──┐
 | 步 | 做什么 | 主要类型 | 稳定性 |
 | --- | --- | --- | --- |
 | 1 | 编译源码 | `Lexer` `Parser` `Compiler` → `Program` | 相对稳定（编译器接口） |
-| 2 | 建指令表 | `BasicVM.Api` | 内置示例 |
-| 3 | `State` 装配 | `State.Reset(api, program, args)` | 内置示例 |
-| 4 | 传参并执行 | `Arguments` `Run()` / `Step()` / `returns` | 内置示例 |
+| 2 | 建指令表 | `BasicVM.Api` | 内置基础 VM（会维护，非标准） |
+| 3 | `State` 装配 | `State.Reset(api, program, args)` | 内置基础 VM（会维护，非标准） |
+| 4 | 传参并执行 | `Arguments` `Run()` / `Step()` / `returns` | 内置基础 VM（会维护，非标准） |
 
 **step 1 和后面三步是分开的**：只想看字节码、只想做静态检查的话，编译完就可以收工，
 完全不需要碰执行器。`demo/03-custom-opcode.js` 就是这么干的。
@@ -193,15 +198,16 @@ console.log(DisasmNoCustom(program))
 
 这一节用到的类（`Lexer` `Parser` `AST` `Compiler` `Program`）是**编译器接口**，围绕的正是
 标准里规定的那一层 —— `Program` 的编码契约，所以这段代码相对稳定、值得照抄。
-**到此为止就是一个完整的 Stope 编译器用法**，后面三节只是「怎么把产物跑起来」的一种示例。
+**到此为止就是一个完整的 Stope 编译器用法**，后面三节只是「怎么把产物跑起来」的一种做法。
 
 ---
 
 ## 4. step 2：建指令表
 
-> **step 2–4 是内置示例，不是规范。** 这里的 `BasicVM.*` 全部来自 `src/basic_vm.js`；
-> 项目不规定执行器的标准（§0），所以下文的名字、结构、调用顺序都可能变。
-> 另外它是**基础虚拟机**：没有自定义指令（表就 33 项）、没有自定义数据类型。
+> **step 2–4 用的是内置基础虚拟机：会维护、接口不随意改，但不属于标准。** 这里的
+> `BasicVM.*` 全部来自 `src/basic_vm.js`；项目不规定执行器的标准（§0），所以宿主可以
+> 换一台 —— 自己写执行器时，只需满足 `vm-guide.md` 里的语义要求。
+> 另外它是**基础虚拟机**：默认没有自定义指令（表就 33 项）、没有自定义数据类型。
 
 ```js
 const api = new BasicVM.Api() // 33 个函数，下标 = 指令编号
@@ -306,7 +312,8 @@ console.log(state.returns[0])
 不需要宿主函数、不需要传参时，四步压成这些：
 
 > 骨架里 **1. 编译** 这段是编译器接口（相对稳定）；**2–4** 是 `basic_vm.js` 的
-> 内置示例 API。想换成自己的执行器，只要保留第 1 段，后面整段重写。
+> 内置基础虚拟机（会维护、接口不随意改，但不是标准）。想换成自己的执行器，只要保留
+> 第 1 段，后面整段重写。
 
 ```js
 import { Lexer, Parser, AST, Compiler, Program, BasicVM, Result } from '@liu-jl-dev/stope'
@@ -378,9 +385,6 @@ console.log('return = ' + state.returns[0])
   [4] <func> 里的 Stope 代码段：
   let a = 1;
     return a + argc;
-  [5] 同一段代码，交给 Stope 词法器扫一遍 token 数：
-    10 个 token
-  [6] Parse() 的返回值：Success
   ```
 
   要点是**内容怎么切由宿主决定**：`parser.Parse(root, stateFunc)` 的回调按标签名 / 属性返回

@@ -77,7 +77,9 @@ vs `Step()` 逐条走到停机，停机位置、错误、返回值必须一致�
 或照 [`custom-opcode.md`](custom-opcode.md) §6 自己写分派。
 
 Stope **不规定虚拟机标准**，但**会维护**这一份：bug 会修、`Program` 演进时会同步、与
-GDScript / Node.js 两份保持语义一致。接口本身仍可能调整，别拿它当规范引用。
+GDScript / Node.js / C# / Python 四份参考实现保持语义一致。接口**不会随意调整** ——
+改名、增删参数只为修 bug 或跟进 `Program`，不会为了换个风格而做；但它不是规范，
+别把这里的类型签名当标准引用。
 
 ---
 

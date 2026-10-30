@@ -16,7 +16,7 @@
 | STML 的行为契约（跨实现，以它为准） | [`../../docs/zh-cn/stml-test-plan.md`](../../docs/zh-cn/stml-test-plan.md) |
 | GDScript 侧的实现笔记与缺陷流水 | [`testing.md`](testing.md) + 上述契约 §7 的 GD-S-xx |
 | 给编译器加自定义指令（另一种宿主扩展） | [`custom-opcode.md`](custom-opcode.md) |
-| 标准范围（哪些是标准、哪些只是示例） | [`../../README.md`](../../README.md) |
+| 标准范围（哪些是标准、哪些不是） | [`../../README.md`](../../README.md) |
 
 依赖只有 **Godot 4.7.2**（开发与实测版本），零第三方插件。
 
@@ -44,7 +44,7 @@ gdscript/addons/stope/stml_parser.gd   Parser + 回调约定
 
 ---
 
-## 1. 先跑起来：demo_02 的六段
+## 1. 先跑起来：demo_02 的四段
 
 ```bash
 godot --headless --path gdscript res://demo/demo_02.tscn
@@ -66,12 +66,9 @@ godot --headless --path gdscript res://demo/demo_02.tscn
 [4] <func> 里的 Stope 代码段：
 let a = 1;
   return a + argc;
-[5] 同一段代码，交给 Stope 词法器扫一遍 token 数：
-  10 个 token
-[6] Parse() 的返回值：Success
 ```
 
-六个编号就是 `demo_02.gd` 里 `demo()` 的六段，本文后面每一节都对得上号：
+四个编号就是 `demo_02.gd` 里 `demo()` 的四段，本文后面每一节都对得上号：
 
 | demo 段 | 那段代码在干什么 | 本文 |
 | --- | --- | --- |
@@ -79,8 +76,6 @@ let a = 1;
 | `[2]` | `for c in root.children: print('  ', c.tag)` | §4（读树） |
 | `[3]` | 用 `_child_by_tag(root, 'class')` 取 `<class>`，再遍历它的子元素、标出自闭合 | §4 |
 | `[4]` | `print(func_ele.text)` —— 把 `<func>` 的代码段原样打出来 | §4 |
-| `[5]` | 把 `func_ele.text` 交给 `StopeLexer` 数一遍 token | §3 末尾 |
-| `[6]` | `print('[6] parse() 的返回值：', 'Success' if result == StopeResult.Success else 'Error')` | §3 |
 
 输入就是 `demo_02.gd` 里那份 `DOC`（**开头有一个换行**，所以行号整体 +1）：
 
@@ -177,20 +172,18 @@ static func _state_func(tag:String, attrs:Dictionary) -> int:
 
 ---
 
-## 3. 第二步：解析 —— demo 的 `[6]` 段
+## 3. 第二步：解析
 
-`demo()` 开头这几行就是全部（`[6]` 打印的是它的返回值）：
+`demo()` 开头这几行就是全部：
 
 ```gdscript
 var lexer := STMLLexer.Lexer.new(DOC)
 var parser := STMLParser.Parser.new(lexer)
 var root := STML.Element.new()
-var result:int = parser.parse(root, _state_func)
-for e in lexer.errors: print('[lex] ', e)
-for e in parser.errors: print('[parse] ', e)
-...
-print('[6] parse() 的返回值：',
-	'Success' if result == StopeResult.Success else 'Error')
+if parser.parse(root, _state_func) != StopeResult.Success:
+	for e in lexer.errors: print('[lex] ', e)
+	for e in parser.errors: print('[parse] ', e)
+	return
 ```
 
 | 约定 | 内容 |
@@ -208,8 +201,8 @@ demo 里 `for e in lexer.errors` / `parser.errors` 那两行就是干这个的�
 > 所以别写 `if r:` 当成功 —— `Success == 0`，`if r:` 判断的是「失败」。
 > demo 里写成三元表达式 `'Success' if result == StopeResult.Success else 'Error'`，就是这个原因。
 
-**`[5]` 段接着证明「内容是什么，Parser 完全不管」**：它把 `[4]` 打出来的那段文本原样交给
-Stope 词法器，数出 10 个 token —— 同一份文本在这一步之前只是 `Element.text` 里的一个字符串。
+**`text` 就是一段普通字符串 —— 「内容是什么，Parser 完全不管」。** 想验证这点，把
+`func_ele.text` 交给 Stope 词法器扫一遍，数出 10 个 token：
 
 ```gdscript
 var stope_lexer := StopeLexer.Lexer.new(func_ele.text)
@@ -218,7 +211,7 @@ while true:
 	var t := stope_lexer.next_token()
 	if t.type == StopeLexer.Token.Type.Eof: break
 	n += 1
-print('  ', n, ' 个 token')
+print(n, ' 个 token')   # 10 —— demo 里没有这一步，留给你自己试
 ```
 
 ---
@@ -340,7 +333,7 @@ STML 解析本身（找 `</`、切 text）不受影响，只有你自己按索�
 
 ## 7. 最小骨架（可直接复制）
 
-把 `demo_02.gd` 压成一份能贴进自己工程的脚本：`DOC` 缩成一行、去掉六段打印、
+把 `demo_02.gd` 压成一份能贴进自己工程的脚本：`DOC` 缩成一行、去掉四段打印、
 `_state_func` 原样保留、`_child_by_tag` 换成通用的递归 `_walk()`。
 （这份骨架是独立跑的，输出与 `demo_02` 的 `[1]`–`[4]` 是同一棵树。）
 
@@ -412,7 +405,7 @@ func _ready() -> void:
 | 用下标取的元素不是想要的那个 | `children` 变了；按名字找 | §4 |
 | `SCRIPT ERROR: Invalid access to property or key` + 拿到 `null` | `attrs['不存在的键']` 在 GDScript 里会报错并给 `null`（不像 C++ 的 `map::operator[]` 会插入） | §5 |
 | 文档后半段凭空消失 | 只解析一个顶层元素，或注释没闭合 | C++ §6.7、§6.4 |
-| 想执行 `<func>` 里的 Stope 代码 | Parser 不管这些，把 `text` 交给 `StopeLexer.Lexer` | [`quick-start.md`](quick-start.md)、`demo_02` 第 5 段 |
+| 想执行 `<func>` 里的 Stope 代码 | Parser 不管这些，把 `text` 交给 `StopeLexer.Lexer` | [`quick-start.md`](quick-start.md) |
 
 ---
 

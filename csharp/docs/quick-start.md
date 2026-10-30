@@ -1,7 +1,7 @@
 # C# 版快速上手
 
 照这份文档走一遍，你会得到：一份能编译、能跑、能改的宿主程序骨架，以及「哪些 API 可以
-依赖、哪些只是内置示例」的分界线。
+依赖、哪些不属于标准（但同样会维护）」的分界线。
 
 完整可运行的版本是 [`demo/01-quick-start/Program.cs`](../demo/01-quick-start/Program.cs)，
 本文逐段讲它。
@@ -9,12 +9,18 @@
 ## 0. 先分清哪些能依赖
 
 Stope 的标准只覆盖三件事：**语言**、**STML**、**编译器的产物 `Program`**。
-所以同一份 demo 里的代码有两种稳定性：
+所以同一份 demo 里的代码要分两层看 —— 差别不在「会不会改」（两层都会维护），而在
+「算不算标准」：
 
 | 段落 | 用到的东西 | 稳定性 |
 | --- | --- | --- |
-| step 1（编译） | `Lexer` / `Parser` / `Compiler` / `Program` | **编译器接口**，相对稳定。`Program` 的编码契约（指令编号、操作数、跳转目标是指令下标）是标准的，宿主可以依赖、可以复制 |
-| step 2–4（运行） | `Api` / `State` / `Arguments` | **内置的基础虚拟机，不是标准**。值的表示、栈布局、宿主函数绑定、错误上报全是实现细节，换一个执行器可以完全不长这样 |
+| step 1（编译） | `Lexer` / `Parser` / `Compiler` / `Program` | **编译器接口**，相对稳定（标准的一部分）。`Program` 的编码契约（指令编号、操作数、跳转目标是指令下标）是标准的，宿主可以依赖、可以复制 |
+| step 2–4（运行） | `Api` / `State` / `Arguments` | **内置的基础虚拟机**：会一直维护、接口不随意调整，但**不属于标准**。值的表示、栈布局、宿主函数绑定、错误上报是这份实现自己的选择，换一个执行器可以完全不长这样 |
+
+**「不是标准」不等于「随手写的样例」**：这台会跟着语言与产物一起维护 —— bug 会修、
+`Program` 演进时同步、与另外四份实现语义对齐；接口也**不会随意调整**，改名或增删参数只会
+为了修 bug 或跟进 `Program`，不会为了换个风格而做。所以边界内的用法可以放心依赖，只是别把
+它的类型签名当规范引用（标准里没有它们）。
 
 本文把这条分界线标在每一段开头。要自己写执行器，看
 [`docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)。
@@ -29,8 +35,7 @@ dotnet run --project csharp/demo/02-stml          # 只解析 STML
 dotnet run --project csharp/demo/03-custom-opcode # 自定义指令：只编译 + 反汇编
 ```
 
-三个 demo 的输出与 C++ / GDScript / Node.js 三套实现**逐字节相同**（同一份源码产出同一份
-字节码）。`01` 的完整输出：
+三个 demo 的输出以**可读**为准，不追求跨实现逐字节相同。`01` 的输出：
 
 ```
 [0]     PushId     0
@@ -99,7 +104,7 @@ var compiler = new Compiler();
 var program = new Program();
 compiler.Compile(tree, program);
 
-// 2-4. 执行：Program -> 结果（内置示例，不是标准）
+// 2-4. 执行：Program -> 结果（内置基础 VM：会维护，但不属于标准）
 var state = new State();
 state.Reset(new Api(), program, args);      // args 是实现 Arguments 的宿主对象
 state.Variables[program.Exports["fmt:println"]] = (Func<object?[], object?>)Println;
@@ -151,7 +156,7 @@ if (rc != Result.Success) return 1;
 
 ## 4. 第二步：装配执行器
 
-> 稳定性：内置示例，不是标准。
+> 稳定性：内置的基础虚拟机 —— 会维护、接口不随意改，但不属于标准。
 
 ```csharp
 var api = new Api();                                 // 33 条内置指令的分派表
@@ -185,7 +190,7 @@ private sealed class MyArgs : Arguments
 
 ## 5. 第三步：绑宿主函数
 
-> 稳定性：内置示例，不是标准。
+> 稳定性：内置的基础虚拟机 —— 会维护、接口不随意改，但不属于标准。
 
 宿主函数在产物里就是**「某个变量槽里的一个值」**（C++ 的 `Value::Type::HostFunction`）。
 编译器把未声明的 `fmt:println` 当外部变量登记进 `Exports`，宿主按名字取槽位填上即可：
