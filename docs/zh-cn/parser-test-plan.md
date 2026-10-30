@@ -279,11 +279,22 @@
 | ID | 输入 | 期望 |
 | --- | --- | --- |
 | B-01 | 1 万条 `let x;` | 解析成功，不崩 |
-| B-02 | 1 万层嵌套 `(`（`"("*10000 + "1" + ")"*10000`） | 解析成功。**这是曾踩过的栈溢出**：折叠不能把 `parseExpr` 再包一层 |
+| B-02 | 1 万层嵌套 `(`（`"("*10000 + "1" + ")"*10000`） | 报 **1 条** `nesting too deep (max 256). `，不再递归、不崩（加限额前这是真的栈溢出点） |
 | B-03 | 1 万层嵌套 `{` | 同上 |
-| B-04 | 1 万个连续 `-`（前缀） | 同上 |
+| B-04 | 1 万个连续 `-`（前缀） | 同上。**这类递归没有括号**，所以限额必须在 parser 里数，只数括号挡不住 |
 | B-05 | 缺尾 `)` 的 1000 层括号 | 报错但不停机、不死循环 |
 | B-06 | `args args args` | 报错不死循环 |
+
+**嵌套深度上限（B-02…B-04 的判据）**：表达式与语句块的递归深度上限 **256 层**，
+两个实现同值、同文案 `line N: nesting too deep (max 256). `。超限时：
+
+1. 只报这**一条**错误 —— 之后的连锁错误（缺 `}`、`expected ")"` …）不再记账；
+2. 立刻停止解析：已经解析完的语句留在 `prog.stmts`，超限那一条不进 AST；
+3. 不崩、不死循环。AST 里个别子节点可能为空（`AstVisitor::Visit`、`ExpressionOptimizer`
+   都判空），但直接解引用子节点的地方（如 `AssignStmt.leftExpr`）必须自己挡。
+
+调用方约定：**`errors` 非空就不要 Compile / 执行** —— 这是所有解析错误的通用约定，
+深度超限只是其中一种。
 
 ### 4.9 O 常量折叠（`constFolding = true` 下重跑同一批源码）
 
@@ -334,7 +345,8 @@ ctest --test-dir build
 
 parser 相关：`test_parser_stmt` / `test_parser_expr` / `test_parser_prec` /
 `test_parser_postfix` / `test_parser_custom` / `test_parser_flow` / `test_parser_fold`。
-深嵌套用例（B 组）必须独立进程跑，见 `cpp/docs/parser_test_plan.md` §8。
+深嵌套用例（B 组）仍独立进程跑（要构造 12000 层的输入，混在主包里会拖慢并遮住其它结论），
+见 `cpp/docs/parser_test_plan.md` §8。
 
 ### GDScript
 

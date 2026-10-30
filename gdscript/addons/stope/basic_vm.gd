@@ -91,8 +91,17 @@ class State:
 		return v
 
 	func _error(msg:String, print_inst_name:bool=true):
-		errors.append(str(i,
-			str(' ',Opcode.keys()[program.opcodes[i]]) if print_inst_name else '',': ',msg))
+		var inst := '' if not print_inst_name else str(' ', _inst_name(program.opcodes[i]))
+		errors.append(str(i, inst, ': ', msg))
+
+	# 错误串里的指令名。内置指令取枚举名；>= 33 的自定义编号在枚举里没有位置，
+	# 按 debug.gd 的惯例印成 `Custom<N>`（那里没传 config 时也是这么印的）。
+	# ⚠ 这里**必须**兜住越界：早期直接写 `Opcode.keys()[raw]`，自定义指令一报错
+	# 就变成 `Out of bounds get index` —— 错误没记下来，run() 还会返回 true。
+	func _inst_name(raw:int) -> String:
+		var keys := Opcode.keys()
+		if raw >= 0 and raw < keys.size(): return keys[raw]
+		return str('Custom', raw) if raw > Opcode.Return else str('Op#', raw)
 
 
 

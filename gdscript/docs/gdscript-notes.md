@@ -21,6 +21,23 @@ GDScript 没有 `try/catch`。所以整条链路的错误模型是统一的：
 `push_error()` / `push_warning()` 只是往控制台 / 调试器发消息，**不会中断执行**，不能当
 抛异常用。插件里用 `push_warning` 报「实现不完整」，就是因为它不阻断加载。
 
+**运行期错误（`SCRIPT ERROR`）只中止「当前函数」并返回类型默认值，调用方照常继续**。
+实测：
+
+```gdscript
+func b() -> bool:
+	var m: Array[Callable] = []
+	m[3].call()          # SCRIPT ERROR: Out of bounds get index '3'
+	return true          # 不执行
+func a() -> void:
+	var r = b()          # r == false（bool 的默认值），a 继续往下跑
+```
+
+这条在写 VM 时尤其要命：错误发生在 `run()` 里，`run()` 返回 `false` 但 `errors` 是空的
+（错误没走 `state.error`），宿主看到「返回失败 + 无错误」两头对不上。
+所以分派表越界、`null` Callable、整数除零这类都得自己**提前判**，不能指望它抛出。
+详见 [`troubleshooting.md`](troubleshooting.md) §6。
+
 ### 1.2 整数是 64 位有符号，溢出静默回绕
 
 `int` 恒为 `int64`，加减乘溢出**不报错**，直接回绕（和 C++ 的有符号溢出行为在实际结果上
@@ -211,6 +228,24 @@ GDScript 每次函数调用 + `Callable.call` 在热循环里都是实打实的�
 
 代价是两处必须手工同步 —— 所以 `test/test_vm.gd` 拿同一程序跑两条路径逐项比对，
 改了一处忘了另一处，它会立刻红。**加性能捷径的前提是先有这条锁。**
+
+### 2.9 写文档
+
+五条，与 [`cpp/docs/development.md`](../../cpp/docs/development.md) §6 是同一套规则
+（那边写得更细，这里只记 GDScript 侧要注意的）：
+
+1. **文件名一律 ASCII kebab-case**：`README.md` / `usage.md` / `testing.md` /
+   `troubleshooting.md` / `gdscript-notes.md`。中文标题写进文件的一级标题，链接里就不会
+   冒出 `%E8%AF%AD…`。（`cpp/docs/` 有 6 个下划线文件，是历史遗留，别照着学。）
+2. **分工**：`README.md` 面向所有人（是什么、怎么装、从哪开始）；`usage.md` 是 API 手册；
+   `testing.md` 与本文件面向改实现的人；报错查 `troubleshooting.md`。
+   同一件事只在一处写，其它地方给链接 —— 这个仓库最怕的是同一事实有三个真源。
+3. **路径写法**：同目录写裸名（`usage.md`），跨目录写相对路径
+   （`../../cpp/docs/stml.md`），别写 `docs/stml.md` 这种半截路径（会失效）。
+4. **示例必须真跑**。代码块要么从 `demo/` 抄，要么跑一遍再贴 —— 尤其 `op_map` 扩容、
+   `--import`、golden 重生成这类「不跑看不出来」的地方。
+5. **缺陷编号**：本实现独有的问题登记成 `GD-P-xx`（解析）/ `GD-S-xx`（STML）等，跨实现的
+   差异写进 `docs/zh-cn/*-test-plan.md` §7 的偏差表；别只在 commit 或聊天里说。
 
 ---
 

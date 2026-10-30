@@ -222,15 +222,24 @@ void runFlowTests() {
     }
     printf("     [B-01] 全前缀截断 %d 例，全部返回\n", total);
   }
-  {  // B-02 10000 层括号：解析 + 析构均成功（崩溃阈值见 test_parser_depth）
+  {  // B-02 10000 层括号：超过 maxDepth（默认 256）报一条错，不崩
     std::u16string src(10000, u'(');
     src += u"a";
     src.append(10000, u')');
     src += u";";
     auto r = parseAll(src);
-    EXPECT_PSTMTS(r, 1, "B-02");
-    EXPECT_PSTMT_SHAPE(r, 0, "ExprStmt(Ident(a))", "B-02");
-    EXPECT_PERR_COUNT(r, 0, "B-02");
+    EXPECT_PSTMTS(r, 0, "B-02");
+    EXPECT_PERR_COUNT(r, 1, "B-02");
+  }
+  {  // B-02b 限额之内（200 层）照常解析：防「加了限额把正常嵌套一起挡掉」
+    std::u16string src(200, u'(');
+    src += u"a";
+    src.append(200, u')');
+    src += u";";
+    auto r = parseAll(src);
+    EXPECT_PSTMTS(r, 1, "B-02b");
+    EXPECT_PSTMT_SHAPE(r, 0, "ExprStmt(Ident(a))", "B-02b");
+    EXPECT_PERR_COUNT(r, 0, "B-02b");
   }
   {  // B-07 正确路径 new == delete 完全配平（预热一次排除静态 map 惰性初始化）
     auto warm = std::make_shared<std::u16string>(u"a;");

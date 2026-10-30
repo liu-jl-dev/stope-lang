@@ -7,7 +7,7 @@
 以 `cpp/include/stope/*.hpp` 的实测行为为准，差异登记在
 [`docs/zh-cn/*-test-plan.md`](../../docs/zh-cn/) 的 §7 里。
 
-当前状态（2026-10-28）：词法 / 语法 / 编译器 / STML / 执行器五组共 **3076 条断言全绿**，
+当前状态（2026-10-30）：词法 / 语法 / 编译器 / STML / 执行器五组共 **3090 条断言全绿**，
 期望值全部由 C++ 侧探针 dump，不是手写的 —— 但那些数据**已经入库**，所以跑测试只需要
 Godot，不需要 C++ 工具链。
 
@@ -187,6 +187,7 @@ godot --headless --path gdscript res://demo/demo_01.tscn
 | 想看 | 去哪 |
 | --- | --- |
 | 每个 API 怎么调、参数与返回 | [usage.md](usage.md) |
+| **报错了**该改哪（按阶段查文案） | [troubleshooting.md](troubleshooting.md) |
 | 测试怎么跑、数据怎么重生成 | [testing.md](testing.md) |
 | GDScript 本身的坑与实现约定 | [gdscript-notes.md](gdscript-notes.md) |
 | Stope 语法（跨实现） | [../../docs/zh-cn/syntax-reference.md](../../docs/zh-cn/syntax-reference.md) |
@@ -195,3 +196,29 @@ godot --headless --path gdscript res://demo/demo_01.tscn
 | 指令集与 `Program` 格式 | [../../docs/zh-cn/compiler-test-plan.md](../../docs/zh-cn/compiler-test-plan.md) §2 |
 | 自己写执行器 | [../../docs/zh-cn/vm-guide.md](../../docs/zh-cn/vm-guide.md) |
 | C++ 侧用法 | [../../cpp/docs/quick-start.md](../../cpp/docs/quick-start.md) |
+
+### 7.1 与 C++ 侧文档的对照
+
+两侧**主题不是一一对应**：C++ 把上手类内容拆成五份，本实现压进 `usage.md` 一份（按调用
+顺序讲），所以「同一个主题在两边分别去哪」值得单独列一张表。
+
+| 主题 | C++ | 本实现 |
+| --- | --- | --- |
+| 总览 / 入口 | [`cpp/docs/README.md`](../../cpp/docs/README.md) | 本文 |
+| 四步上手 + 可复制骨架 | [`quick-start.md`](../../cpp/docs/quick-start.md) | [`usage.md`](usage.md) §1–§9 + 本文 §5 |
+| 常见错误 / 排错 | `quick-start.md` §8、`stml.md` §8、`custom-opcode.md` §8 | [`troubleshooting.md`](troubleshooting.md)（三张表合成一份） |
+| STML 上手 | [`stml.md`](../../cpp/docs/stml.md) | [`usage.md`](usage.md) §10 |
+| STML 语法细节 12 条 | `stml.md` §6 | **不重复**，直接看 C++ 那份（对两侧同样成立） |
+| 自定义指令：登记 → 编译 → 反汇编 | [`custom-opcode.md`](../../cpp/docs/custom-opcode.md) | [`usage.md`](usage.md) §7 |
+| 自定义指令：怎么真的执行 | `custom-opcode.md` §6 | [`usage.md`](usage.md) §7.1 |
+| 执行器（栈、宿主接口、返回值） | [`basic_vm.md`](../../cpp/docs/basic_vm.md) | [`usage.md`](usage.md) §9 |
+| `Value` / 引用计数 / 生命周期 | `basic_vm.md` §2、§7 | **不适用**：本实现用 `Variant` + 引擎 GC |
+| 常量折叠规则总表 | [`expr_optim.md`](../../cpp/docs/expr_optim.md) | [`usage.md`](usage.md) §8 只写调用方式，语义只维护 C++ 那一份 |
+| 构建 / 坑 / 行尾 | [`development.md`](../../cpp/docs/development.md) §1–§5 | [`testing.md`](testing.md) §1 + [`gdscript-notes.md`](gdscript-notes.md) §3 |
+| 代码风格 | `development.md` §5 | [`gdscript-notes.md`](gdscript-notes.md) §2.6 |
+| 文档协作与命名 | `development.md` §6 | [`gdscript-notes.md`](gdscript-notes.md) §2.9 |
+| 四份 `*_test_plan.md`（实现笔记 + 缺陷流水） | [`cpp/docs/`](../../cpp/docs/) | [`testing.md`](testing.md) 一份覆盖五组；跨实现契约在 `docs/zh-cn/` |
+
+> **本目录文件名一律 ASCII kebab-case**（`gdscript-notes.md` / `testing.md` / `usage.md` /
+> `troubleshooting.md`），与 `cpp/docs/development.md` §6.3 是同一条规则 —— 那边
+> `cpp/docs/` 自己有 6 个文件用了下划线，是历史遗留，别照着学。

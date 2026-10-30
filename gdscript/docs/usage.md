@@ -129,6 +129,7 @@ print(parser.errors, " / 词法错误: ", lexer.errors)
 | `parse_prog(prog, is_top_level: bool)` | 顶层 / 块内共用实现，区别在遇到 `}` 时怎么收尾 |
 | `errors: Array[String]` | `line N: msg`，**不**合并词法错误 |
 | `const_folding: bool = true` | 常量折叠开关，测试里按用例切换 |
+| `max_depth: int = 256` | 嵌套深度上限（表达式与语句块共用一个计数器），`0` = 不限制；与 C++ 的 `Parser::maxDepth` 同值 |
 | `has_err() -> bool` | 等价于 `not errors.is_empty()` |
 
 词法错误和语法错误是**两套** `errors`，调用方自己决定怎么合并（C++ 侧同样不合并，
@@ -149,6 +150,10 @@ token。少数语句解析入口（`let` / `return`）例外，与 C++ 保持一
 
 不能出现的 token 会得到 `no prefix parse function for token type. `，此时返回一个裸
 `StopeAst.Expr`（形状串打印成 `Err(行号)`），让解析继续。
+
+嵌套超过 `max_depth` 时报 `line N: nesting too deep (max 256). ` 并**停止解析**：只报这
+一条（连锁错误不再记账），已解析完的语句保留在 `prog.stmts` 里。此时 `left_expr` 之类的
+子节点可能是 `null` —— **`errors` 非空就不要把 AST 交给编译器或执行器**。
 
 ### 2.4 AST 形状串
 
@@ -368,6 +373,43 @@ var compiler := StopeCompiler.Compiler.new(cfg)
 > 按变长决定吃不吃参数个数，编号撞内置还会报 warning。`StopeTestUtil.dump_program`
 > 是测试比对格式，自定义指令一律打成 `Opcode(33)`，**不反查名字**。
 
+### 7.1 怎么真的执行这些编号
+
+编译器只负责把编号写进 `opcodes`，**执行是宿主的事**。参考执行器的分派表 `Api.op_map`
+是**稠密的 `Array[Callable]`，下标就是编号**，`run()` / `step()` 直接 `op_map[opcode]` 取 ——
+所以注册 N 号就必须让数组长度 ≥ N+1，且 0…N 每一格都是**有效** Callable。
+
+```gdscript
+class Host:
+	# my:add：弹 2 个、压 1 个。s.i 已经指着这条指令本身
+	func my_add(s:StopeBasicVM.State) -> void:
+		var b = s._pop_and_get_value()
+		var a = s._pop_and_get_value()
+		s.stack.push_back(a + b)
+
+var host := Host.new()
+var api := StopeBasicVM.Api.new()
+api.op_map.resize(34)					# 33 号要能下标取到 ⇒ 至少 34 项
+api.op_map[33] = host.my_add				# 33 = my:add 的编号
+
+var state := StopeBasicVM.State.new()
+state.reset(api, program, args)				# args 是你自己的 Arguments 实现
+print(state.run(), state.returns)			# true [3]
+```
+
+上面这段是照可运行代码抄的：`my:add` 注册在 33、源码 `let x = my:add(1, 2); return x;`。
+
+三条不照做会踩：
+
+| 漏了 | 现象 |
+| --- | --- |
+| 不 `resize` | `SCRIPT ERROR: Out of bounds get index '33'`，`run()` 当场中止并返回 `false`，**`errors` 却是空的**（错误没走 `state.error`），只在 Godot 控制台里 |
+| `resize` 了但 33…N-1 留空 | `Attempt to call function 'null::null (Callable)'`，同样中止 |
+| 把编号占进 0…32 | 内置实现赢，你的处理函数永远不会被调用（反汇编也只会印内置指令名） |
+
+> 在自定义指令里调 `state.error()` 时，错误串的指令名印成 `Custom<N>` —— 枚举里没有这个
+> 编号，别指望看到注册名。要看名字用 `StopeDebug.disasm(prog, cfg)`。
+
 ---
 
 ## 8. 常量折叠：`StopeExprOptim`
@@ -428,7 +470,35 @@ print(state.returns)
 | `State.returns: Array` | `return` 的返回值，按出现顺序 |
 | `State.errors: Array[String]` | `"i OpName: msg"`（`i` 是指令下标） |
 | `State.error(msg)` | 宿主的报错入口（对应 C++ `State::Error`）；写进 `errors` 后 `run`/`step` 立即停 |
-| `Api.op_map: Array[Callable]` | 33 项，下标 = opcode |
+| `Api.op_map: Array[Callable]` | 33 项，下标 = opcode；要跑自定义指令得先扩表，见 §7.1 |
+
+### `State` 的字段
+
+写指令处理函数、或者自己接管执行流程时要用到这些（`returns` / `errors` 见上表，不重复）：
+
+| 字段 | 说明 |
+| --- | --- |
+| `api` / `program` / `args` | `reset` 传进来的三样，执行期间只读 |
+| `i: int` | 指令指针。**执行中**指着当前这条指令；`run` / `step` 在末尾统一 `+1` |
+| `stack: Array` | 数据栈，栈顶是 `stack.back()`（= `stack[-1]`） |
+| `variables: Array` | 变量槽位，长度 = `program.variable_num`；`reset` 已 `resize` 好，初值 `null` |
+
+### 写一条指令处理函数
+
+签名固定 `func(s:State) -> void`，靠副作用干活：
+
+| 约定 | 说明 |
+| --- | --- |
+| 操作数 | `s.i` 已指着这条指令，**先 `s.i += 1` 再读** `s.program.opcodes[s.i]`；循环末尾还会统一 `+1`，别自己多推 |
+| 栈效果 | 参数已按从左到右压好；结果压回栈顶、占 **1 格**；自定义指令**没有 callee 入栈**（编译器 `dec(参数个数 - 1)` 就是这条） |
+| 变长指令 | 流里在参数之后多一个「实参个数」操作数，先读它 |
+| 取值 | 用 `s._pop_and_get_value()` 弹栈并自动解引用 `Identifier`；直接读 `s.stack[-1]` 可能拿到槽位引用 |
+| 报错 | `s.error(msg)`（等价于 `s._error(msg)`）：写进 `errors`，`run` / `step` 立刻停 |
+| 跳转 | 改 `s.i` 时目标要 `-1`（末尾还有 `+1`）；`Return` 的做法是把 `s.i` 拨到 `len(opcodes)` |
+
+`Api.op_map` 里那 33 个 `_xxx` 就是按这套写的，可以直接当模板。`_pop_and_get_value()` /
+`_error()` 虽然带下划线，但 GDScript 没有访问控制，处理函数里直接调就是 —— 下划线只是
+「内部用」的约定。
 
 `step()` 与 `run()` 是**两份独立实现**，`run()` 不在循环里调 `step()`（热循环里每条指令
 多一次函数调用，GDScript 下是实打实的开销）。代价是改步进规则要同时改两处 ——

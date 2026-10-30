@@ -109,25 +109,23 @@ target_link_libraries(test_vm PRIVATE stope)
 
 add_test(NAME vm COMMAND test_vm)
 
-# 深嵌套探测：test_parser_depth <kind> <depth>
-# 阈值是默认 8 MB 栈下的实测值（g++ 15.2 / MinGW-w64），换编译器或链接选项
-# （-Wl,--stack）会变。崩溃深度由 run_depth.cmake 包装：被信号杀死时 ctest 报
-# SegFault（WILL_FAIL 不反转"崩溃"判定），所以用 EXPECT=crash 显式登记。
+# 深嵌套用例：test_parser_depth <kind> <depth> <ok|deep>
+#
+# 限额是 Parser::maxDepth（默认 256，见 parser.hpp），不是栈容量 ——
+# 判据在二进制里：ok 要求 0 条错误，deep 要求恰好 1 条 "nesting too deep"。
+# 不再需要 run_depth.cmake 那种「把崩溃翻译成预期」的包装：现在不崩了。
 add_executable(test_parser_depth test/test_parser_depth.cpp)
 target_link_libraries(test_parser_depth PRIVATE stope)
 
 set(STOPE_DEPTH_CASES
-    paren 11000 ok      paren 12000 crash
-    block 4000 ok       block 5000 crash
-    unary 9000 ok       unary 10000 crash
-    at    3000 ok       at    5000 crash)
+    paren 200 ok   paren 300 deep   paren 12000 deep
+    block 200 ok   block 300 deep
+    unary 200 ok   unary 300 deep
+    at    200 ok   at    300 deep)
 while(STOPE_DEPTH_CASES)
   list(POP_FRONT STOPE_DEPTH_CASES kind depth expect)
-  add_test(NAME parser-depth-${kind}-${depth}
-           COMMAND ${CMAKE_COMMAND}
-                   -DEXE=$<TARGET_FILE:test_parser_depth>
-                   -DKIND=${kind} -DDEPTH=${depth} -DEXPECT=${expect}
-                   -P ${CMAKE_CURRENT_SOURCE_DIR}/test/run_depth.cmake)
+  add_test(NAME parser-depth-${kind}-${depth}-${expect}
+           COMMAND test_parser_depth ${kind} ${depth} ${expect})
 endwhile()
 
 # ---------------------------------------------------------------------------

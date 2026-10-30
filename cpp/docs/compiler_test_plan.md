@@ -6,7 +6,7 @@
 - 计划版本：v1.3（2026-10-22）：**全部测试落地并全绿** ——
   53 个用例（C-01…C-52 + C-37b）/ 98 断言 / 0 失败，Opcode 覆盖 **33/33**；
   基类另有 `test_ast_visitor` 的 V 组 36 断言 / 0 失败；
-  另有 `test_vm` 的 VM 组 156 断言 / 0 失败；`ctest` **14/14**。
+  另有 `test_vm` 的 VM 组 156 断言 / 0 失败；`ctest` **15/15**。
   - v1.3 的变化只有一处：`Opcode` 新增 `PushValue`（编号 8），读变量与「当赋值
     目标」分成两条指令，见 §2.1 末尾。用例数与断言数不变，只是期望串里的读值位置
     由 `PushId` 改成 `PushValue`，覆盖口径 32 → 33。
@@ -342,7 +342,7 @@ parser 识别 `myop`（把它变成 `Custom` token），编译器这边查不到
 | `Opcode` 覆盖 | 33/33 | **必须保持 33/33**。测试里统计见过的 opcode，缺哪个会打印名字 |
 | `AST::NodeType` 产生路径 | 26 个可编译节点全覆盖 | — |
 | 错误路径 | 7 类 error + 6 类错误信息全覆盖 | — |
-| `ctest` | 14/14 | 全部通过（lexer + parser + compiler + stml + ast_visitor + vm + 8 组深嵌套） |
+| `ctest` | 15/15 | 全部通过（lexer + parser + compiler + stml + ast_visitor + vm + 9 组深度用例） |
 | `test_ast_visitor` 断言数 | 36 | 全部通过（V 组，锁基类遍历顺序与分发表完整性） |
 
 跑完的尾部输出：

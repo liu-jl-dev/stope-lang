@@ -20,7 +20,7 @@
 | 头文件 | `include/stope/` 19 个，只放声明；自引用一律 `#include <stope/xxx.hpp>` |
 | 编译单元 | `src/` 9 个 `*.cpp`：`ast` `ast_visitor` `compiler` `expr_optim` `lexer` `parse_binarr` `parser` `stml_lexer` `stml_parser` |
 | 产物 | `add_library(stope STATIC ...)` → `build/libstope.a` |
-| 测试 | ctest **14/14**：`lexer` `parser` `compiler` `ast_visitor` `stml` `vm` 六个目标 + 8 组 `parser-depth-*` |
+| 测试 | ctest **15/15**：`lexer` `parser` `compiler` `ast_visitor` `stml` `vm` 六个目标 + 9 组 `parser-depth-*` |
 | 示例 | `demo/01-quick-start.cpp` → `demo01`；`demo/02-stml.cpp` → `demo02`；`demo/03-custom-opcode.cpp` → `demo03`（都未接 ctest） |
 | 依赖 | **零第三方**。C++20 |
 
@@ -55,8 +55,9 @@ cmake --build build --target gen-golden   # 改了行为或加用例时才要
 1. **必须显式 `-G "MinGW Makefiles"`。** 删过 `build/` 后再 `cmake -B build`，
    CMake 会误选 Visual Studio 2022 并报 `No CMAKE_CXX_COMPILER could be found`。
    修的时候要连 `CMakeCache.txt` 与 `CMakeFiles/` 一起清。
-2. **不要加 `-DCMAKE_BUILD_TYPE=Release`。** 优化后栈帧变小，8 组 `parser-depth-*`
-   里有 4 组「应当栈溢出崩溃」的用例反而不崩 → 测试失败。默认（无优化）构建是对的。
+2. **构建类型不再影响深度用例**（2026-10-30）：`parser-depth-*` 的判据是
+   `Parser::maxDepth`（默认 256 这个逻辑值），不是栈容量。此前那 4 组「应当栈溢出崩溃」
+   的用例要求必须跑无优化构建，现在这条限制已随限额一起取消。
 3. **源码编译失败时 `ctest` 照样报「全部通过」** —— 它跑的是上一次的旧 exe。
    判断构建是否成功，**以 `cmake --build build` 的退出码为准**，不要看 ctest。
 4. **崩栈的定位**：Bash 里跑 exe 只给 `exit=127` 且 stdout 因缓冲丢失，

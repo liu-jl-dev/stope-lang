@@ -51,7 +51,7 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 cd cpp
 cmake -B build -G "MinGW Makefiles"     # 必须显式指定 generator
 cmake --build build                      # 产出 build/libstope.a 与各测试
-ctest --test-dir build                   # 14/14
+ctest --test-dir build                   # 15/15
 ./build/demo01.exe
 ```
 

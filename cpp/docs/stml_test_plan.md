@@ -374,8 +374,7 @@ STML 自己的代码在 `-Wall -Wextra` 下是零告警。）
    元素行号写 `e.line = token.line`。
 5. **改动 `stml_lexer.hpp` 的子扫描函数前**，先读 §2.1 的"子扫描函数契约"
    （"从 `input` 开头工作 → 自己推进 → 返回消费长度"），以及"未闭合要吃掉剩余输入"。
-6. **ctest 的构建类型会影响深度用例**：另 8 组 `parser-depth-*` 的崩溃阈值是
-   **默认**（无 `CMAKE_BUILD_TYPE`）构建下实测的；加 `-DCMAKE_BUILD_TYPE=Release`
-   会让栈用量变小、该崩的不崩，那 4 项会报失败。
+6. **深度用例与构建类型无关**（2026-10-30 起）：`parser-depth-*` 的判据是
+   `Parser::maxDepth`（逻辑值，默认 256），不是栈容量，`Release` / `Debug` 结论一样。
 7. **行尾**：`cpp/include/stope/stml_*.hpp` 是 **CRLF**，`cpp/test/test_stml_*.cpp/hpp` 是 **LF**。
    用 Python 改写时用 `newline=''` 保持。

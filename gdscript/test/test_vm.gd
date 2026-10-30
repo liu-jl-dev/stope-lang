@@ -20,6 +20,11 @@ class NoArgs extends StopeBasicVM.Arguments:
 		return null
 	func num() -> int: return 0
 
+# V-05 用：一条主动报错的自定义指令
+class HostBoom:
+	func boom(s:StopeBasicVM.State) -> void:
+		s.error('boom. ')
+
 static func run(rep:StopeTestUtil.Report) -> void:
 	# 顺序执行的程序：步数恰好等于指令条数（不含操作数），顺手锁住 step 的计数
 	_paths(rep, 'V-01', SRC_LINEAR, true)
@@ -29,6 +34,8 @@ static func run(rep:StopeTestUtil.Report) -> void:
 	_paths(rep, 'V-03', SRC_ERR, false)
 	# 宿主取参失败也要能回报（Arguments.at 有 state 参数了）
 	_get_arg_error(rep)
+	# 自定义指令里报错：错误串拼指令名时不能越界
+	_custom_opcode_error(rep)
 
 # 宿主侧的错误通道：`Arguments.at(state, key)` 里 state.error(...) 之后 VM 必须停，
 # 错误进同一个 errors，且定位到 GetArg 那条指令。以前 at 拿不到 state，宿主只能
@@ -43,6 +50,31 @@ static func _get_arg_error(rep:StopeTestUtil.Report) -> void:
 	rep.check('V-04', '错误条数', '1', str(s.errors.size()))
 	rep.check('V-04', '错误全文',
 		str(s.i, ' GetArg: args not provided in this test. '), _join(s.errors))
+
+# 自定义指令（编号 >= 33）里报错：`_error` 拼指令名时**不能越界**。
+# `Opcode.keys()` 只有 33 项，早期直接 `Opcode.keys()[opcode]` 下标取 —— 自定义指令
+# 一报错就变成引擎级 `Out of bounds get index`，错误一句都没记下来，而 errors 既然
+# 为空，run() 还会返回 true（假装成功）。修复后按 debug.gd 的惯例印成 `Custom<N>`。
+static func _custom_opcode_error(rep:StopeTestUtil.Report) -> void:
+	var first := StopeOpcode.FIRST_CUSTOM_OPCODE
+	var cfg := StopeOpcode.CustomOpcodeConfig.new()
+	cfg.add_custom_opcode('my:boom', first, 0)
+	var prog := _build_with('my:boom();', cfg)
+	if prog == null:
+		rep.add_fail('  FAIL V-05  编译失败')
+		return
+
+	var host := HostBoom.new()
+	var api := StopeBasicVM.Api.new()
+	# 分派表是稠密 Array，下标即编号 ⇒ 长度必须 >= 编号 + 1
+	api.op_map.resize(first + 1)
+	api.op_map[first] = host.boom
+
+	var s := StopeBasicVM.State.new()
+	s.reset(api, prog, NoArgs.new())
+	rep.check('V-05', 'run 返回', 'false', str(s.run()))
+	rep.check('V-05', '错误条数', '1', str(s.errors.size()))
+	rep.check('V-05', '错误全文', str('0 Custom', first, ': boom. '), _join(s.errors))
 
 static func _paths(rep:StopeTestUtil.Report, id:String, src:String, check_steps:bool) -> void:
 	var prog := _build(src)
@@ -87,12 +119,16 @@ static func _inst_count(prog:StopeProgram.Program) -> int:
 	return n
 
 static func _build(src:String) -> StopeProgram.Program:
+	return _build_with(src, null)
+
+# cfg 同时交给 Parser 与 Compiler（少给一处，自定义指令就会被当成普通函数调用）
+static func _build_with(src:String, cfg:StopeOpcode.CustomOpcodeConfig) -> StopeProgram.Program:
 	var lx := StopeLexer.Lexer.new(src)
-	var ps := StopeParser.Parser.new(lx)
+	var ps := StopeParser.Parser.new(lx, cfg)
 	var ast := StopeAst.Prog.new()
 	ps.parse_program(ast)
 	if not ps.errors.is_empty(): return null
-	var c := StopeCompiler.Compiler.new()
+	var c := StopeCompiler.Compiler.new(cfg)
 	var out := StopeProgram.Program.new()
 	if c.compile(ast, out) != StopeResult.Success: return null
 	return out

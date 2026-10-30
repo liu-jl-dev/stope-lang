@@ -140,8 +140,8 @@ struct Parser {
 | **PD-11b** ❌未修 | `();` | 空括号不支持；`parseParenExpr` 留着 `// 不必 nextToken() ？` 自问注释 | 明确支持或明确报错 |
 | **PD-12** | 正确路径 `new == delete`（配平）；**但每发出 1 条 error，`delete` 就比 `new` 多 1**。实测：`a;` → 4/4；`break x;` → 5/6；`break x; break y;`（同行去重成 1 条）→ 7/8；分两行 2 条 → 8/10 | 不配平，方向是 delete > new（不是 AST 节点泄漏） | **根因已定位（2026-10-16 实测隔离）**：不在 parser，而在 `error()` 的 `std::stringstream` + `vector::emplace_back` 惯用法 —— 该工具链上 stringstream 的内部分配不经过可替换的全局 `operator new`（重载 `new`/`new[]` 都看不到），释放却走 `operator delete(void*, size_t)`，于是每次 error 多计一次 delete。**不是双重释放**（指针唯一、进程干净退出、AST 侧完全配平）。改用 `std::to_string` 拼接实测可配平。测量方法本身的坑见 §10 第 5 条 |
 | **PD-18** ❌待定（2026-10-16 从 PD-7 拆出） | `-2 ^ 2;` → `Pow(Unary(-, 2), 2)`，即一元 `-` 优先级**高于** `^` | 不是结合性问题（`^` 结合性已定，见 PD-7），而是"一元 `-` 与 `^` 谁先结合"。多数语言（Python）是 `-(2^2)`，但也有语言（Excel）是 `(-2)^2`。参考实现与本实现一致 | 项目定夺后：若改为 `-(2^2)`，则 `parseUnaryExpr` 的操作数要用低于 `Pow` 的优先级解析；若维持现状则把 P-07 的 `KNOWN` 删掉、记为有意行为 |
-| **PD-13** | 递归无深度上限，默认 8 MB 栈实测阈值：`((((a))))` 11000 OK / 12000 **解析阶段**崩；`{{{{a;}}}}` 4000 OK / 5000 **析构阶段**崩；`a[a[a[0]]]` 3000 OK / 5000 **析构阶段**崩。256 MB 栈下 10 万层正常 | 恶意/病态输入可致栈溢出崩溃 | 加深度上限 + 报错，或改用显式栈。崩在解析还是析构由 `test_parser_depth` 的 `PARSE-OK` / `DESTROY-OK` 两段输出区分 |
-| **PD-13b** | **析构同样递归**：`----a` 9000 层解析成功且析构成功；10000 层解析成功、但 `AST::Prog` 析构时崩。块 5000 / 索引 5000 同样是"解析 OK、析构崩" | 即使解析通过，销毁 AST 也会崩 | 同 PD-13。注意：这使"解析成功"不足以作为安全判据，测试必须包含析构 |
+| **PD-13** | 递归无深度上限，默认 8 MB 栈实测阈值：`((((a))))` 11000 OK / 12000 **解析阶段**崩；`{{{{a;}}}}` 4000 OK / 5000 **析构阶段**崩；`a[a[a[0]]]` 3000 OK / 5000 **析构阶段**崩。256 MB 栈下 10 万层正常 | 恶意/病态输入可致栈溢出崩溃 | ✅ **2026-10-30 已修**：加 `Parser::maxDepth`（默认 256），超限报 `nesting too deep (max 256). ` 并停止递归。上面这些阈值是加限额前的实测，留作历史 |
+| **PD-13b** | **析构同样递归**：`----a` 9000 层解析成功且析构成功；10000 层解析成功、但 `AST::Prog` 析构时崩。块 5000 / 索引 5000 同样是"解析 OK、析构崩" | 即使解析通过，销毁 AST 也会崩 | ✅ **2026-10-30 随 PD-13 一并解决**：AST 深度不会超过 `maxDepth`，析构链自然有界。教训仍然成立 —— 判"解析安全"必须包含析构（`test_parser_depth` 的 `DESTROY-OK` 那一段就是为此保留的） |
 
 ### 3.4 P3 —— 接口与一致性
 
@@ -187,8 +187,9 @@ struct Parser {
   未注册标识符 `other(1)` 走普通 `Call`；`customOpcodeConfig == nullptr` 时全部走 `Ident` 路径。
 - 全前缀截断：11 组合法程序 × 全部前缀 = **166 个截断用例，0 挂起、0 崩溃、0 异常**（`test_parser_flow.cpp` B-01）。
 - 内存：8 个正确路径用例 `new == delete` **完全配平**（`virtual ~Node()` 生效，见 `../../docs/zh-cn/syntax-impl.md` §7.1）。
-- 深嵌套（8 MB 栈）：括号 11000 / 块 4000 / 一元 9000 / 索引 3000 以内解析+析构均成功；
-  括号 12000 解析阶段崩；块 5000 / 一元 10000 / 索引 5000 解析成功但**析构阶段崩**。
+- 深嵌套：`Parser::maxDepth` 默认 **256 层**，超限报 `nesting too deep (max 256). ` 并停止
+  解析 —— 不再有栈溢出。限额前 8 MB 栈的崩溃阈值（括号 12000 / 块 5000 / 一元 10000 /
+  索引 5000）见 PD-13/PD-13b，留作历史。
 
 ---
 
@@ -221,13 +222,13 @@ cpp/
    ├─ test_parser_custom.cpp       # K 自定义指令（K-01…K-11）
    ├─ test_parser_flow.cpp         # L 行号 / R 错误恢复 / B 健壮性与内存
    ├─ test_parser_fold.cpp         # O 常量折叠（O-01…O-37，parser 已接入折叠后新增）
-   ├─ test_parser_depth.cpp        # 深嵌套探测（独立进程，B-03…B-06）
-   └─ run_depth.cmake              # 深嵌套的 ctest 包装器（把"崩"翻译成符合预期）
+   └─ test_parser_depth.cpp        # 嵌套深度上限（独立进程，B-02…B-04）
 ```
 
-> **为什么不并进 `test_lexer`**：深嵌套用例（PD-13/PD-13b）会真的栈溢出崩溃，一个二进制里
-> 崩了会连带 lexer 的结论全部看不到。独立 `test_parser` 目标能让 `ctest` 分别报告成败；
-> 崩溃阈值由 `test_parser_depth` 以独立进程跑，`run_depth.cmake` 用 `EXPECT=crash/ok` 登记。
+> **为什么不并进 `test_lexer`**：深嵌套用例要构造上万 token 的输入，一个二进制里跑崩了会连带
+> lexer 的结论全部看不到；独立 `test_parser` / `test_parser_depth` 能让 `ctest` 分别报告成败。
+> 加 `maxDepth` 之前这几条是真的栈溢出崩溃点（PD-13/PD-13b），现在不崩了，但「超限后是否
+> 干净地停」仍值得独立验证。
 
 ### 4.2 `test_common.hpp` 增量扩展
 
@@ -303,7 +304,7 @@ add_test(NAME parser COMMAND test_parser)
 set_tests_properties(parser PROPERTIES TIMEOUT 120)   # 死循环兜底，见 §10 第 3 条
 
 add_executable(test_parser_depth test/test_parser_depth.cpp)
-# 8 组深度用例由 run_depth.cmake 包装（EXPECT=ok/crash），见 §5.8
+# 9 组深度用例：目标名就是判据（ok / deep 由二进制自己断言），见 §5.8
 ```
 
 - `test_lexer` 目标保持不动。
@@ -320,7 +321,7 @@ ID 前缀：`S` 语句 / `X` 表达式 / `P` 优先级 / `F` 后缀与前缀 / `
 `R` 错误恢复 / `B` 健壮性与内存。共 129 个用例（S45 + X13 + P20 + F18 + K12 + L5 + R7 + B10；
 其中 K-12 是 PD-3 的绕坑对照，故 K 组计 12 个）。
 测试代码全部落地于 `cpp/test/`，计划文档统一收在 `cpp/docs/`；`ctest` 全绿
-（当前 12 项：lexer + parser + compiler + ast_visitor + 8 组深嵌套）。
+（当前 15 项：lexer + parser + compiler + stml + ast_visitor + vm + 9 组深度用例）。
 
 ### 5.1 语句层（test_parser_stmt.cpp，S-01…S-45）
 
@@ -492,11 +493,12 @@ ID 前缀：`S` 语句 / `X` 表达式 / `P` 优先级 / `F` 后缀与前缀 / `
 | ID | 场景 | 预期 | 性质 |
 | --- | --- | --- | --- |
 | B-01 | 11 组合法程序 × 全部前缀（实测 166 个） | 0 挂起、0 崩溃、0 异常；语句数 ≤ 前缀长度 | OK（硬性） |
-| B-02 | `((((a))))` 10000 层 | 解析 + 析构均成功 | OK |
-| B-03 | `((((a))))` 11000 / 12000 层 | 11000 解析+析构 OK；12000 **解析阶段崩** | KNOWN(PD-13) |
-| B-04 | `{{{{a;}}}}` 4000 / 5000 层 | 4000 OK；5000 **解析 OK、析构崩** | KNOWN(PD-13b) |
-| B-05 | `----a` 9000 / 10000 层 | 9000 解析+析构均 OK；10000 **解析 OK、析构崩** | KNOWN(PD-13b) |
-| B-06 | `a[a[a[0]]]` 3000 / 5000 层 | 3000 OK；5000 **解析 OK、析构崩** | KNOWN(PD-13b) |
+| B-02 | `((((a))))` 10000 层 | 报 1 条 `nesting too deep (max 256). `，解析+析构都不崩 | OK（2026-10-30 限额后） |
+| B-02b | `((((a))))` 200 层 | 限额内照常解析：1 条 `ExprStmt(Ident(a))`、0 错误 | OK |
+| B-03 | `((((a))))` 11000 / 12000 层 | 同 B-02（限额前 12000 崩在解析阶段） | OK |
+| B-04 | `{{{{a;}}}}` 4000 / 5000 层 | 同 B-02（限额前 5000 崩在析构阶段） | OK |
+| B-05 | `----a` 9000 / 10000 层 | 同 B-02（无限额时这类递归**没有括号**，只数括号挡不住） | OK |
+| B-06 | `a[a[a[0]]]` 3000 / 5000 层 | 同 B-02 | OK |
 | B-07 | 正确路径 8 例（`return 1,2;`、`f(g(1),2)[3];`、if/elif/else、`while{let x,y;}`、`a[0]=f(1,2);`、`'x ff 0a';` 等） | `new == delete` 配平 | OK |
 | B-08 | 有 error 的输入（`break x;`、`a = ;`、`'x zz';`） | `delete = new + error条数` | KNOWN(PD-12) |
 | B-09 | 同一个 `Lexer` / `Parser` 复用跑第二条输入 | 明确不支持，只断言"不崩" | OK（记录） |
@@ -599,8 +601,8 @@ parser 侧只锁定「哪些 AST 会被折、折成什么」；**每一格的语
 cd cpp
 cmake -B build
 cmake --build build
-ctest --test-dir build --output-on-failure     # 10 个用例全过（1 个主包 + 1 个 lexer + 8 个深度探测）
-./build/test_parser.exe                           # 626 断言 / 16 KNOWN / PASSED
+ctest --test-dir build --output-on-failure     # 15 个用例全过（6 个模块 + 9 个深度用例）
+./build/test_parser.exe                           # 708 断言 / 16 KNOWN / PASSED
 ```
 
 MinGW 环境下若 make 报错（源码路径含非 ASCII 字符时 `mingw32-make` 无法处理），
@@ -618,11 +620,13 @@ g++ -std=c++20 -Wall -Wextra -I stope -o build/test_parser.exe \
 退出码约定（与 lexer 一致）：`0`=全部通过；`1`=有 `OK` 用例失败；
 `2`=有 `FIXED-PENDING-FLIP`（提醒翻转）。
 
-**深嵌套用例必须单独编译/单独跑**：PD-13 会真的崩，不能放在主流程里连带后面的用例。
-实际形态：`test/test_parser_depth.cpp` 是独立 main（`test_parser_depth <paren|block|unary|at> <depth>`，
-分两段打印 `PARSE-OK`/`DESTROY-OK` 以区分 PD-13 与 PD-13b）；`CMakeLists.txt` 用
-`run_depth.cmake` 包装器注册 8 组 ctest（`EXPECT=crash/ok` 显式登记预期崩溃，
-绕过 ctest `WILL_FAIL` 不反转"段错误"判定的问题）。主二进制只跑 B-01/B-07…B-10。
+**深嵌套用例单独编译/单独跑**：`test/test_parser_depth.cpp` 是独立 main，
+`test_parser_depth <paren|block|unary|at> <depth> <ok|deep>`，分两段打印
+`PARSE-OK` / `DESTROY-OK`（历史上这两段用来区分崩在解析还是崩在析构，PD-13/PD-13b）。
+
+判据在二进制里，不在 CMake 里：`ok` 要求 **0 条**错误，`deep` 要求**恰好 1 条**且含
+`nesting too deep`。`CMakeLists.txt` 直接注册 9 组 `add_test`，不需要包装器（不再有崩溃要
+"翻译"）。主二进制只跑 B-01/B-07…B-10。
 
 ---
 
@@ -639,8 +643,8 @@ g++ -std=c++20 -Wall -Wextra -I stope -o build/test_parser.exe \
 | M7 | B 健壮性与内存用例（B-01…B-10，含独立进程的深度探测） | ✅ 2026-10-16 完成 |
 | M8 | 修复剩余 PD 并翻转断言 | ⏳ 进行中（PD-1/PD-2/PD-3/PD-4/PD-4b/PD-4c/PD-4d/PD-5/PD-6/PD-11/PD-16/PD-17 已修并翻转，PD-7 已定夺、PD-18 拆出待定；PD-8/PD-9/PD-10/PD-11b/PD-12/PD-13/PD-13b/PD-14/PD-15/PD-18 待修或待定） |
 
-**本轮总验收**：`ctest --test-dir build` **10/10 通过**；`test_parser.exe`
-626 断言 / 0 失败 / 16 KNOWN / 0 待翻转，`RESULT: PASSED`；lexer 未回归
+**本轮总验收**：`ctest --test-dir build` **15/15 通过**；`test_parser.exe`
+708 断言 / 0 失败 / 16 KNOWN / 0 待翻转，`RESULT: PASSED`；lexer 未回归
 （292 断言 / 0 失败）。
 
 ---
@@ -684,9 +688,11 @@ g++ -std=c++20 -Wall -Wextra -I stope -o build/test_parser.exe \
 7b. **`parseProg` 带 `isTopLevel` 上下文**：顶层（`ParseProgram`）与块内（block/if/elif/else/while）
    对 `}` 的处理不同——前者报错并跳过，后者直接结束并交给外层消费。新增任何 prog 解析入口时
    必须显式传这个参数，默认值容易埋雷。
-8. **ctest 对"被信号杀死"的处理**：段错误时 ctest 报 Exception/SegFault，`WILL_FAIL` 只反转
-   "退出码"判定、不反转"崩溃"判定 → 深度用例统一走 `run_depth.cmake` 包装器，
-   由 `EXPECT` 字段显式登记"这里就该崩"。
+8. **深度用例不再依赖栈容量**（2026-10-30）：B-02…B-04 改由 `Parser::maxDepth`（默认 256）
+   兜住 —— 超限报错、不崩，所以 `run_depth.cmake` 那套「把崩溃翻译成预期」的包装器已删除，
+   `CMAKE_BUILD_TYPE` 也不再影响这几条用例。**改计数口径必须两侧同步**：`depth` 只在
+   `parseExpr` / `parseProg` 两个递归入口 +1，线性下降（`parseProg → parseLetStmt → parseExpr`）
+   原值传递，否则 `let a = 1;` 这类平铺代码会凭空吃掉好几层额度。
 9. **与 GDScript 参考实现的语义差异**：本计划以"参考实现为准"标注期望（如 custom 参数表、
    错误不去重）。若项目决定采用 C++ 侧的宽松语义，需回来把对应 `KNOWN` 改成 `OK`
    并记录在本文档 §2.2。**项目已定夺的两条**：① `^` 为**右结合**（PD-7，

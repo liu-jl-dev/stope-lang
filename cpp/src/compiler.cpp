@@ -282,6 +282,10 @@ void Compiler::onVisitWhileStmt(AST::WhileStmt* s) {
 }
 
 void Compiler::onVisitAssignStmt(AST::AssignStmt* s) {
+  // 解析因「嵌套太深」中止时，子表达式可能为空（Parser 已把错误记进 errors，
+  // 调用方见错就不该再 Compile）。这里只兜住崩溃，不做语义修正。
+  if (s == nullptr || s->leftExpr == nullptr)
+    return;
   if (s->leftExpr->type == AST::NodeType::IdentExpr) {
     AST::IdentExpr& e = *static_cast<AST::IdentExpr*>(s->leftExpr.get());
     BlockScope* host = findIdentHost(e.ident);

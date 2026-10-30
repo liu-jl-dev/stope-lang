@@ -296,7 +296,8 @@ void nextToken() { curTokenIdx = (curTokenIdx + 1) % 2;
 但 `^` 自 2026-10-22 改为右结合后，`a^a^a^…` **每级一个 `parseExpr` 递归**（阈值降一级，
 同级的 `^` 会进右侧子树），与嵌套括号一样吃栈——PD-13 的风险面多了一种形态。
 
-**当前没有深度上限**（PD-13）。8 MB 栈实测阈值：
+**上限 256 层**（`Parser::maxDepth`，2026-10-30）：超限报 `nesting too deep (max 256). `
+并停止递归，不再有栈溢出。下面是加限额之前 8 MB 栈的实测阈值，留作历史（PD-13/PD-13b）：
 
 | 形态 | 通过 | 崩溃 |
 | --- | --- | --- |
@@ -306,6 +307,8 @@ void nextToken() { curTokenIdx = (curTokenIdx + 1) % 2;
 | 索引 `a[a[...]]` | 3000 层 | 5000 层（**析构阶段**崩） |
 
 析构崩溃（PD-13b）容易漏：隐式析构链 `~Prog → ~BlockStmt → ~Prog` 同样递归，且**没有代码可改**。
+现在被同一个上限连带挡住 —— AST 深度不超过 256，析构链自然有界；`test_parser_depth` 的
+`DESTROY-OK` 那一段仍然保留，用来确认「解析成功」之外析构也走完了。
 修 PD-13 的推荐做法是给这两个入口加 RAII 深度守卫（上限建议 1000），AST 深度被限制后析构自然安全。
 
 ---
@@ -677,15 +680,15 @@ ctest --test-dir build                 # 10/10
 
 产物直接落在 `cpp/build/`（不是 `build/test/`）。
 
-**深嵌套用例必须独立进程跑**（PD-13 会真崩）：
+**深嵌套用例单独进程跑**（要构造 12000 层的输入）：
 
 ```bash
-./build/test_parser_depth.exe <paren|block|unary|at> <depth>
+./build/test_parser_depth.exe <paren|block|unary|at> <depth> <ok|deep>
 ```
 
-ctest 经 `cpp/test/run_depth.cmake` 包装，用 `EXPECT=crash|ok` 登记（`WILL_FAIL` 不反转
-段错误判定；MinGW 下崩溃进程的 `RESULT_VARIABLE` 是字符串 `"Stack overflow"`，包装器用正则
-`^-?[0-9]+$` 判别是否为数字退出码）。
+判据在二进制里：`ok` 要求 0 条错误，`deep` 要求恰好 1 条 `nesting too deep (max 256). `。
+限额来自 `Parser::maxDepth`（默认 256，0 = 不限），超限即停、不崩 —— 加限额之前这几条是真
+栈溢出点，现在 `CMAKE_BUILD_TYPE` 也不再影响结论。
 
 ### 11.2 退出码
 
@@ -699,9 +702,9 @@ ctest 经 `cpp/test/run_depth.cmake` 包装，用 `EXPECT=crash|ok` 登记（`WI
 
 | 项 | 值 |
 | --- | --- |
-| `test_parser` | 626 断言 / 0 失败 / 16 KNOWN / 0 待翻转 / PASSED |
+| `test_parser` | 708 断言 / 0 失败 / 16 KNOWN / 0 待翻转 / PASSED |
 | `test_lexer` | 292 断言 / 0 失败 / PASSED |
-| `ctest` | 10/10 |
+| `ctest` | 15/15 |
 | NodeType 覆盖 | 26/26（parser 用例实际产生的类型） |
 | 编译告警 | `parser.hpp` 在 `-Wall -Wextra` 下零告警；现存告警来自 `lexer.hpp` 的 `-Wsign-compare` |
 
@@ -718,7 +721,6 @@ ctest 经 `cpp/test/run_depth.cmake` 包装，用 `EXPECT=crash|ok` 登记（`WI
 | `test/test_parser_custom.cpp` | `K-01…K-12` 自定义指令 |
 | `test/test_parser_flow.cpp` | `L/R/B` 行号 / 错误恢复 / 健壮性与内存 |
 | `test/test_parser_depth.cpp` | 独立进程深度探针（打印 `PARSE-OK` / `DESTROY-OK` 两段） |
-| `test/run_depth.cmake` | ctest 包装器 |
 
 ---
 

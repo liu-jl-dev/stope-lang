@@ -110,12 +110,12 @@ STML 可以用来管理相互调用的 Stope 程序，或实现面向对象等�
 | 定位      | **权威实现**                 | 参考实现（逐项按 C++ 对齐）                |
 | 布局      | Pitchfork Layout（编译型静态库） | Godot 工程，以 `addons/stope/` 插件分发 |
 | 标准 / 依赖 | C++20，零第三方依赖             | Godot 4（实测 4.7.2），零第三方插件         |
-| 测试      | ctest 14 组，1503 条断言全绿    | 3076 条断言全绿                      |
+| 测试      | ctest 15 组，1505 条断言全绿    | 3090 条断言全绿                      |
 
 两侧出现分歧时**以 C++ 的实测行为为准**，差异登记在对应测试计划的 §7。
 
 > **`gdscript/` 是参考实现，不是第二套标准。** 词法 / 语法 / 编译器 / STML 四块已与 C++
-> 逐项对齐 —— 期望值全部由 C++ 探针 dump，3076 条断言全绿（STML 那 121 条用例两侧跑的是
+> 逐项对齐 —— 期望值全部由 C++ 探针 dump，3090 条断言全绿（STML 那 121 条用例两侧跑的是
 > **同一份清单** `gdscript/test/data/stml_cases.txt`）；残留的两条差异见
 > [stml-test-plan.md](docs/zh-cn/stml-test-plan.md) §7 的 GD-S-17/18。参考执行器
 > `basic_vm.gd` 与 C++ 侧一样**不属于规范**。安装与用法见
@@ -193,8 +193,9 @@ cmake --build build --target gen-golden   # 重生成 GDScript 侧的期望值�
 
 - 删过 `build/` 后**必须**显式写 `-G "MinGW Makefiles"`，否则 CMake 会误选 Visual Studio  
   并报 `No CMAKE_CXX_COMPILER could be found`。
-- **不要加 `-DCMAKE_BUILD_TYPE=Release`**。优化后栈帧变小，8 组 `parser-depth-*`  
-  里有 4 组"应当栈溢出"的用例反而不崩，测试会失败。
+- 加不加 `-DCMAKE_BUILD_TYPE=Release` 都行：深度用例的判据是 `Parser::maxDepth`（默认
+  256 这个逻辑值），不依赖栈容量。（加限额之前必须跑无优化构建 —— 那 4 组"应当崩溃"的
+  用例在优化后不会崩。）
 
 更多（含"源码编译失败时 ctest 仍报全绿"这类陷阱）见  
 [cpp/docs/development.md](cpp/docs/development.md)。
@@ -212,7 +213,7 @@ godot --headless --path gdscript res://demo/demo_02.tscn
 godot --headless --path gdscript res://demo/demo_03.tscn
 ```
 
-第一条跑 3076 条断言（词法 / 语法 / 编译器 / STML / 执行器五组，前四组对齐 C++）；三个 demo 与 `cpp/demo/` 下的
+第一条跑 3090 条断言（词法 / 语法 / 编译器 / STML / 执行器五组，前四组对齐 C++）；三个 demo 与 `cpp/demo/` 下的
 `0N-*.cpp` 一一对应
 （`01` 编译+运行 / `02` STML 解析 / `03` 自定义指令）。
 更多见 [gdscript/docs/testing.md](gdscript/docs/testing.md)。
@@ -236,6 +237,7 @@ godot --headless --path gdscript res://demo/demo_03.tscn
 | 自己实现一个虚拟机       | [docs/zh-cn/vm-guide.md](docs/zh-cn/vm-guide.md)                 |
 | GDScript 实现与插件安装 | [gdscript/docs/README.md](gdscript/docs/README.md)               |
 | GDScript API 用法   | [gdscript/docs/usage.md](gdscript/docs/usage.md)                 |
+| GDScript 报错排查（按阶段查文案） | [gdscript/docs/troubleshooting.md](gdscript/docs/troubleshooting.md) |
 | GDScript 测试与数据重生成 | [gdscript/docs/testing.md](gdscript/docs/testing.md)             |
 | GDScript 语言坑与代码约定 | [gdscript/docs/gdscript-notes.md](gdscript/docs/gdscript-notes.md) |
 | C++ 侧实现笔记（改 `cpp/` 前看） | [cpp/docs/development.md](cpp/docs/development.md)             |

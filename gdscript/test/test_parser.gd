@@ -13,6 +13,7 @@ const GOLDEN_BINARR := 'res://test/data/golden_binarr.txt'
 static func run(rep:StopeTestUtil.Report) -> void:
 	_run_source_cases(rep)
 	_run_binarr_cases(rep)
+	_run_depth_cases(rep)
 
 # ---------------- 1. 源码 -> AST ----------------
 static func _run_source_cases(rep:StopeTestUtil.Report) -> void:
@@ -171,3 +172,33 @@ static func _val(e) -> String:
 		StopeAst.NodeType.BinArrExpr: return str('[', StopeAst.fmt_bytes(e.value), ']')
 		StopeAst.NodeType.StringExpr: return str('"', e.value, '"')
 	return "?"
+
+# ---------------- 3. 嵌套深度上限（PD-DEPTH）----------------
+# 期望值不 dump：限额与错误文案是**两侧约定**（C++ Parser::maxDepth 与 GD
+# max_depth 同为 256，文案逐字相同），所以这里按约定写死；C++ 侧由
+# cpp/test/test_parser_depth.cpp 断言同一组深度。任一侧改了计数口径或文案，
+# 两边都会红。
+static func _run_depth_cases(rep:StopeTestUtil.Report) -> void:
+	_depth_case(rep, 'PD-DEPTH-1', 'paren', 200, false)  # 限额内：照常解析
+	_depth_case(rep, 'PD-DEPTH-2', 'paren', 300, true)
+	_depth_case(rep, 'PD-DEPTH-3', 'block', 300, true)
+	_depth_case(rep, 'PD-DEPTH-4', 'unary', 300, true)   # 没有括号的递归
+	_depth_case(rep, 'PD-DEPTH-5', 'at', 300, true)
+	_depth_case(rep, 'PD-DEPTH-6', 'paren', 12000, true)  # 曾真的栈溢出
+
+static func _depth_case(rep:StopeTestUtil.Report, id:String, kind:String, n:int,
+		deep:bool) -> void:
+	var src := ''
+	match kind:
+		'paren': src = '('.repeat(n) + 'a' + ')'.repeat(n) + ';'
+		'block': src = '{'.repeat(n) + 'a;' + '}'.repeat(n)
+		'unary': src = '-'.repeat(n) + 'a;'
+		'at': src = 'a['.repeat(n) + '0' + ']'.repeat(n) + ';'
+	var lx := StopeLexer.Lexer.new(src)
+	var ps := StopeParser.Parser.new(lx)
+	var prog := StopeAst.Prog.new()
+	ps.parse_program(prog)
+	rep.check(id, '错误条数', '1' if deep else '0', str(ps.errors.size()))
+	if deep:
+		rep.check(id, '错误文案', 'line 1: nesting too deep (max 256). ',
+			ps.errors[0] if ps.errors.size() > 0 else '（无错误）')
