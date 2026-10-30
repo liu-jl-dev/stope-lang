@@ -340,6 +340,9 @@ warning（`builtin decoding wins`），因为 `opcodes` 是 int 混排，运行�
 
 ## 7. 自定义指令
 
+> 分步教程（登记 → 编译 → 反汇编 → **怎么真的执行**）见 [`custom-opcode.md`](custom-opcode.md)；
+> 本节只列 API 与硬约束。
+
 ```gdscript
 var cfg := StopeOpcode.CustomOpcodeConfig.new()
 cfg.add_custom_opcode("myop", 100, 2)		# 定长 2 个参数
@@ -383,8 +386,8 @@ var compiler := StopeCompiler.Compiler.new(cfg)
 class Host:
 	# my:add：弹 2 个、压 1 个。s.i 已经指着这条指令本身
 	func my_add(s:StopeBasicVM.State) -> void:
-		var b = s._pop_and_get_value()
-		var a = s._pop_and_get_value()
+		var b = s.stack.pop_back()	# 栈上一定是值：读变量走 PushValue
+		var a = s.stack.pop_back()
 		s.stack.push_back(a + b)
 
 var host := Host.new()
@@ -440,7 +443,10 @@ var folded := StopeExprOptim.optimize(expr)	# 折了就返回新节点，没折�
 
 ## 9. 参考执行器：`StopeBasicVM`
 
-**这不是标准。** 它只用来验证 `Program` 能跑，接口随时可能变；自己写执行器请照
+**这不是标准，是内置的基础虚拟机。** 它只用来验证 `Program` 能跑，接口随时可能变。
+能力边界：**不支持自定义指令**（`op_map` 默认 33 格，怎么自己扩见 §7.1）、
+**不支持自定义数据类型**（值只有 `null` / 整数 / 浮点 / 字符串 / 二进制数组 / `Callable`，
+布尔用整数表示）。自己写执行器请照
 [`docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)。
 
 ```gdscript
@@ -492,13 +498,12 @@ print(state.returns)
 | 操作数 | `s.i` 已指着这条指令，**先 `s.i += 1` 再读** `s.program.opcodes[s.i]`；循环末尾还会统一 `+1`，别自己多推 |
 | 栈效果 | 参数已按从左到右压好；结果压回栈顶、占 **1 格**；自定义指令**没有 callee 入栈**（编译器 `dec(参数个数 - 1)` 就是这条） |
 | 变长指令 | 流里在参数之后多一个「实参个数」操作数，先读它 |
-| 取值 | 用 `s._pop_and_get_value()` 弹栈并自动解引用 `Identifier`；直接读 `s.stack[-1]` 可能拿到槽位引用 |
+| 取值 | 直接 `s.stack.pop_back()` —— 栈上**一定是值**（读变量走 `PushValue`），不需要也不该解引用 |
 | 报错 | `s.error(msg)`（等价于 `s._error(msg)`）：写进 `errors`，`run` / `step` 立刻停 |
 | 跳转 | 改 `s.i` 时目标要 `-1`（末尾还有 `+1`）；`Return` 的做法是把 `s.i` 拨到 `len(opcodes)` |
 
-`Api.op_map` 里那 33 个 `_xxx` 就是按这套写的，可以直接当模板。`_pop_and_get_value()` /
-`_error()` 虽然带下划线，但 GDScript 没有访问控制，处理函数里直接调就是 —— 下划线只是
-「内部用」的约定。
+`Api.op_map` 里那 33 个 `_xxx` 就是按这套写的，可以直接当模板。`_error()` 虽然带下划线，
+但 GDScript 没有访问控制，处理函数里直接调就是 —— 下划线只是「内部用」的约定。
 
 `step()` 与 `run()` 是**两份独立实现**，`run()` 不在循环里调 `step()`（热循环里每条指令
 多一次函数调用，GDScript 下是实打实的开销）。代价是改步进规则要同时改两处 ——
@@ -529,14 +534,14 @@ state.variables[program.exports["fmt:println"]] = Callable(host, "println")
 
 | 点 | GD 侧 |
 | --- | --- |
-| `Identifier` 包装 | 有（`StopeBasicVM.Identifier`），`PushId` 压它，`Assign` 靠它取槽位 |
+| 错误串格式 | `"3 Add: msg"`（**带指令名**）；C++ 是 `"3: msg"`。下标相同、格式不同，跨实现比对只看消息部分 |
+| `Identifier` 包装 | 有（`StopeBasicVM.Identifier`），但**只有 `PushId` 造它、只有 `Assign` 读它** —— 其它指令不做防御性解引用（与 C++ 一致；拿到它说明编译器产物错了） |
 | `At` 的 key 数 | 只支持 1 个，其它报 `no implement for key num != 1. ` |
-| `At` 的容器 | 只支持 `PackedByteArray` 与 `String`；取字符串给的是**码点**（`unicode_at`） |
-| `-true`、`true + 1`、`"ab" * 3` | **报错**：`_minus` / `_add` / `_mul` 只接受数值（GDScript 里 `bool` 不是 `int`）。常量折叠已按 C++ 规则折成 `Int(-1)` / `Int(2)` / `String(ababab)`，所以字面量形态看不出来；变量形态（`let x = true; -x;`）会撞上 |
-| 整数除零 | 引擎级 `SCRIPT ERROR`，**当前函数直接中断**、`errors` 里看不到（`_div` 先做 `a % b`，所以 `1 / 0` 同样会撞） |
+| `At` 的容器 | 只支持 `PackedByteArray` 与 `String`；取字符串给的是**码点**（`unicode_at`），C++ 给的是 UTF-16 码元 —— 非 BMP 字符上会不同 |
+| `==` 两侧类型不同 | 执行器自己实现 `_equals`（同类型才比、整数与浮点互通、其余不等）。**不能直接用 Godot 的 `==`**：`"1" == 1` 会抛引擎级错误，且 `_store` 不执行 —— 栈没动、`errors` 也没有，`run()` 照常往下跑 |
 
-前两条是刻意保留的简化：它只是参考实现，`vm-guide.md` 是给自写执行器看的。
-第四条是与 C++ 的**真实差异**，登记在 [`cpp/docs/expr-optim.md`](../../cpp/docs/expr-optim.md) §7。
+前两条只是这份实现自己的选择（错误格式、内部表示），换执行器可以完全不同；后两条是真的能力边界。
+自写执行器见 [`docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)。
 
 ---
 
@@ -589,7 +594,7 @@ print(p.errors, lx.errors)                    # 两边不合并，都要看
 
 剩下的两条差异（遍历顺序、非 BMP 字符）登记在
 [`docs/zh-cn/stml-test-plan.md`](../../docs/zh-cn/stml-test-plan.md) §7 的 GD-S-17/18。
-完整的 STML 语义看 [`cpp/docs/stml.md`](../../cpp/docs/stml.md) 与
-[`docs/zh-cn/stml-test-plan.md`](../../docs/zh-cn/stml-test-plan.md)。
+**分步教程**见 [`stml.md`](stml.md)（回调 → 解析 → 读树 + 可跑骨架）；
+语义权威是 [`cpp/docs/stml.md`](../../cpp/docs/stml.md)（含 12 条语法坑）。
 
 可运行的例子见 `demo/demo_02.gd`（对着 `cpp/demo/02-stml.cpp` 写的，回调逐条对应）。

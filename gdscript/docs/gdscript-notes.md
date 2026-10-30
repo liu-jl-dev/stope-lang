@@ -35,7 +35,8 @@ func a() -> void:
 
 这条在写 VM 时尤其要命：错误发生在 `run()` 里，`run()` 返回 `false` 但 `errors` 是空的
 （错误没走 `state.error`），宿主看到「返回失败 + 无错误」两头对不上。
-所以分派表越界、`null` Callable、整数除零这类都得自己**提前判**，不能指望它抛出。
+所以分派表越界、`null` Callable 这类都得自己**提前判**，不能指望它抛出
+（整数除零同理：`basic_vm.gd` 的 `_check_int_zero` 就是提前判，判完才敢除）。
 详见 [`troubleshooting.md`](troubleshooting.md) §6。
 
 ### 1.2 整数是 64 位有符号，溢出静默回绕

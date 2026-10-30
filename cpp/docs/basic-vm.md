@@ -61,6 +61,24 @@ Result State::Run() {           // 复用 Step：header-only + 隐式 inline，�
 `test/test_vm.cpp` 的 V-31…V-34 把两条驱动路径钉在一起：同一份源码，`Run()` 一次跑完
 vs `Step()` 逐条走到停机，停机位置、错误、返回值必须一致。
 
+### 1.1 能力边界：这是一台基础虚拟机
+
+`BasicVM` 的定位是**基础虚拟机** —— 能跑通编译器产物的最小实现，外加一份宿主接入的样板。
+它不追求完整，也不打算成为「标准 VM」，边界如下：
+
+| 支持 | 不支持 |
+| --- | --- |
+| 33 条内置指令（`Assign` … `Return`） | **自定义指令**。`API::opFuncs` 是 `static std::array<OpFunc, kOpCount>`，`kOpCount = (int)Opcode::Return + 1 = 33`，**定长、加不进去**；`State::Step()` 直接 `opFuncs[opcode]` 下标取，产物里出现 ≥ 33 的编号就是**数组越界（未定义行为）** |
+| 变量槽、栈、`exports`、宿主函数、`argc` / `args[i]`、`Step()` 单步 | **自定义数据类型**。`Value::Type` 只有 `Null` / `Integer` / `Float` / `BinArr` / `String` / `Identifier` / `HostFunction` 七种（`Identifier` 还是内部用的槽位标记，不出现在语言层面），布尔用 `Integer` 的 1 / 0 表示；没有对象、结构体、类，也没有注册新值类型的入口 |
+| 运行期错误的累积（`errors`）与立即终止 | 调试器、GC（只有字符串 / BinArr 的 refcount）、协程、异常 |
+
+语言层面唯一的扩展点是**宿主函数**（`Type::HostFunction`）：值仍然只是那七种之一，但它能
+桥到宿主任意类型（见 §5.1）。自定义指令则完全没有位置 —— 要执行，只能换一台执行器，
+或照 [`custom-opcode.md`](custom-opcode.md) §6 自己写分派。
+
+Stope **不规定虚拟机标准**，但**会维护**这一份：bug 会修、`Program` 演进时会同步、与
+GDScript / Node.js 两份保持语义一致。接口本身仍可能调整，别拿它当规范引用。
+
 ---
 
 ## 2. `Value`：句柄 + 引用计数

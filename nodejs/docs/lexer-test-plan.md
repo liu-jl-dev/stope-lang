@@ -19,7 +19,9 @@
 
 ### 1.2 非目标
 
-- 不测 parser / compiler（还没实现）。
+- 本文件只管 lexer。parser / compiler / 反汇编 / 执行器 / STML 各自有测试文件
+  （`test/parser.test.js`、`compiler.test.js`、`disasm.test.js`、`vm.test.js`、`stml.test.js`），
+  它们由 golden 数据驱动，见 `../README.md` §测试。
 - 不做性能基准，只有"不死循环、不崩"的健壮性下限（R 组）。
 - **不做与 C++ 的运行时交叉比对**：那需要编译 C++，是一次性动作，做法见 §6。
 

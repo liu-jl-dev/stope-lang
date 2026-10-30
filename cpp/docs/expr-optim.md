@@ -446,10 +446,10 @@ L1 提前于 L2 只是顺序选择：`t(null) == false`，所以含 null 的 `an
 
 | 行为 | 折叠器（两侧同一套） | C++ VM | GDScript 执行器 |
 | --- | --- | --- | --- |
-| `-true` | `Int(-1)` | `Int(-1)` ✔ | 报 `'Minus' can only numbers. ` ✗ |
-| `'x 41' + 'x 42'` | `BinArr(2B)` 字节连接 | `BinArr` 连接 ✔ | 报 `'Add' can only operate numbers or strings. ` ✗ |
-| `"ab" * 3`、`3 * "ab"` | `String(ababab)` 串重复 | 串重复 ✔ | 报 `'Mul' can only operate numbers. ` ✗ |
-| `true + 1`、`true + true` | `Int(2)`（bool 当 0/1） | `Int(2)` ✔ | 报错 ✗ |
+| `-true` | `Int(-1)` | `Int(-1)` ✔ | `Int(-1)` ✔ |
+| `'x 41' + 'x 42'` | `BinArr(2B)` 字节连接 | `BinArr` 连接 ✔ | `BinArr` 连接 ✔ |
+| `"ab" * 3`、`3 * "ab"` | `String(ababab)` 串重复 | 串重复 ✔ | 串重复 ✔ |
+| `true + 1`、`true + true` | `Int(2)`（bool 当 0/1） | `Int(2)` ✔ | `Int(2)` ✔ |
 
 **折叠器与 C++ VM 零差异**：2026-10-21 用两支探针把同一表达式写成
 「字面量」（走折叠）与「`let` 变量」（走运行期）各跑一遍，共 2953 组
@@ -457,12 +457,11 @@ L1 提前于 L2 只是顺序选择：`t(null) == false`，所以含 null 的 `an
 去掉错误信息里的行号后**逐条一致**。折叠器「不折叠」的那些情况只是把计算推给
 运行期，不改变结果（清单见 §5）。
 
-GDScript 执行器那一列的三处 ✗ 是**执行器没跟进**，不是编译器或折叠器的问题：
-`basic_vm.gd` 的 `_minus` / `_add` / `_mul` 仍只接受「数值」（GDScript 里 `bool`
-不是 `int`），所以写死的字面量会被折叠掉、看不见差异，而变量形态
-（`let x = true; -x;`）会报错。参考执行器本就不属于规范，见
-[`docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)；真要修就改 `basic_vm.gd`
-那三个函数，并同步 `gdscript/docs/usage.md` 的差异表。
+GDScript 执行器那一列曾经有三处 ✗（`basic_vm.gd` 的 `_minus` / `_add` / `_mul` 只接受
+「数值」，而 GDScript 里 `bool` 不是 `int`，所以变量形态的 `let x = true; -x;` 会报错）。
+2026-10-30 已修：布尔统一按整数 1 / 0 处理，`_minus` / `_add` / `_mul` 补齐了序列与
+二进制数组的分支，三份执行器在 47 组用例上逐条一致（值 + 错误消息）。
+参考执行器本就不属于规范，见 [`docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)。
 
 > 换后端时要重新核这张表：如果后端语义是「报错」，那么折叠掉一个本该报错的表达式就等于
 > 把错误吞掉了，两条路径会算出不同结果。改折叠规则时必须同时改执行器。

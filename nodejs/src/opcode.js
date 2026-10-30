@@ -70,4 +70,4 @@ class CustomOpcodeConfig {
   }
 }
 
-export { Opcode, CustomOpcode, CustomOpcodeConfig }
+export { Opcode, CustomOpcode, CustomOpcodeConfig, kFirstCustomOpcode }

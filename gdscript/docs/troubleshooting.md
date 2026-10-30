@@ -88,7 +88,8 @@
 | 文案 | 触发 | 怎么办 |
 | --- | --- | --- |
 | `"Call" can only call a function. ` | 被调的值不是 `Callable`（忘了把宿主函数填进变量槽） | `state.variables[program.exports['fmt:println']] = Callable(host, 'println')` |
-| `'Add' can only operate numbers or strings. ` | 变量形态的 `true + 1`（GDScript 里 `bool` 不是 `int`） | 折叠过的字面量看不出来；显式写 `int(x)` |
+| `"Div" division by zero. ` / `"IDiv" …` / `"Mod" …` | 整数除零（**两侧都是整数**才拦；任一侧是浮点走 IEEE，得 `inf` / `nan`） | 除法前自己判 0 —— 这类现在会进 `errors`，不再打断脚本 |
+| `"Add" can only operate on numbers, strings or bin arrays. ` | 两侧类型对不上（如 `1 + "a"`、`"a" + 1`） | Stope 不做隐式转换，显式转成同一类型 |
 | `index out of range. ` / `index must be integer. ` | `a[5]` 越界 / 下标不是整数 | 检查容器长度与下标类型 |
 | `no implement for key num != 1. ` / `no implement for container type. ` | 多维下标 / 对非容器取下标 | 参考实现的已知简化，见 [usage.md](usage.md) §9 |
 | `0 Assign: no implement. ` | `Assign` 左侧不是变量槽位 | 编译器产物不对，别在 VM 里兜底 |
@@ -102,7 +103,6 @@
 | --- | --- | --- |
 | `Out of bounds get index '33'` on `Array[Callable]` | `Api.op_map` 只有 33 项，没给自定义编号扩表 | `api.op_map.resize(编号 + 1)`，见 [usage.md](usage.md) §7.1 |
 | `Attempt to call function 'null::null (Callable)'` | 表扩了但那一格没填处理函数 | 33…N-1 全填成明确报错的 handler |
-| `Modulo by zero error in operator '%'.` | 整数除零（`_div` 先算 `a % b`，所以 `1 / 0` 也报这个） | 除法前自己判 0；这是引擎中断，不是 VM 错误 |
 | `ERROR: Stack underflow! (Engine Bug)` | 把 `max_depth` 调到 400+ 后跑深嵌套 | 保持默认 256 —— GD 每层吃 2 个栈帧，硬墙约 500 |
 | `Identifier "StopeLexer" not declared in the current scope` | 全局类缓存过期 | `godot --import`，见 [testing.md](testing.md) §1 |
 

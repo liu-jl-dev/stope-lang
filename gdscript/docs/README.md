@@ -7,7 +7,7 @@
 以 `cpp/include/stope/*.hpp` 的实测行为为准，差异登记在
 [`docs/zh-cn/*-test-plan.md`](../../docs/zh-cn/) 的 §7 里。
 
-当前状态（2026-10-30）：词法 / 语法 / 编译器 / STML / 执行器五组共 **3090 条断言全绿**，
+当前状态（2026-10-30）：词法 / 语法 / 编译器 / STML / 执行器五组共 **3153 条断言全绿**，
 期望值全部由 C++ 侧探针 dump，不是手写的 —— 但那些数据**已经入库**，所以跑测试只需要
 Godot，不需要 C++ 工具链。
 
@@ -44,9 +44,13 @@ Godot，不需要 C++ 工具链。
 
 ## 2. 不包含什么
 
-- **虚拟机不是标准。** `StopeBasicVM.State` / `Api` 只是**参考执行器**，用来证明编译器
-  产出的 `Program` 确实能跑。指令语义、栈布局、宿主函数约定都不属于规范 —— 换个执行器
-  完全可以。自写执行器见 [`docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)。
+- **虚拟机不是标准；内置的是一台「基础虚拟机」。** `StopeBasicVM.State` / `Api` 会被维护
+  （修 bug、与 C++ / Node.js 对齐），但指令语义、栈布局、宿主函数约定都不属于规范 ——
+  换个执行器完全可以。能力边界：**不支持自定义指令**（`Api.op_map` 默认只有 33 格，
+  跑 ≥ 33 的编号会 `Out of bounds get index`，要执行得自己扩表，见
+  [`custom-opcode.md`](custom-opcode.md) §6）、**不支持自定义数据类型**（值只有
+  `null` / 整数 / 浮点 / 字符串 / 二进制数组 / `Callable`，布尔用整数表示，没有对象或类）。
+  自写执行器见 [`docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)。
 - **STML 的两条残留差异**：属性遍历顺序是插入序（C++ 是字典序）、非 BMP 字符按码点推进
   （C++ 按 UTF-16 码元）。逐条列在
   [`docs/zh-cn/stml-test-plan.md`](../../docs/zh-cn/stml-test-plan.md) §7 的 GD-S-17/18；
@@ -170,6 +174,9 @@ godot --headless --path gdscript res://demo/demo_01.tscn
 > `demo_02` 的宿主回调（`config` → Nevext、带 `stope` 属性 → Stope、其余 → Xml）与
 > `cpp/demo/02-stml.cpp` 的 lambda 逐条对应，输入文档也是同一份。
 
+上面这段骨架只是「够跑通」。**逐段讲解版**（每一步为什么这么写、三个 demo 的完整输出、
+GDScript 侧专属的坑表）在 [`quick-start.md`](quick-start.md)。
+
 ## 6. 改动顺序
 
 语义是 C++ 定的，所以**不要先改 GDScript**：
@@ -186,31 +193,36 @@ godot --headless --path gdscript res://demo/demo_01.tscn
 
 | 想看 | 去哪 |
 | --- | --- |
+| **想嵌入到自己的项目**：四步 + 最小骨架 + 常见错误 | [quick-start.md](quick-start.md) |
 | 每个 API 怎么调、参数与返回 | [usage.md](usage.md) |
+| **解析 STML 文档**：回调 → 解析 → 读树 + 最小骨架 | [stml.md](stml.md) |
+| **给编译器加自定义指令**：登记 → 编译 → 反汇编 → 执行 | [custom-opcode.md](custom-opcode.md) |
 | **报错了**该改哪（按阶段查文案） | [troubleshooting.md](troubleshooting.md) |
 | 测试怎么跑、数据怎么重生成 | [testing.md](testing.md) |
 | GDScript 本身的坑与实现约定 | [gdscript-notes.md](gdscript-notes.md) |
 | Stope 语法（跨实现） | [../../docs/zh-cn/syntax-reference.md](../../docs/zh-cn/syntax-reference.md) |
 | 词法 / 语法 / 编译器 / STML 行为契约 | [../../docs/zh-cn/](../../docs/zh-cn/) 下的四份 `*-test-plan.md` |
-| 执行器（不是标准，只是参考实现） | [../../docs/zh-cn/vm-guide.md](../../docs/zh-cn/vm-guide.md) |
+| 执行器（内置基础 VM，不是标准） | [../../docs/zh-cn/vm-guide.md](../../docs/zh-cn/vm-guide.md) |
 | 指令集与 `Program` 格式 | [../../docs/zh-cn/compiler-test-plan.md](../../docs/zh-cn/compiler-test-plan.md) §2 |
 | 自己写执行器 | [../../docs/zh-cn/vm-guide.md](../../docs/zh-cn/vm-guide.md) |
 | C++ 侧用法 | [../../cpp/docs/quick-start.md](../../cpp/docs/quick-start.md) |
 
 ### 7.1 与 C++ 侧文档的对照
 
-两侧**主题不是一一对应**：C++ 把上手类内容拆成五份，本实现压进 `usage.md` 一份（按调用
-顺序讲），所以「同一个主题在两边分别去哪」值得单独列一张表。
+两侧**语义以 C++ 为准**，但文档分工不同：本实现有两篇**语言版教程**
+（[`stml.md`](stml.md) / [`custom-opcode.md`](custom-opcode.md)），用 GDScript 代码把上手动线
+重写了一遍；`usage.md` 只放 API 表。与语言无关的细节（比如 STML 那 12 条语法坑）**不重复**，
+直接指回 C++。
 
 | 主题 | C++ | 本实现 |
 | --- | --- | --- |
 | 总览 / 入口 | [`cpp/docs/README.md`](../../cpp/docs/README.md) | 本文 |
-| 四步上手 + 可复制骨架 | [`quick-start.md`](../../cpp/docs/quick-start.md) | [`usage.md`](usage.md) §1–§9 + 本文 §5 |
-| 常见错误 / 排错 | `quick-start.md` §8、`stml.md` §8、`custom-opcode.md` §8 | [`troubleshooting.md`](troubleshooting.md)（三张表合成一份） |
-| STML 上手 | [`stml.md`](../../cpp/docs/stml.md) | [`usage.md`](usage.md) §10 |
-| STML 语法细节 12 条 | `stml.md` §6 | **不重复**，直接看 C++ 那份（对两侧同样成立） |
-| 自定义指令：登记 → 编译 → 反汇编 | [`custom-opcode.md`](../../cpp/docs/custom-opcode.md) | [`usage.md`](usage.md) §7 |
-| 自定义指令：怎么真的执行 | `custom-opcode.md` §6 | [`usage.md`](usage.md) §7.1 |
+| 四步上手 + 可复制骨架 | [`quick-start.md`](../../cpp/docs/quick-start.md) | [`quick-start.md`](quick-start.md)（逐段讲 `demo_01.gd`） |
+| 常见错误 / 排错 | `quick-start.md` §8、`stml.md` §8、`custom-opcode.md` §8 | [`troubleshooting.md`](troubleshooting.md)（三张表合成一份）+ 两篇语言版各自的排错表 |
+| STML 上手 | [`stml.md`](../../cpp/docs/stml.md) | [`stml.md`](stml.md)（语言版，含可跑骨架） |
+| STML 语法细节 12 条 | `stml.md` §6 | **不重复**；语言版 §6 只写 GD 侧的两条差异（GD-S-17/18） |
+| 自定义指令：登记 → 编译 → 反汇编 | [`custom-opcode.md`](../../cpp/docs/custom-opcode.md) | [`custom-opcode.md`](custom-opcode.md) §2–§5 |
+| 自定义指令：怎么真的执行 | `custom-opcode.md` §6 | 语言版 §6（含可跑的 `op_map` 扩表代码） |
 | 执行器（栈、宿主接口、返回值） | [`basic-vm.md`](../../cpp/docs/basic-vm.md) | [`usage.md`](usage.md) §9 |
 | `Value` / 引用计数 / 生命周期 | `basic-vm.md` §2、§7 | **不适用**：本实现用 `Variant` + 引擎 GC |
 | 常量折叠规则总表 | [`expr-optim.md`](../../cpp/docs/expr-optim.md) | [`usage.md`](usage.md) §8 只写调用方式，语义只维护 C++ 那一份 |
@@ -219,6 +231,6 @@ godot --headless --path gdscript res://demo/demo_01.tscn
 | 文档协作与命名 | `development.md` §6 | [`gdscript-notes.md`](gdscript-notes.md) §2.9 |
 | 四份 `*-test-plan.md`（实现笔记 + 缺陷流水） | [`cpp/docs/`](../../cpp/docs/) | [`testing.md`](testing.md) 一份覆盖五组；跨实现契约在 `docs/zh-cn/` |
 
-> **本目录文件名一律 ASCII kebab-case**（`gdscript-notes.md` / `testing.md` / `usage.md` /
-> `troubleshooting.md`），与 `cpp/docs/development.md` §6.3 是同一条规则。`cpp/docs/` 与
-> `nodejs/docs/` 已在 2026-10-30 一并统一，全仓库没有下划线文件名了。
+> **本目录文件名一律 ASCII kebab-case**（`quick-start.md` / `gdscript-notes.md` / `testing.md` /
+> `usage.md` / `troubleshooting.md`），与 `cpp/docs/development.md` §6.3 是同一条规则。
+> `cpp/docs/` 与 `nodejs/docs/` 已在 2026-10-30 一并统一，全仓库没有下划线文件名了。

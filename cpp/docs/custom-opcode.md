@@ -301,11 +301,15 @@ warning: custom opcode "my:steal" uses #19, which collides with Add; builtin dec
 ## 6. 拿到 `Program` 之后：宿主怎么执行这些编号
 
 本 demo 到此为止 —— 再往下就进入「执行器」的领域，而项目**不规定虚拟机**
-（见 `../../docs/zh-cn/vm-guide.md` 开头）。要做的话，自定义指令只有三条要求：
+（见 `../../docs/zh-cn/vm-guide.md` 开头）。
 
-1. **分派表得认识这些编号。** `BasicVM` 的 `API::opFuncs` 只有 33 项
-   （`kOpCount = Opcode::Return + 1`），`State::Run()` 直接 `opFuncs[opcode]` 下标取 ——
-   自定义编号会越界。换成你自己的执行器时，分派要么做成 `switch`，要么把表扩到最大编号。
+先说清一件事：**内置的 `BasicVM` 不执行自定义指令。** `API::opFuncs` 是定长的
+`std::array<OpFunc, kOpCount>`（`kOpCount = Opcode::Return + 1 = 33`），加不进新项；
+`State::Step()` 直接 `opFuncs[opcode]` 下标取，产物里出现自定义编号就是**数组越界
+（未定义行为）**。所以下面三条是写给**你自己的执行器**的：
+
+1. **分派表得认识这些编号。** 你的执行器可以做成 `switch`，也可以把表扩到最大编号 ——
+   反正不能是 `BasicVM` 那张定长的。
 2. **栈效果是 `[a₁ … aₙ] → [ret]`。** 参数已经按从左到右压好了，结果占 1 格；
    注意**没有 callee 入栈**（这点与 `Call` 不同，也是 CD-3 的由来）。
 3. **变长指令先读一个 `short` 当 `n`。** 定长指令的参数个数在注册表里，流里不重复写。

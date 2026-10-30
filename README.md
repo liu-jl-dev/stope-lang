@@ -22,10 +22,27 @@ Stope 只规定三件事：
 2. **STML** —— 内嵌标记语言；
 3. **Stope 编译器** —— AST → `Program` 的产物格式。
 
-**虚拟机不在标准范围内。** `cpp/include/stope/basic_vm.hpp`（以及 `cpp/include/stope/debug.hpp`、  
-GDScript 侧 `gdscript/addons/stope/basic_vm.gd` 的 `StopeBasicVM.State` / `Api`）都**只是参考实现**，用途是验证产出的 `Program`  
-确实能被执行。指令集的具体语义、栈的布局、宿主函数的调用约定均**不属于规范**——  
-宿主程序完全可以用自己的执行器替代，只要它能消费编译器产出的 `Program`。
+**虚拟机不在标准范围内。** Stope **不规定虚拟机的标准**：拿到 `Program` 之后怎么执行、
+值怎么表示、栈怎么布局、宿主函数怎么调，全由实现者决定 —— 栈式字节码解释、寄存器机、
+直接遍历 AST、转译成 C / 宿主语言的闭包，都合规。宿主程序完全可以用自己的执行器替代，
+只要它能消费编译器产出的 `Program`。
+
+本项目**会维护**一台内置虚拟机：`cpp/include/stope/basic_vm.hpp`（反汇编在同目录的
+`debug.hpp`）、GDScript 侧 `gdscript/addons/stope/basic_vm.gd` 的 `StopeBasicVM.State` / `Api`、
+Node.js 侧 `nodejs/src/basic_vm.js` 的 `BasicVM.State` / `Api`。它是**基础虚拟机** ——
+定位是「能跑通编译器产物的最小实现 + 宿主接入的样板」，能力边界是明确的：
+
+| 内置虚拟机**支持** | 内置虚拟机**不支持** |
+| --- | --- |
+| 33 条内置指令、变量槽与栈、`exports`、宿主函数、`argc` / `args[i]`、单步 `Step()` | **自定义指令**：分派表只有内置的那 33 项，产物里 ≥ 33 的编号没有实现，直接跑会越界（C++ 是未定义行为） |
+| 空、整数、浮点、字符串、二进制数组、宿主函数 —— 布尔以整数 1 / 0 表示 | **自定义数据类型**：不能注册新的值类型，也没有对象、结构体、类 |
+
+「会维护」指的是：bug 会修、编译器产物演进时同步、三份实现的语义彼此对齐。但它
+**不承诺接口稳定** —— `BasicVM::*` / `StopeBasicVM.*` / `BasicVM.*` 这些名字只属于这几份实现，
+换一个执行器可能一个都不存在。要执行自定义指令只有两条路：自己扩指令表（C++ 的
+`API::opFuncs` 是定长 `std::array`，扩不了；GDScript / Node.js 的是动态数组，可以扩），
+或者干脆自写执行器 —— 见 [cpp/docs/custom-opcode.md](cpp/docs/custom-opcode.md) §6 与
+[docs/zh-cn/vm-guide.md](docs/zh-cn/vm-guide.md)。
 
 ---
 
@@ -105,21 +122,23 @@ STML 可以用来管理相互调用的 Stope 程序，或实现面向对象等�
 
 ## 实现状态
 
-|         | C++                      | GDScript                        |
-| ------- | ------------------------ | ------------------------------- |
-| 定位      | **权威实现**                 | 参考实现（逐项按 C++ 对齐）                |
-| 布局      | Pitchfork Layout（编译型静态库） | Godot 工程，以 `addons/stope/` 插件分发 |
-| 标准 / 依赖 | C++20，零第三方依赖             | Godot 4（实测 4.7.2），零第三方插件         |
-| 测试      | ctest 15 组，1505 条断言全绿    | 3090 条断言全绿                      |
+|         | C++                      | GDScript                        | Node.js                     |
+| ------- | ------------------------ | ------------------------------- | --------------------------- |
+| 定位      | **权威实现**                 | 参考实现（逐项按 C++ 对齐）                | 参考实现（逐项按 C++ 对齐）            |
+| 布局      | Pitchfork Layout（编译型静态库） | Godot 工程，以 `addons/stope/` 插件分发 | npm 包，纯 ESM、`src/` 下按模块分文件   |
+| 标准 / 依赖 | C++20，零第三方依赖             | Godot 4（实测 4.7.2），零第三方插件         | Node >= 20，零第三方依赖           |
+| 测试      | ctest 15 组，1505 条断言全绿    | 3153 条断言全绿                      | `npm test` 780 条断言全绿        |
 
-两侧出现分歧时**以 C++ 的实测行为为准**，差异登记在对应测试计划的 §7。
+三者出现分歧时**以 C++ 的实测行为为准**，差异登记在对应测试计划的 §7。
 
-> **`gdscript/` 是参考实现，不是第二套标准。** 词法 / 语法 / 编译器 / STML 四块已与 C++
-> 逐项对齐 —— 期望值全部由 C++ 探针 dump，3090 条断言全绿（STML 那 121 条用例两侧跑的是
-> **同一份清单** `gdscript/test/data/stml_cases.txt`）；残留的两条差异见
-> [stml-test-plan.md](docs/zh-cn/stml-test-plan.md) §7 的 GD-S-17/18。参考执行器
-> `basic_vm.gd` 与 C++ 侧一样**不属于规范**。安装与用法见
-> [gdscript/docs/README.md](gdscript/docs/README.md)。
+> **`gdscript/` 与 `nodejs/` 都是参考实现，不是第二套标准。** 词法 / 语法 / 编译器 / STML
+> 四块已与 C++ 逐项对齐 —— 期望值全部由 C++ 探针 dump，两侧都不手写（STML 那 121 条用例
+> 跑的是**同一份清单** `gdscript/test/data/stml_cases.txt`）。残留的两条差异见
+> [stml-test-plan.md](docs/zh-cn/stml-test-plan.md) §7 的 GD-S-17/18；`nodejs/` 的整数用
+> `BigInt`（对应 int64）、字符串是 UTF-16（与 C++ 的 `u16string` 一致），所以它没有那两条
+> 差异。参考执行器（`basic_vm.hpp` / `basic_vm.gd` / `basic_vm.js`）**都不属于规范**。
+> 安装与用法见 [gdscript/docs/README.md](gdscript/docs/README.md)、
+> [nodejs/README.md](nodejs/README.md)。
 
 ---
 
@@ -213,10 +232,27 @@ godot --headless --path gdscript res://demo/demo_02.tscn
 godot --headless --path gdscript res://demo/demo_03.tscn
 ```
 
-第一条跑 3090 条断言（词法 / 语法 / 编译器 / STML / 执行器五组，前四组对齐 C++）；三个 demo 与 `cpp/demo/` 下的
+第一条跑 3153 条断言（词法 / 语法 / 编译器 / STML / 执行器五组，前四组对齐 C++）；三个 demo 与 `cpp/demo/` 下的
 `0N-*.cpp` 一一对应
 （`01` 编译+运行 / `02` STML 解析 / `03` 自定义指令）。
 更多见 [gdscript/docs/testing.md](gdscript/docs/testing.md)。
+
+---
+
+## 构建与测试（Node.js）
+
+无需构建，也无需 `npm install`（零依赖）：
+
+```bash
+cd nodejs
+node demo/01-quick-start.js   # 编译 + 运行（还有 02-stml / 03-custom-opcode）
+npm test                  # 780 条断言：词法 / 语法 / 编译器 / 反汇编 / 执行器 / STML
+npm run test:cov          # 覆盖率 + 阈值门禁（行 80% / 分支 70%）
+```
+
+期望值与另外两个实现共用同一份 golden 数据（`gdscript/test/data/`，由
+`cmake --build cpp/build --target gen-golden` 生成），所以**跑 Node.js 测试也不需要
+C++ 工具链**。更多见 [nodejs/README.md](nodejs/README.md)。
 
 ---
 
@@ -231,15 +267,20 @@ godot --headless --path gdscript res://demo/demo_03.tscn
 | 四份跨实现行为契约      | [docs/zh-cn/](docs/zh-cn/) 下的 `*-test-plan.md`                   |
 | C++ 实现总览（入口）    | [cpp/docs/README.md](cpp/docs/README.md)                         |
 | 嵌入 C++ 程序（四步）  | [cpp/docs/quick-start.md](cpp/docs/quick-start.md)               |
-| 解析 STML 文档       | [cpp/docs/stml.md](cpp/docs/stml.md)                             |
+| 解析 STML 文档（上手） | [C++](cpp/docs/stml.md) · [GDScript](gdscript/docs/stml.md) · [Node.js](nodejs/docs/stml.md) |
+| 加自定义指令（上手） | [C++](cpp/docs/custom-opcode.md) · [GDScript](gdscript/docs/custom-opcode.md) · [Node.js](nodejs/docs/custom-opcode.md) |
 | 构建 / 测试 / 行尾约定 | [cpp/docs/development.md](cpp/docs/development.md)               |
-| 虚拟机（参考实现）      | [cpp/docs/basic\_vm.md](cpp/docs/basic-vm.md)                    |
+| 内置虚拟机（基础 VM）   | [cpp/docs/basic-vm.md](cpp/docs/basic-vm.md)                     |
 | 自己实现一个虚拟机       | [docs/zh-cn/vm-guide.md](docs/zh-cn/vm-guide.md)                 |
 | GDScript 实现与插件安装 | [gdscript/docs/README.md](gdscript/docs/README.md)               |
+| 嵌入 GDScript / Godot 项目（四步） | [gdscript/docs/quick-start.md](gdscript/docs/quick-start.md) |
 | GDScript API 用法   | [gdscript/docs/usage.md](gdscript/docs/usage.md)                 |
 | GDScript 报错排查（按阶段查文案） | [gdscript/docs/troubleshooting.md](gdscript/docs/troubleshooting.md) |
 | GDScript 测试与数据重生成 | [gdscript/docs/testing.md](gdscript/docs/testing.md)             |
 | GDScript 语言坑与代码约定 | [gdscript/docs/gdscript-notes.md](gdscript/docs/gdscript-notes.md) |
+| Node.js 实现（模块、约定、测试） | [nodejs/README.md](nodejs/README.md)               |
+| 嵌入 Node.js 项目（四步）     | [nodejs/docs/quick-start.md](nodejs/docs/quick-start.md)           |
+| Node.js API 用法与错误总表   | [nodejs/docs/usage.md](nodejs/docs/usage.md)                       |
 | C++ 侧实现笔记（改 `cpp/` 前看） | [cpp/docs/development.md](cpp/docs/development.md)             |
 | C++ 侧各模块实现笔记    | [cpp/docs/](cpp/docs/) 下的 `*-test-plan.md`、`expr-optim.md`       |
 
