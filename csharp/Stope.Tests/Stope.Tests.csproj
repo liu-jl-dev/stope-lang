@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    测试跑器：**控制台程序，不是测试框架**。零 NuGet 依赖（离线也能 dotnet run），
+    断言与汇总自己实现 —— 与 nodejs 侧「零依赖、只用 node:test」的取舍一致。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Stope.Tests</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Stope\Stope.csproj" />
+  </ItemGroup>
+
+</Project>

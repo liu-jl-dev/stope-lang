@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Stope 的 C# 实现。零第三方依赖：只用 BCL（System.Numerics 的 BigInteger 承担
+    整数解析的溢出判断，System.Text.RegularExpressions 只用于「校验」不用于扫描）。
+
+    ⚠ CheckForOverflowUnderflow 必须保持 false：Stope 的整数算术**溢出不检查、按 64 位
+      补码回绕**，与 C++ 的 unsigned 运算等价。打开它会让 long 溢出直接抛
+      OverflowException，语义与另外三份实现不一致。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Stope</RootNamespace>
+    <AssemblyName>Stope</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

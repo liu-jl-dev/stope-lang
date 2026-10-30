@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="Stope/Stope.csproj" />
+  <Project Path="Stope.Tests/Stope.Tests.csproj" />
+  <Folder Name="/demo/">
+    <Project Path="demo/01-quick-start/01-quick-start.csproj" />
+    <Project Path="demo/02-stml/02-stml.csproj" />
+    <Project Path="demo/03-custom-opcode/03-custom-opcode.csproj" />
+  </Folder>
+</Solution>

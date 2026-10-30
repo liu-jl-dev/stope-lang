@@ -4,4 +4,7 @@
 cpp/build
 gdscript/.godot
 
-
+# .NET：构建产物与用户级设置都不入库
+csharp/**/bin
+csharp/**/obj
+csharp/.vs

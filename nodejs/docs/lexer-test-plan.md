@@ -120,7 +120,7 @@ C++ 哪天修了，这些用例的后缀和期望值一起翻。
 
 ```sh
 cd nodejs
-npm test                                       # 全部（当前 92 条：87 lexer + 5 工程自检）
+npm test                                       # 全部（当前 780 条，其中 lexer 87 条）
 node --test test/lexer.test.js                 # 只跑 lexer
 node --test --test-name-pattern="I-0" test/lexer.test.js   # 按编号过滤
 npm run test:watch
@@ -128,6 +128,9 @@ npm run test:cov                               # 覆盖率 + 阈值门禁
 ```
 
 glob 必须带双引号，否则 shell 先展开、`node --test` 收不到 glob。
+
+八份测试文件各自的驱动方式与条数见 [`testing.md`](testing.md) §1 —— 本计划只覆盖
+`lexer.test.js` 那 87 条。
 
 ### 断言族（`test/helpers.js`）
 

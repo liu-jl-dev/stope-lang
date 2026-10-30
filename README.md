@@ -10,7 +10,7 @@ Stope 的特点：
 - 语法简单、稳定。不会为了支持不同的编程范式而修改语法。
 - 动态类型。
 
-如果你认为提供编程范式与标准库才算编程语言，那么 Stope 应当称为“编程语言框架”，可以用来快速搭建定制化的脚本系统。
+如果您认为编程语言应当提供编程范式与标准库，那么 Stope 应当称为“编程语言框架”，可以用来快速搭建定制化的脚本系统。
 
 ---
 
@@ -29,7 +29,8 @@ Stope 只规定三件事：
 
 本项目**会维护**一台内置虚拟机：`cpp/include/stope/basic_vm.hpp`（反汇编在同目录的
 `debug.hpp`）、GDScript 侧 `gdscript/addons/stope/basic_vm.gd` 的 `StopeBasicVM.State` / `Api`、
-Node.js 侧 `nodejs/src/basic_vm.js` 的 `BasicVM.State` / `Api`。它是**基础虚拟机** ——
+Node.js 侧 `nodejs/src/basic_vm.js` 的 `BasicVM.State` / `Api`、
+C# 侧 `csharp/Stope/BasicVm.cs` 的 `State` / `Api`。它是**基础虚拟机** ——
 定位是「能跑通编译器产物的最小实现 + 宿主接入的样板」，能力边界是明确的：
 
 | 内置虚拟机**支持** | 内置虚拟机**不支持** |
@@ -37,7 +38,7 @@ Node.js 侧 `nodejs/src/basic_vm.js` 的 `BasicVM.State` / `Api`。它是**基�
 | 33 条内置指令、变量槽与栈、`exports`、宿主函数、`argc` / `args[i]`、单步 `Step()` | **自定义指令**：分派表只有内置的那 33 项，产物里 ≥ 33 的编号没有实现，直接跑会越界（C++ 是未定义行为） |
 | 空、整数、浮点、字符串、二进制数组、宿主函数 —— 布尔以整数 1 / 0 表示 | **自定义数据类型**：不能注册新的值类型，也没有对象、结构体、类 |
 
-「会维护」指的是：bug 会修、编译器产物演进时同步、三份实现的语义彼此对齐。但它
+「会维护」指的是：bug 会修、编译器产物演进时同步、四份实现的语义彼此对齐。但它
 **不承诺接口稳定** —— `BasicVM::*` / `StopeBasicVM.*` / `BasicVM.*` 这些名字只属于这几份实现，
 换一个执行器可能一个都不存在。要执行自定义指令只有两条路：自己扩指令表（C++ 的
 `API::opFuncs` 是定长 `std::array`，扩不了；GDScript / Node.js 的是动态数组，可以扩），
@@ -122,23 +123,23 @@ STML 可以用来管理相互调用的 Stope 程序，或实现面向对象等�
 
 ## 实现状态
 
-|         | C++                      | GDScript                        | Node.js                     |
-| ------- | ------------------------ | ------------------------------- | --------------------------- |
-| 定位      | **权威实现**                 | 参考实现（逐项按 C++ 对齐）                | 参考实现（逐项按 C++ 对齐）            |
-| 布局      | Pitchfork Layout（编译型静态库） | Godot 工程，以 `addons/stope/` 插件分发 | npm 包，纯 ESM、`src/` 下按模块分文件   |
-| 标准 / 依赖 | C++20，零第三方依赖             | Godot 4（实测 4.7.2），零第三方插件         | Node >= 20，零第三方依赖           |
-| 测试      | ctest 15 组，1505 条断言全绿    | 3153 条断言全绿                      | `npm test` 780 条断言全绿        |
+|         | C++                      | GDScript                        | Node.js                     | C#                          |
+| ------- | ------------------------ | ------------------------------- | --------------------------- | --------------------------- |
+| 定位      | **权威实现**                 | 参考实现（逐项按 C++ 对齐）                | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            |
+| 布局      | Pitchfork Layout（编译型静态库） | Godot 工程，以 `addons/stope/` 插件分发 | npm 包，纯 ESM、`src/` 下按模块分文件   | `dotnet` 类库 + 控制台测试跑器，`slnx` 解决方案 |
+| 标准 / 依赖 | C++20，零第三方依赖             | Godot 4（实测 4.7.2），零第三方插件         | Node >= 20，零第三方依赖           | .NET 10（实测 SDK 10.0.401），零第三方包 |
+| 测试      | ctest 15 组，1505 条断言全绿    | 3153 条断言全绿                      | `npm test` 780 条断言全绿        | `dotnet run` 3154 条断言全绿      |
 
-三者出现分歧时**以 C++ 的实测行为为准**，差异登记在对应测试计划的 §7。
+四者出现分歧时**以 C++ 的实测行为为准**，差异登记在对应测试计划的 §7。
 
-> **`gdscript/` 与 `nodejs/` 都是参考实现，不是第二套标准。** 词法 / 语法 / 编译器 / STML
+> **`gdscript/`、`nodejs/`、`csharp/` 都是参考实现，不是第二套标准。** 词法 / 语法 / 编译器 / STML
 > 四块已与 C++ 逐项对齐 —— 期望值全部由 C++ 探针 dump，两侧都不手写（STML 那 121 条用例
 > 跑的是**同一份清单** `gdscript/test/data/stml_cases.txt`）。残留的两条差异见
 > [stml-test-plan.md](docs/zh-cn/stml-test-plan.md) §7 的 GD-S-17/18；`nodejs/` 的整数用
 > `BigInt`（对应 int64）、字符串是 UTF-16（与 C++ 的 `u16string` 一致），所以它没有那两条
-> 差异。参考执行器（`basic_vm.hpp` / `basic_vm.gd` / `basic_vm.js`）**都不属于规范**。
-> 安装与用法见 [gdscript/docs/README.md](gdscript/docs/README.md)、
-> [nodejs/README.md](nodejs/README.md)。
+> 差异。参考执行器（`basic_vm.hpp` / `basic_vm.gd` / `basic_vm.js` / `BasicVm.cs`）**都不属于
+> 规范**。安装与用法见 [gdscript/docs/README.md](gdscript/docs/README.md)、
+> [nodejs/README.md](nodejs/README.md)、[csharp/README.md](csharp/README.md)。
 
 ---
 
@@ -256,6 +257,23 @@ C++ 工具链**。更多见 [nodejs/README.md](nodejs/README.md)。
 
 ---
 
+## 构建与测试（C#）
+
+需要 .NET SDK 10（实测 10.0.401），**零 NuGet 依赖**，`dotnet build` 不联网：
+
+```bash
+dotnet build csharp/Stope.slnx                  # 库 + 测试 + 三个 demo
+dotnet run --project csharp/Stope.Tests         # 3154 条断言：词法 / 折叠 / 语法编译器 / 深度 / 反汇编 / STML / 执行器
+dotnet run --project csharp/demo/01-quick-start # 编译 + 运行（还有 02-stml / 03-custom-opcode）
+```
+
+测试跑器是**控制台程序**而不是 xUnit/NUnit：断言与分组汇总自己实现，输出格式与
+GDScript / Node.js 两侧一致，方便横向对照。期望值同样读 `gdscript/test/data/` 那一份
+golden 数据，所以**跑 C# 测试也不需要 C++ 工具链**。更多见
+[csharp/README.md](csharp/README.md)。
+
+---
+
 ## 文档导览
 
 | 想看             | 去哪                                                               |
@@ -267,8 +285,8 @@ C++ 工具链**。更多见 [nodejs/README.md](nodejs/README.md)。
 | 四份跨实现行为契约      | [docs/zh-cn/](docs/zh-cn/) 下的 `*-test-plan.md`                   |
 | C++ 实现总览（入口）    | [cpp/docs/README.md](cpp/docs/README.md)                         |
 | 嵌入 C++ 程序（四步）  | [cpp/docs/quick-start.md](cpp/docs/quick-start.md)               |
-| 解析 STML 文档（上手） | [C++](cpp/docs/stml.md) · [GDScript](gdscript/docs/stml.md) · [Node.js](nodejs/docs/stml.md) |
-| 加自定义指令（上手） | [C++](cpp/docs/custom-opcode.md) · [GDScript](gdscript/docs/custom-opcode.md) · [Node.js](nodejs/docs/custom-opcode.md) |
+| 解析 STML 文档（上手） | [C++](cpp/docs/stml.md) · [GDScript](gdscript/docs/stml.md) · [Node.js](nodejs/docs/stml.md) · [C#](csharp/docs/stml.md) |
+| 加自定义指令（上手） | [C++](cpp/docs/custom-opcode.md) · [GDScript](gdscript/docs/custom-opcode.md) · [Node.js](nodejs/docs/custom-opcode.md) · [C#](csharp/docs/custom-opcode.md) |
 | 构建 / 测试 / 行尾约定 | [cpp/docs/development.md](cpp/docs/development.md)               |
 | 内置虚拟机（基础 VM）   | [cpp/docs/basic-vm.md](cpp/docs/basic-vm.md)                     |
 | 自己实现一个虚拟机       | [docs/zh-cn/vm-guide.md](docs/zh-cn/vm-guide.md)                 |
@@ -281,6 +299,11 @@ C++ 工具链**。更多见 [nodejs/README.md](nodejs/README.md)。
 | Node.js 实现（模块、约定、测试） | [nodejs/README.md](nodejs/README.md)               |
 | 嵌入 Node.js 项目（四步）     | [nodejs/docs/quick-start.md](nodejs/docs/quick-start.md)           |
 | Node.js API 用法与错误总表   | [nodejs/docs/usage.md](nodejs/docs/usage.md)                       |
+| Node.js 测试与数据重生成     | [nodejs/docs/testing.md](nodejs/docs/testing.md)                   |
+| C# 实现（模块、约定、测试）   | [csharp/README.md](csharp/README.md)                               |
+| 嵌入 C# 项目（四步）         | [csharp/docs/quick-start.md](csharp/docs/quick-start.md)           |
+| C# API 用法与错误总表        | [csharp/docs/usage.md](csharp/docs/usage.md)                       |
+| C# 测试与数据重生成          | [csharp/docs/testing.md](csharp/docs/testing.md)                   |
 | C++ 侧实现笔记（改 `cpp/` 前看） | [cpp/docs/development.md](cpp/docs/development.md)             |
 | C++ 侧各模块实现笔记    | [cpp/docs/](cpp/docs/) 下的 `*-test-plan.md`、`expr-optim.md`       |
 

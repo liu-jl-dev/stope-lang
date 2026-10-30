@@ -36,6 +36,8 @@ node demo/03-custom-opcode.js   # 自定义指令：只编译 + 反汇编
 [`docs/usage.md`](docs/usage.md)（每个模块的签名、字段、返回码、错误总表）、
 [`docs/stml.md`](docs/stml.md)（解析 STML 文档）、
 [`docs/custom-opcode.md`](docs/custom-opcode.md)（加自定义指令并执行）。
+改实现的话再看 [`docs/testing.md`](docs/testing.md)（测试怎么跑、三种驱动方式、
+哪些没覆盖）与 [`docs/lexer-test-plan.md`](docs/lexer-test-plan.md)（词法用例清单）。
 
 ```js
 import { Lexer, Parser, Compiler, Program, AST, Disasm, BasicVM, Result } from '@liu-jl-dev/stope'
@@ -110,6 +112,7 @@ nodejs/
     ├── usage.md            # API 手册：逐模块签名 / 字段 / 返回码 + 错误总表
     ├── stml.md             # STML 教程：回调 → 解析 → 读树 + 可跑骨架
     ├── custom-opcode.md    # 自定义指令教程：登记 → 编译 → 反汇编 → 执行
+    ├── testing.md          # 测试说明：怎么跑、三种驱动方式、加用例流程、没覆盖的
     └── lexer-test-plan.md  # lexer 测试计划：覆盖矩阵、与 C++ 的差异、交叉验证做法
 ```
 
@@ -150,6 +153,9 @@ cmake --build build --target gen-golden
 | `golden_stml.txt` | `cpp/tools/golden_stml.cpp` | STML 词法 + 语法，用例清单是 `stml_cases.txt`（两侧共用） |
 
 因为跑测试只需要这四份**已入库**的文本，`npm test` 不需要 C++ 工具链。
+
+八份测试文件各自的驱动方式（golden / 自写 / 自洽）、条数、加用例流程，见
+[`docs/testing.md`](docs/testing.md)。
 
 ## 新增一个模块
 
