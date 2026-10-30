@@ -1,5 +1,5 @@
 class_name StopeExprOptim
-# 常量折叠 —— 端口 cpp/stope/expr_optim.hpp（2026-10-18）。
+# 常量折叠 —— 端口 cpp/include/stope/expr_optim.hpp（2026-10-18）。
 #
 # 契约与 C++ 完全一致：
 #   - 只做「单节点」变换，不递归。挂在 parser 构造 UnaryOpExpr / BinaryOpExpr 的末尾，
@@ -8,12 +8,12 @@ class_name StopeExprOptim
 #   - 拿不准就一律不折叠：除零、整数溢出、含浮点的 idiv、跨类型 ==、null 参与比较、
 #     Bool 参与比较 —— 全部保留原节点。折叠后的节点沿用运算符节点的 line。
 #
-# 本项目自定的三条算术规则（详见 cpp/stope/expr_optim.md §4.9）：
+# 本项目自定的三条算术规则（详见 cpp/docs/expr-optim.md §4.9）：
 #   1. BinArr + BinArr == 字节连接；
 #   2. String / BinArr * 非负整数 == 串重复（整数 * 串 同理）；
 #   3. `+ - * / idiv % ^` 里 Bool 视作 0 / 1，但 `< <= > >=` 与 `== !=` 仍按类型区分。
 #
-# 判断顺序与 C++ 一一对应（层号同 expr_optim.md §4.2 / §4.7）：
+# 判断顺序与 C++ 一一对应（层号同 expr-optim.md §4.2 / §4.7）：
 #   L0 两侧必须都是字面量常量 -> L1 and/or -> L2 任一侧 null -> L3 比较 -> L4 算术
 # 刻意【不】拆成 foldXxx 分派函数，保持「一个格子 = 一个分支」，方便两边对照。
 

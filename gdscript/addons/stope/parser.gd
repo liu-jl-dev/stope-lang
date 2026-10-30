@@ -4,7 +4,7 @@ class_name StopeParser
 # 行为契约见 docs/zh-cn/parser-test-plan.md，与 C++ 的偏差登记在该文档 §7（GD-P-xx）。
 # 几条容易踩错、且两边必须一致的约定：
 #   1. 错误恢复：**分隔符缺失时只报错、不推进**，把后续 token 留给下一条语句重新解析。
-#      （参考实现在这几处会吞 token，C++ 有意偏离，见 cpp/docs/parser_test_plan.md §2.2）
+#      （参考实现在这几处会吞 token，C++ 有意偏离，见 cpp/docs/parser-test-plan.md §2.2）
 #      例外（有意保留旧语义）：parse_let_stmt / parse_return_stmt 的兜底分支仍会推进。
 #   2. 不变量：parse_expr() 之后必有一次 next_token()。删错误分支里的推进时别连带删它。
 #   3. 顶层孤立 "}" 要报错【并跳过】继续解析；块内的 "}" 由外层消费，不报错。

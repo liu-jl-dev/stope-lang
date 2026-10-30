@@ -236,7 +236,7 @@ GDScript 每次函数调用 + `Callable.call` 在热循环里都是实打实的�
 
 1. **文件名一律 ASCII kebab-case**：`README.md` / `usage.md` / `testing.md` /
    `troubleshooting.md` / `gdscript-notes.md`。中文标题写进文件的一级标题，链接里就不会
-   冒出 `%E8%AF%AD…`。（`cpp/docs/` 有 6 个下划线文件，是历史遗留，别照着学。）
+   冒出 `%E8%AF%AD…`。（全仓库 2026-10-30 已统一，没有下划线文件名。）
 2. **分工**：`README.md` 面向所有人（是什么、怎么装、从哪开始）；`usage.md` 是 API 手册；
    `testing.md` 与本文件面向改实现的人；报错查 `troubleshooting.md`。
    同一件事只在一处写，其它地方给链接 —— 这个仓库最怕的是同一事实有三个真源。

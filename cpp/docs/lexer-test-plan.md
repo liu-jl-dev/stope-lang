@@ -141,9 +141,9 @@ struct Token {
 cpp/
 ├─ CMakeLists.txt              # 新增 test 目标（见 4.3）
 ├─ docs/
-│  ├─ lexer_test_plan.md       # 本文档（计划文档统一放 docs/）
-│  ├─ parser_test_plan.md
-│  └─ compiler_test_plan.md
+│  ├─ lexer-test-plan.md       # 本文档（计划文档统一放 docs/）
+│  ├─ parser-test-plan.md
+│  └─ compiler-test-plan.md
 └─ test/
    ├─ test_common.hpp          # 断言宏 + u16 辅助 + Token 转字符串 + 已知失败标记
    ├─ test_lexer_number.cpp    # T3/T4 数字

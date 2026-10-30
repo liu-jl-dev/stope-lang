@@ -10,7 +10,7 @@
   §6–§10 已按落地实况改写。
 - 实测环境：g++ (MinGW-w64 x86_64-win32-seh) 15.2.0，`-std=c++20`，默认 8 MB 线程栈
 - 参考实现（语义基准）：`gdscript/addons/stope/parser.gd`
-- 上游依赖：`cpp/include/stope/lexer.hpp`（其测试计划与已知缺陷见 `lexer_test_plan.md`）
+- 上游依赖：`cpp/include/stope/lexer.hpp`（其测试计划与已知缺陷见 `lexer-test-plan.md`）
 
 ---
 
@@ -27,7 +27,7 @@
 
 ### 1.2 非目标
 
-- 不测试 lexer（另有 `lexer_test_plan.md`）；不测试语义分析、代码生成（`compiler.gd` 的职责）。
+- 不测试 lexer（另有 `lexer-test-plan.md`）；不测试语义分析、代码生成（`compiler.gd` 的职责）。
 - 不做性能基准；只做"不死循环 / 不崩 / 不泄漏"的健壮性下限（见 §3 PD-12 / PD-13）。
 - 不验证"语义正确性"（如 `1 = 2;` 是否应判错），parser 层只记录现状（见 PD-10）。
 
@@ -202,13 +202,13 @@ cpp/
 ├─ CMakeLists.txt                  # 新增 test_parser / test_parser_depth 目标（见 4.3）
 ├─ docs/
 │  ├─ README.md                    # 本目录总览（面向所有人）
-│  ├─ lexer_test_plan.md           # lexer 的计划文档（计划文档统一放 docs/）
-│  ├─ parser_test_plan.md          # 本文档
-│  ├─ compiler_test_plan.md        # compiler 的计划文档（CD-1…CD-5 的对照表在 §3）
-│  ├─ stml_test_plan.md            # STML 的计划文档
-│  ├─ expr_optim.md                # 常量折叠的规则总表
+│  ├─ lexer-test-plan.md           # lexer 的计划文档（计划文档统一放 docs/）
+│  ├─ parser-test-plan.md          # 本文档
+│  ├─ compiler-test-plan.md        # compiler 的计划文档（CD-1…CD-5 的对照表在 §3）
+│  ├─ stml-test-plan.md            # STML 的计划文档
+│  ├─ expr-optim.md                # 常量折叠的规则总表
 │  ├─ development.md               # 布局 / 构建 / ODR / 行尾 / 代码风格 / API 约定 / 文档约定
-│  ├─ basic_vm.md                  # 虚拟机的语义约定（句柄 / 栈 / 宿主接口）
+│  ├─ basic-vm.md                  # 虚拟机的语义约定（句柄 / 栈 / 宿主接口）
 │  └─ quick-start.md               # 嵌入 Stope 的四步，讲 demo/01-quick-start.cpp
 └─ test/
    ├─ test_common.hpp              # 已有，已增量扩展（见 4.2）
@@ -507,7 +507,7 @@ ID 前缀：`S` 语句 / `X` 表达式 / `P` 优先级 / `F` 后缀与前缀 / `
 ### 5.9 常量折叠（test_parser_fold.cpp，O-01…O-36）
 
 parser 侧只锁定「哪些 AST 会被折、折成什么」；**每一格的语义见
-`cpp/docs/expr_optim.md` §4 行为矩阵**（那里是唯一的可调总表，§4.7 有格子→代码位置对照）。
+`cpp/docs/expr-optim.md` §4 行为矩阵**（那里是唯一的可调总表，§4.7 有格子→代码位置对照）。
 
 | ID | 输入 | 折叠后 | 覆盖的规则 |
 | --- | --- | --- | --- |

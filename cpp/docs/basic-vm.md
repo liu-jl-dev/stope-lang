@@ -7,7 +7,7 @@
 | --- | --- |
 | 本目录总览（面向所有人） | `README.md`（本目录） |
 | 怎么把它跑起来（四步） | `quick-start.md`（本目录） |
-| 指令表与 `Program` 字段 | `compiler_test_plan.md` §2 |
+| 指令表与 `Program` 字段 | `compiler-test-plan.md` §2 |
 | 不想先编译、想直接跑 AST（继承 `ASTVisitor`） | `../../docs/zh-cn/syntax-impl.md` §7.2 |
 | 工程侧的构建 / 测试约定 | `development.md`（本目录） |
 | 自己写一个执行器（**虚拟机不属于标准**） | `../../docs/zh-cn/vm-guide.md` |

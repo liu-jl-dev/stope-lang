@@ -15,7 +15,7 @@
 >
 > **本文所有期望值都是机器生成的**：由 `cpp/test/test_stml_lexer.cpp` 与
 > `cpp/test/test_stml_parser.cpp` 实测导出（2026-10-18，215 条断言全绿），不是手推的。
-> C++ 侧更细的实现笔记与缺陷流水见 `cpp/docs/stml_test_plan.md`。
+> C++ 侧更细的实现笔记与缺陷流水见 `cpp/docs/stml-test-plan.md`。
 
 ## 目录
 
@@ -222,7 +222,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 
 ## 3. 行为基线
 
-> 编号 `B-n` 是**契约**，`TD-n` 是**已登记的缺陷/偏离**（同步登记在 `cpp/docs/stml_test_plan.md` §3）。
+> 编号 `B-n` 是**契约**，`TD-n` 是**已登记的缺陷/偏离**（同步登记在 `cpp/docs/stml-test-plan.md` §3）。
 
 | ID | 基线 | 锁定用例 |
 | --- | --- | --- |
@@ -511,7 +511,7 @@ ctest --test-dir build          # 13 项，其中 stml 是新增的那一项
 
 退出码：`0` 全过；`1` 有断言失败；`2` 全过但有 `FIXED-PENDING-FLIP`。
 
-细化的 C++ 侧记录见 `cpp/docs/stml_test_plan.md`。
+细化的 C++ 侧记录见 `cpp/docs/stml-test-plan.md`。
 
 ### GDScript
 
@@ -541,7 +541,7 @@ ctest --test-dir build          # 13 项，其中 stml 是新增的那一项
 ## 7. 已知差异登记
 
 > `GD-S-n` = GDScript 侧相对 C++ 基准的差异，按顺序编号，修一条划一条（保留记录）。
-> `TD-n` = 两侧共有的缺陷/定夺，完整清单见 `cpp/docs/stml_test_plan.md` §3。
+> `TD-n` = 两侧共有的缺陷/定夺，完整清单见 `cpp/docs/stml-test-plan.md` §3。
 >
 > **2026-10-28**：GDScript 侧 STML 整体重写 —— 词法补 `Text` 态与 Xml 注释、语法改成宿主
 > 回调并逐分支照抄 C++、错误文案换成 §3 那 10 条；同日又把 `Token.Type` 的三个枚举项改名

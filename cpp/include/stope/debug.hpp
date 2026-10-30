@@ -21,7 +21,7 @@
 
 namespace Stope {
 
-// 自定义指令的编号必须大于 Opcode::Return（compiler_test_plan.md §4.4）：
+// 自定义指令的编号必须大于 Opcode::Return（compiler-test-plan.md §4.4）：
 // opcodes 是 short 混排序列，撞号以后编译器写出的仍是同一个 short，运行时与
 // 反汇编都看不出区别。Disasm 会把这种注册报成 warning。
 inline constexpr short kFirstCustomOpcode =

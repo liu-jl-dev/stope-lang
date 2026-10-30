@@ -9,7 +9,7 @@
 | 本目录总览（面向所有人） | [README.md](README.md) |
 | 自定义指令的**语言规则**（文法、命名、关键字优先） | [syntax-reference.md](../../docs/zh-cn/syntax-reference.md) §5.3 |
 | 执行器侧怎么执行这些编号 | [vm-guide.md](../../docs/zh-cn/vm-guide.md) §5.5 |
-| `Program` 的编码契约（哪条指令带操作数） | [compiler_test_plan.md](compiler_test_plan.md) §2、§4.4 |
+| `Program` 的编码契约（哪条指令带操作数） | [compiler-test-plan.md](compiler-test-plan.md) §2、§4.4 |
 | 完整的四步嵌入（编译 → 装配 → 运行） | [quick-start.md](quick-start.md) |
 | 解析 STML 文档（另一种宿主扩展） | [stml.md](stml.md) |
 | 反汇编函数本身 | `include/stope/debug.hpp` |
@@ -133,7 +133,7 @@ compiler.Compile(tree, program);
 
 两个签名不一样是有原因的：`Parser` 的 config 参数是 `CustomOpcodeConfig*`（可空，形参非 const），
 `Compiler` 的构造参数是 `const CustomOpcodeConfig*`。传同一份对象即可，别各建一份 ——
-两边不一致时你会看到 `undefined custom instruction`（`compiler_test_plan.md` C-37），
+两边不一致时你会看到 `undefined custom instruction`（`compiler-test-plan.md` C-37），
 或者干脆得到普通 `Call`（C-37b）。
 
 demo 的源码：
@@ -200,7 +200,7 @@ required stack size: 2
 | `[21] my:halt` | `my:halt();` | 定长 0 参 → 不带操作数 |
 | `[23] PushValue 0` `[25] Return 1` | `return x;` | 读值 → `PushValue` |
 
-栈容量的记账有个细节（`compiler_test_plan.md` CD-3）：自定义指令**没有 callee 入栈**，
+栈容量的记账有个细节（`compiler-test-plan.md` CD-3）：自定义指令**没有 callee 入栈**，
 结果仍占 1 格，所以净变化是 `-(n-1)`。定长 2 参的 `my:add` 只多占 1 格，这也是
 `required stack size: 2` 的来历。
 
@@ -406,6 +406,6 @@ g++ -std=c++20 -Iinclude sk.cpp build/libstope.a -o sk.exe
 | `demo/03-custom-opcode.cpp` | 本文讲的例子（目标 `demo03`，未接 ctest） |
 | `include/stope/custom_opcode.hpp` | `CustomOpcode` / `CustomOpcodeConfig` |
 | `include/stope/debug.hpp` | `Disasm` / `DisasmNoCustom` / `kFirstCustomOpcode` |
-| `compiler_test_plan.md` §4.4 | 自定义指令的坑（编号 > `Return`、`opHasParam` 的兜底分支） |
+| `compiler-test-plan.md` §4.4 | 自定义指令的坑（编号 > `Return`、`opHasParam` 的兜底分支） |
 | [syntax-reference.md](../../docs/zh-cn/syntax-reference.md) §5.3 | 语言侧规则（文法、命名、关键字优先） |
 | [vm-guide.md](../../docs/zh-cn/vm-guide.md) §5.5 | 执行器侧要求 |

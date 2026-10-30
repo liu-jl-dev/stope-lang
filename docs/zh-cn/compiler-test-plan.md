@@ -86,7 +86,7 @@
 > （左值），只有 `let` 的目标和「等号左侧恰好是裸标识符」的赋值目标才会用它；
 > `PushValue` 压的是**变量的值**（右值），其余一切读变量的位置都用它 ——
 > 表达式里的变量、被调用者、被索引的容器、条件、`return` 的值。
-> 详见 `cpp/docs/compiler_test_plan.md` §2.1。
+> 详见 `cpp/docs/compiler-test-plan.md` §2.1。
 
 > ⚠ CM 组（§5）的期望串与 C++ 侧**完全一致**：两侧现在都有 `PushValue`，读变量用
 > `PushValue`，只有 `let` 的目标和「等号左侧恰好是裸标识符」用 `PushId`。
@@ -307,7 +307,7 @@ ctest --test-dir build
 ```
 
 compiler 相关：`test_compiler`（C 组 98 条）、`test_ast_visitor`（V 组 36 条）。
-细化的 C++ 侧记录见 `cpp/docs/compiler_test_plan.md`。
+细化的 C++ 侧记录见 `cpp/docs/compiler-test-plan.md`。
 
 ### GDScript
 

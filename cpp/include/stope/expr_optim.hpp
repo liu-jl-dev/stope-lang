@@ -8,7 +8,7 @@
 namespace Stope {
 
 // 常量折叠：在构造 AST 节点时就地求值，把「操作数全是字面量」的子树替换成一个
-// 字面量节点。完整行为说明（含可调整的行为矩阵）见同目录的 expr_optim.md。
+// 字面量节点。完整行为说明（含可调整的行为矩阵）见同目录的 expr-optim.md。
 //
 // 【调用契约】Optimize 成功折叠时会 delete 入参并返回一个**新**指针；未折叠时
 //            原样返回入参。因此调用方必须重新赋值：  e = opt.Optimize(e);
@@ -22,9 +22,9 @@ namespace Stope {
 //            语义去执行或报错。不折叠永远只是「少一次优化」，不改变程序语义。
 //
 // 【整数溢出不检查】`+ - * / idiv % ^` 的整数结果一律按 64 位补码回绕，与参考
-//            实现 basic_vm.hpp 保持一致（详见 expr_optim.md §5）。
+//            实现 basic_vm.hpp 保持一致（详见 expr-optim.md §5）。
 //
-// 【本项目自定的三条算术规则】（2026-10-16 定夺，详见 expr_optim.md §4.9）
+// 【本项目自定的三条算术规则】（2026-10-16 定夺，详见 expr-optim.md §4.9）
 //            1. BinArr + BinArr == 字节连接；
 //            2. String / BinArr * 非负整数 == 串重复（`整数 * 串` 同理）；
 //            3. `+ - * / idiv % ^` 的算术上下文里 Bool 视作 0 / 1（含 Bool⊕Bool），
@@ -51,7 +51,7 @@ struct ExpressionOptimizer {
   static bool isSeq(ConstKind k);
   // ---------- 「算术上下文」里的 Bool：视作 0 / 1 的整数 ----------
   // 只对 `+ - * / idiv % ^` 生效；`< <= > >=` 与 `== !=` 仍按各自的类型规则
-  // （即 Bool 与数字比较、相等一律不折叠），详见 expr_optim.md §4.5 / §4.9。
+  // （即 Bool 与数字比较、相等一律不折叠），详见 expr-optim.md §4.5 / §4.9。
   static bool isNumLike(ConstKind k);
   // 两侧都参与整数运算（Bool 算整数），只有出现 Float 才走浮点分支
   static bool bothNumInt(ConstKind lk, ConstKind rk);
@@ -111,14 +111,14 @@ struct ExpressionOptimizer {
   AST::Expr* optimizeUnaryOpExpr(AST::UnaryOpExpr* e);
 
   // ==================== 二元 ====================
-  // 【结构】还是一个函数，判断顺序自上而下（层号对应 expr_optim.md §4.2 / §4.7）：
+  // 【结构】还是一个函数，判断顺序自上而下（层号对应 expr-optim.md §4.2 / §4.7）：
   //   L0 两侧必须都是字面量常量，否则不折（含 Call / Custom 的副作用保护）
   //   L1 and / or        —— 结果与左值类型无关，恒走 truthy
   //   L2 任一侧是 null   —— 一次处理完，下面的分支里都不再判 null
   //   L3 == != < <= > >= —— 只取决于两侧是否同为序列 / 同为数字
   //   L4 + - * / idiv % ^—— 只剩两类左值：数值（Bool 折算 0/1）与序列（连接、重复）
   // L1–L3 在每个左值分支里原本是逐字重复的，提出来只为去重；
-  // 每一层都保持「一个格 = 一个分支」，方便对照 expr_optim.md §4 的行为矩阵。
+  // 每一层都保持「一个格 = 一个分支」，方便对照 expr-optim.md §4 的行为矩阵。
   // 不拆成 foldNull / foldArith / foldAdd ... 等分派函数。
   AST::Expr* optimizeBinaryOpExpr(AST::BinaryOpExpr* e);
 };

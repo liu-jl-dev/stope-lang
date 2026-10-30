@@ -12,7 +12,7 @@
 // 只是内置示例执行器，不是标准的一部分（见 01-quick-start.cpp 开头与
 // docs/zh-cn/vm-guide.md）。自定义指令的意义正在于此：宿主自己定义、自己执行。
 //
-// 两条硬约束（见 docs/compiler_test_plan.md §4.4）：
+// 两条硬约束（见 docs/compiler-test-plan.md §4.4）：
 //   * 编号必须 > Opcode::Return。opcodes 是 short 混排序列，撞号以后与内置指令
 //     无法区分；Disasm() 会把这种注册报成 warning（[5] 演示）。
 //   * 定长指令的 argNum 必须与实际调用一致，否则编译期报错、不产出（[4] 演示）。

@@ -22,29 +22,33 @@
 | [`quick-start.md`](quick-start.md) | 四步把 Stope 嵌进自己的程序：编译 → 装配 → 执行 → 取返回值 |
 | [`stml.md`](stml.md) | STML 文档怎么解析：树的形状归解析器，内容怎么切归宿主 |
 | [`custom-opcode.md`](custom-opcode.md) | 给编译器加自己的指令：登记 → 编译 → 反汇编 |
-| [`basic_vm.md`](basic_vm.md) | 内置参考执行器的语义约定（**不属于标准**，见 §3） |
+| [`basic-vm.md`](basic-vm.md) | 内置参考执行器的语义约定（**不属于标准**，见 §3） |
 
 ### 实现笔记（改 `cpp/` 时才需要）
 
 | 文件 | 讲什么 |
 | --- | --- |
 | [`development.md`](development.md) | 布局、构建与两个构建陷阱、行尾、代码风格、API 参数与所有权约定 |
-| [`expr_optim.md`](expr_optim.md) | 常量折叠的规则总表（哪几种组合折、怎么折、与执行器怎么对齐） |
-| 四份 `*_test_plan.md` | 词法 / 语法 / 编译器 / STML 的**实现笔记与缺陷流水** |
+| [`expr-optim.md`](expr-optim.md) | 常量折叠的规则总表（哪几种组合折、怎么折、与执行器怎么对齐） |
+| 四份 `*-test-plan.md` | 词法 / 语法 / 编译器 / STML 的**实现笔记与缺陷流水** |
 
-> ⚠ **两份"测试计划"不是一回事**，文件名只差一个字符：
+> ⚠ **两份"测试计划"不是一回事**，靠**所在目录**区分（文件名现在完全一样）：
 >
-> | 位置 | 命名 | 给谁 |
+> | 位置 | 给谁 | 内容 |
 > | --- | --- | --- |
-> | `docs/zh-cn/*-test-plan.md` | 连字符 | **跨实现的行为契约** —— 所有实现都该满足，给所有人看 |
-> | `cpp/docs/*_test_plan.md` | 下划线 | **C++ 侧自己的**实现笔记、缺陷编号、踩坑记录，给改实现的人看 |
+> | `docs/zh-cn/*-test-plan.md` | 所有人 | **跨实现的行为契约** —— 所有实现都该满足 |
+> | `cpp/docs/*-test-plan.md` | 改实现的人 | **C++ 侧自己的**实现笔记、缺陷编号、踩坑记录 |
+>
+> 两份文件名一一对应（`lexer-test-plan.md` 等），看路径判断是哪一份 —— 别只看名字。
+> 2026-10-30 之前 `cpp/docs/` 用的是下划线（`lexer_test_plan.md`），与 `docs/zh-cn/` 靠
+> 一个字符区分；按 §文件名 kebab-case 的规则统一后，改成靠目录区分。
 
 ## 2. 从哪开始
 
 | 我想…… | 去哪 |
 | --- | --- |
 | 在 C++ 程序里跑一段 Stope 脚本 | [`quick-start.md`](quick-start.md)（配 `demo/01-*.cpp`） |
-| 单步执行 / 自己写调试器 | [`basic_vm.md`](basic_vm.md) §1（`State::Step()` 的终止条件与错误态约定） |
+| 单步执行 / 自己写调试器 | [`basic-vm.md`](basic-vm.md) §1（`State::Step()` 的终止条件与错误态约定） |
 | 解析一份 STML 文档 | [`stml.md`](stml.md)（配 `demo/02-*.cpp`） |
 | 给编译器加一条自己的指令 | [`custom-opcode.md`](custom-opcode.md)（配 `demo/03-*.cpp`） |
 | 查 Stope 的语法与错误文案 | [`docs/zh-cn/syntax-reference.md`](../../docs/zh-cn/syntax-reference.md) |

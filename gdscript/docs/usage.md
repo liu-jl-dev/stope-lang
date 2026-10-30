@@ -428,7 +428,7 @@ var folded := StopeExprOptim.optimize(expr)	# 折了就返回新节点，没折�
   `Bool` 参与比较 —— 全部保留原节点，把计算推给运行期。
 - 折叠后的节点沿用运算符节点的 `line`。
 
-算术规则以 [`cpp/docs/expr_optim.md`](../../cpp/docs/expr_optim.md) 为准，其中三条是
+算术规则以 [`cpp/docs/expr-optim.md`](../../cpp/docs/expr-optim.md) 为准，其中三条是
 本项目自定的：`BinArr + BinArr` 是字节连接；`String / BinArr * 非负整数` 是串重复；
 `+ - * / idiv % ^` 里 `Bool` 当 `0` / `1`（但比较运算仍按类型区分）。
 
@@ -506,7 +506,7 @@ print(state.returns)
 停机时的 `i` 必须逐项相同。
 
 C++ 侧是反过来的：`State::Run()` 就复用 `State::Step()`（header-only + 隐式 inline，展开后
-没有额外开销），只有一份步进规则，见 [`cpp/docs/basic_vm.md`](../../cpp/docs/basic_vm.md) §1。
+没有额外开销），只有一份步进规则，见 [`cpp/docs/basic-vm.md`](../../cpp/docs/basic-vm.md) §1。
 
 ### 宿主函数怎么进去
 
@@ -536,7 +536,7 @@ state.variables[program.exports["fmt:println"]] = Callable(host, "println")
 | 整数除零 | 引擎级 `SCRIPT ERROR`，**当前函数直接中断**、`errors` 里看不到（`_div` 先做 `a % b`，所以 `1 / 0` 同样会撞） |
 
 前两条是刻意保留的简化：它只是参考实现，`vm-guide.md` 是给自写执行器看的。
-第四条是与 C++ 的**真实差异**，登记在 [`cpp/docs/expr_optim.md`](../../cpp/docs/expr_optim.md) §7。
+第四条是与 C++ 的**真实差异**，登记在 [`cpp/docs/expr-optim.md`](../../cpp/docs/expr-optim.md) §7。
 
 ---
 

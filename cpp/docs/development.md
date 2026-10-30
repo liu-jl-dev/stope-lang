@@ -6,8 +6,8 @@
 | --- | --- |
 | 本目录总览（面向所有人，本文是面向开发者的） | `README.md`（本目录） |
 | 怎么在程序里嵌入 Stope | `quick-start.md`（本目录） |
-| 虚拟机的约定 | `basic_vm.md`（本目录） |
-| Lexer / Parser / Compiler / STML 的测试计划 | 四份 `*_test_plan.md`（本目录） |
+| 虚拟机的约定 | `basic-vm.md`（本目录） |
+| Lexer / Parser / Compiler / STML 的测试计划 | 四份 `*-test-plan.md`（本目录） |
 | 语言的规格 | `../../docs/zh-cn/syntax-reference.md` |
 
 ---
@@ -225,9 +225,9 @@ VSCode 里格式化按钮的等价效果，就是 `--style=file`（改完设置�
 | 文档 | 记什么 |
 | --- | --- |
 | `../../docs/zh-cn/*` | 跨实现通用的**规格与契约**（语法、测试计划） |
-| `lexer_test_plan.md` / `parser_test_plan.md` / `compiler_test_plan.md` / `stml_test_plan.md` | 各模块**测了什么** + 缺陷编号 |
-| `expr_optim.md` | 常量折叠的规则总表 |
-| `basic_vm.md` | 虚拟机的语义约定 |
+| `lexer-test-plan.md` / `parser-test-plan.md` / `compiler-test-plan.md` / `stml-test-plan.md` | 各模块**测了什么** + 缺陷编号 |
+| `expr-optim.md` | 常量折叠的规则总表 |
+| `basic-vm.md` | 虚拟机的语义约定 |
 | `quick-start.md` | 嵌入 Stope 的四步 |
 | `stml.md` | STML 文档解析：回调决定内容模式 + 语法注意事项 |
 | `custom-opcode.md` | 自定义指令：注册 → 编译 → 反汇编 |
@@ -245,9 +245,15 @@ VSCode 里格式化按钮的等价效果，就是 `--style=file`（改完设置�
 
 ### 6.3 文件名
 
-`docs/zh-cn/`、`cpp/docs/`、`gdscript/docs/` 的文件名**一律 ASCII kebab-case**，
-目录名可以是 `zh-cn`。中文标题放在文件的一级标题里即可 —— 这样链接里不会再出现
-`%20` 与 `%E8%AF%AD…`。
+`docs/zh-cn/`、`cpp/docs/`、`gdscript/docs/`、`nodejs/docs/` 的文件名**一律 ASCII
+kebab-case**，目录名可以是 `zh-cn`。中文标题放在文件的一级标题里即可 —— 这样链接里不会再
+出现 `%20` 与 `%E8%AF%AD…`。
+
+**2026-10-30 已统一**：`cpp/docs/` 原来有 6 个下划线文件（`basic_vm` / `expr_optim` /
+四个 `*_test_plan`），已改成 kebab（`basic-vm` / `expr-optim` / 四个 `*-test-plan`）。
+副作用是「C++ 实现笔记」与「跨实现契约」现在**同名不同目录**
+（`cpp/docs/parser-test-plan.md` vs `docs/zh-cn/parser-test-plan.md`），引用时别只写裸名、
+也别凭名字判断是哪一份 —— 见 [`README.md`](README.md) §1 的对照表。
 
 改文件名后要按「任意非 ASCII 字符 + `.md`」再扫一遍残留引用，
 不能只 grep 已知的旧名（子串匹配会漏，例如 `测试执行说明.md` 里没有 `测试说明.md`）。
@@ -256,7 +262,7 @@ VSCode 里格式化按钮的等价效果，就是 `--style=file`（改完设置�
 
 文档里写路径时：
 
-- 本目录内的文件写**裸名**（`basic_vm.md`）
+- 本目录内的文件写**裸名**（`basic-vm.md`）
 - 仓库根下的写 `../../docs/zh-cn/xxx.md`
 - `cpp/` 下的写 `cpp/docs/xxx.md`
 

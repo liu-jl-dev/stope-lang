@@ -14,7 +14,7 @@
 > 必须先在这里登记再动 C++。
 >
 > 面向语言的规格文档另见 [syntax-reference.md](syntax-reference.md)；C++ 侧更细的实现笔记见
-> `cpp/docs/lexer_test_plan.md`（那一份含 C++ 特有的 API 与已修缺陷流水）。
+> `cpp/docs/lexer-test-plan.md`（那一份含 C++ 特有的 API 与已修缺陷流水）。
 
 ## 目录
 
@@ -381,7 +381,7 @@ ctest --test-dir build
 
 lexer 相关：`test_lexer_number` / `test_lexer_ident` / `test_lexer_string` /
 `test_lexer_punct` / `test_lexer_flow` / `test_lexer_misc`。
-细化的 C++ 侧记录见 `cpp/docs/lexer_test_plan.md`。
+细化的 C++ 侧记录见 `cpp/docs/lexer-test-plan.md`。
 
 ### GDScript
 

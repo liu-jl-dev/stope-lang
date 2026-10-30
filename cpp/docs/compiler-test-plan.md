@@ -13,7 +13,7 @@
 - 实测环境：g++ (MinGW-w64 x86_64-win32-seh) 15.2.0，`-std=c++20`
 - 参考实现（语义基准）：`gdscript/addons/stope/compiler.gd`（配 `opcode.gd` 的 `Opcode` / `has_a_param`、
   `program.gd` 的收尾）
-- 上游依赖：`parser.hpp` + `lexer.hpp`（其测试计划见 `parser_test_plan.md` / `lexer_test_plan.md`）
+- 上游依赖：`parser.hpp` + `lexer.hpp`（其测试计划见 `parser-test-plan.md` / `lexer-test-plan.md`）
 
 ---
 
@@ -133,7 +133,7 @@ struct Compiler : public ASTVisitor {            // 基类见 ast_visitor.hpp
 
 - 参考实现 `set_custom_insts` 会校验 ①code 必须 > `Return` ②名字不能是关键字
   ③非变长时 `arg_num >= 0`。C++ 的 `addCustomOpcode` 目前**没有**这些校验。
-  要补的话应改 `custom_opcode.hpp`，届时记得同步 `lexer_test_plan.md` 的 K 组。
+  要补的话应改 `custom_opcode.hpp`，届时记得同步 `lexer-test-plan.md` 的 K 组。
 
 ---
 
@@ -146,7 +146,7 @@ struct Compiler : public ASTVisitor {            // 基类见 ast_visitor.hpp
 | `cpp/test/test_compiler.cpp` | 全部 C 组用例 + `main()`。自成二进制，与 `test_parser` / `test_lexer` 分开：编译产物的差异不至于互相掩盖，也让 `ctest` 能单独定位 |
 | `cpp/test/test_ast_visitor.cpp` | V 组用例：基类 `ASTVisitor` 的遍历骨架（见 §4.5）。与 C 组分开二进制，因为断言锁的是「默认遍历顺序」，与指令流无关 |
 | `cpp/test/test_common.hpp` | 复用 `g_total` / `g_failed` / `check()` / `section()` / `toUtf8()` |
-| `cpp/docs/*_test_plan.md` | 计划文档统一放在 `cpp/docs/`（本文档、`parser_test_plan.md`、`lexer_test_plan.md`） |
+| `cpp/docs/*-test-plan.md` | 计划文档统一放在 `cpp/docs/`（本文档、`parser-test-plan.md`、`lexer-test-plan.md`） |
 
 `CMakeLists.txt` 里的登记：
 

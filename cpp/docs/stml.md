@@ -10,7 +10,7 @@
 | --- | --- |
 | 本目录总览（面向所有人） | `README.md`（本目录） |
 | STML 的行为契约（跨实现，以它为准） | `../../docs/zh-cn/stml-test-plan.md` |
-| C++ 侧的实现笔记与缺陷流水 | `stml_test_plan.md`（本目录） |
+| C++ 侧的实现笔记与缺陷流水 | `stml-test-plan.md`（本目录） |
 | Nevext 语言本身 | <https://github.com/liu-jl-dev/nevext> |
 | 标准范围（哪些是标准、哪些只是示例） | `../../README.md` |
 | Stope 程序的编译与运行 | `quick-start.md`（本目录） |
@@ -559,5 +559,5 @@ int main() {
 | `demo/02-stml.cpp` | 本文讲的 demo，目标 `demo02`；**只解析，不编译不执行** |
 | `test/test_stml_parser.cpp`（59 用例） | 语法侧断言，用例编号 PA / PB / PC / PE / PF / PH / PL |
 | `test/test_stml_lexer.cpp`（62 用例） | 词法侧断言，用例编号 SE / SL / SN / SP / SR / SS / ST / SW / SX |
-| `stml_test_plan.md`（本目录） | C++ 侧的实现笔记与缺陷编号 TD-xx |
+| `stml-test-plan.md`（本目录） | C++ 侧的实现笔记与缺陷编号 TD-xx |
 | `../../docs/zh-cn/stml-test-plan.md` | 跨实现的行为契约：什么是对的（C++ 与 GDScript 两侧都按它验证） |

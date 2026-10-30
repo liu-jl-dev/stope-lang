@@ -211,14 +211,14 @@ godot --headless --path gdscript res://demo/demo_01.tscn
 | STML 语法细节 12 条 | `stml.md` §6 | **不重复**，直接看 C++ 那份（对两侧同样成立） |
 | 自定义指令：登记 → 编译 → 反汇编 | [`custom-opcode.md`](../../cpp/docs/custom-opcode.md) | [`usage.md`](usage.md) §7 |
 | 自定义指令：怎么真的执行 | `custom-opcode.md` §6 | [`usage.md`](usage.md) §7.1 |
-| 执行器（栈、宿主接口、返回值） | [`basic_vm.md`](../../cpp/docs/basic_vm.md) | [`usage.md`](usage.md) §9 |
-| `Value` / 引用计数 / 生命周期 | `basic_vm.md` §2、§7 | **不适用**：本实现用 `Variant` + 引擎 GC |
-| 常量折叠规则总表 | [`expr_optim.md`](../../cpp/docs/expr_optim.md) | [`usage.md`](usage.md) §8 只写调用方式，语义只维护 C++ 那一份 |
+| 执行器（栈、宿主接口、返回值） | [`basic-vm.md`](../../cpp/docs/basic-vm.md) | [`usage.md`](usage.md) §9 |
+| `Value` / 引用计数 / 生命周期 | `basic-vm.md` §2、§7 | **不适用**：本实现用 `Variant` + 引擎 GC |
+| 常量折叠规则总表 | [`expr-optim.md`](../../cpp/docs/expr-optim.md) | [`usage.md`](usage.md) §8 只写调用方式，语义只维护 C++ 那一份 |
 | 构建 / 坑 / 行尾 | [`development.md`](../../cpp/docs/development.md) §1–§5 | [`testing.md`](testing.md) §1 + [`gdscript-notes.md`](gdscript-notes.md) §3 |
 | 代码风格 | `development.md` §5 | [`gdscript-notes.md`](gdscript-notes.md) §2.6 |
 | 文档协作与命名 | `development.md` §6 | [`gdscript-notes.md`](gdscript-notes.md) §2.9 |
-| 四份 `*_test_plan.md`（实现笔记 + 缺陷流水） | [`cpp/docs/`](../../cpp/docs/) | [`testing.md`](testing.md) 一份覆盖五组；跨实现契约在 `docs/zh-cn/` |
+| 四份 `*-test-plan.md`（实现笔记 + 缺陷流水） | [`cpp/docs/`](../../cpp/docs/) | [`testing.md`](testing.md) 一份覆盖五组；跨实现契约在 `docs/zh-cn/` |
 
 > **本目录文件名一律 ASCII kebab-case**（`gdscript-notes.md` / `testing.md` / `usage.md` /
-> `troubleshooting.md`），与 `cpp/docs/development.md` §6.3 是同一条规则 —— 那边
-> `cpp/docs/` 自己有 6 个文件用了下划线，是历史遗留，别照着学。
+> `troubleshooting.md`），与 `cpp/docs/development.md` §6.3 是同一条规则。`cpp/docs/` 与
+> `nodejs/docs/` 已在 2026-10-30 一并统一，全仓库没有下划线文件名了。

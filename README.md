@@ -233,7 +233,7 @@ godot --headless --path gdscript res://demo/demo_03.tscn
 | 嵌入 C++ 程序（四步）  | [cpp/docs/quick-start.md](cpp/docs/quick-start.md)               |
 | 解析 STML 文档       | [cpp/docs/stml.md](cpp/docs/stml.md)                             |
 | 构建 / 测试 / 行尾约定 | [cpp/docs/development.md](cpp/docs/development.md)               |
-| 虚拟机（参考实现）      | [cpp/docs/basic\_vm.md](cpp/docs/basic_vm.md)                    |
+| 虚拟机（参考实现）      | [cpp/docs/basic\_vm.md](cpp/docs/basic-vm.md)                    |
 | 自己实现一个虚拟机       | [docs/zh-cn/vm-guide.md](docs/zh-cn/vm-guide.md)                 |
 | GDScript 实现与插件安装 | [gdscript/docs/README.md](gdscript/docs/README.md)               |
 | GDScript API 用法   | [gdscript/docs/usage.md](gdscript/docs/usage.md)                 |
@@ -241,7 +241,7 @@ godot --headless --path gdscript res://demo/demo_03.tscn
 | GDScript 测试与数据重生成 | [gdscript/docs/testing.md](gdscript/docs/testing.md)             |
 | GDScript 语言坑与代码约定 | [gdscript/docs/gdscript-notes.md](gdscript/docs/gdscript-notes.md) |
 | C++ 侧实现笔记（改 `cpp/` 前看） | [cpp/docs/development.md](cpp/docs/development.md)             |
-| C++ 侧各模块实现笔记    | [cpp/docs/](cpp/docs/) 下的 `*_test_plan.md`、`expr_optim.md`       |
+| C++ 侧各模块实现笔记    | [cpp/docs/](cpp/docs/) 下的 `*-test-plan.md`、`expr-optim.md`       |
 
 ---
 

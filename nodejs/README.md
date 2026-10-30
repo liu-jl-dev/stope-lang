@@ -36,7 +36,7 @@ nodejs/
 │   ├── helpers.js     # lexer 的断言族（对应 C++ 的 EXPECT_* 宏）
 │   └── lexer.test.js  # lexer 用例，编号与 C++ 侧逐条对齐
 └── docs/
-    └── lexer_test_plan.md   # lexer 测试计划：覆盖矩阵、与 C++ 的差异、交叉验证做法
+    └── lexer-test-plan.md   # lexer 测试计划：覆盖矩阵、与 C++ 的差异、交叉验证做法
 ```
 
 ## 测试
@@ -87,7 +87,7 @@ describe('Lexer', () => {
   公用断言抽到 `test/helpers.js`，期望值改一处即可。以后 parser 一组带 `P` 前缀，
   STML 一组带 `STOK`/`SP` 前缀。
 - **用例编号与 C++ 对齐**：`test/lexer.test.js` 的 `I-xx` / `F-xx` / `D-xx` / … 全部沿用
-  `cpp/test/test_lexer_*.cpp` 的编号，清单见 `docs/lexer_test_plan.md`。C++ 改行为时两边一起改。
+  `cpp/test/test_lexer_*.cpp` 的编号，清单见 `docs/lexer-test-plan.md`。C++ 改行为时两边一起改。
 - **golden 数据由 C++ 侧 dump 生成**，不手写；比对前统一剥掉 `\r`（Windows 行尾差异）。
 - **`exports` 封闭包内路径**：外部只能从包根导入，深引用 `pkg/src/x.js` 会失败，这是刻意的。
 

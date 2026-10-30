@@ -13,7 +13,7 @@ enum class TokenType {
   CLAngle,    // </
   CRAngle,    // />
   EQ,         // =
-  Word,       // ^[a-zA-Z_:][a-zA-Z0-9_:-]*$  （注意不含 '.'，见 cpp/docs/stml_test_plan.md TD-1）
+  Word,       // ^[a-zA-Z_:][a-zA-Z0-9_:-]*$  （注意不含 '.'，见 cpp/docs/stml-test-plan.md TD-1）
   String,     // ""  ''
   Text,       // 一般元素中的文本
   NevextSrc,  // Nevext 代码

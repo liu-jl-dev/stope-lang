@@ -34,7 +34,7 @@ int main() {
   const int missingTypes = stmlTypeCoverage();
   printf("   缺失 TokenType %d 种\n", missingTypes);
 
-  printf("\n== 已知问题清单（TD = STML 缺陷/偏离，详见 cpp/docs/stml_test_plan.md §3）\n");
+  printf("\n== 已知问题清单（TD = STML 缺陷/偏离，详见 cpp/docs/stml-test-plan.md §3）\n");
   printf("   TD-1  Word 字符集注释含 '.' 但实现不支持    : 已修（2026-10-18 改注释，SW-04/SW-08）\n");
   printf("   TD-2  属性装在 std::map 里，顺序不保证      : 定夺（PB-06/PB-07 锁字典序）\n");
   printf("   TD-3  元素内文本只有一段，不做多段拼接      : 定夺（PC-01/PC-09）\n");

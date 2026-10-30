@@ -4,7 +4,7 @@
 //   I-xx 整数  F-xx 浮点  D-xx 标识符  K-xx 关键字  S-xx 字符串  B-xx 二进制串
 //   P-xx 标点  W-xx 空白与注释  L-xx 行号  E-xx 错误  R-xx 健壮性
 //   C-xx 自定义指令  G-xx 端到端
-// 用例清单与覆盖矩阵见 ../docs/lexer_test_plan.md。
+// 用例清单与覆盖矩阵见 ../docs/lexer-test-plan.md。
 //
 // 与 C++ 的唯一有意差异：C++ 里标识符与标点的 lexeme 恒为空（它有两个未修缺陷
 // D-8 / D-9），nodejs 侧对所有 token 都填了 lexeme。涉及这两处的断言按 nodejs

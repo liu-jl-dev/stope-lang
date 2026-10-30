@@ -10,10 +10,10 @@
 | 各模块的对外接口 | `../../docs/zh-cn/syntax-impl.md` |
 | 标准范围（为什么虚拟机不算标准） | `../../README.md` |
 | 自己写一个执行器 | `../../docs/zh-cn/vm-guide.md` |
-| 虚拟机的语义约定 | `basic_vm.md`（本目录） |
+| 虚拟机的语义约定 | `basic-vm.md`（本目录） |
 | 布局 / 构建 / 行尾 / 文档约定 | `development.md`（本目录） |
 | API 参数与所有权约定 | `development.md` §7（本目录） |
-| 常量折叠的规则总表 | `expr_optim.md`（本目录） |
+| 常量折叠的规则总表 | `expr-optim.md`（本目录） |
 | 解析 STML 文档 | `stml.md`（本目录） |
 | 给编译器加自定义指令 | `custom-opcode.md`（本目录） |
 
@@ -32,7 +32,7 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 | 虚拟机环节（§4–§6） | **只是内置示例** | `BasicVM::Allocator` `ProgramConstants` `API` `State` `Value` `Arguments` |
 
 **编译环节**跟着编译器规格走：`Program` 有明确的编码契约（指令编号、操作数、跳转目标都是
-`opcodes` 下标，见 `compiler_test_plan.md` §2），改接口要同步改规格与测试，所以可以照着写。
+`opcodes` 下标，见 `compiler-test-plan.md` §2），改接口要同步改规格与测试，所以可以照着写。
 它今天叫「相对稳定」而不是「稳定」，是因为 `Program` 的字段仍在演进。
 
 **虚拟机环节**是 `include/stope/basic_vm.hpp` 这一份实现的接口，**不是规范**：
@@ -146,7 +146,7 @@ cout << DisasmNoCustom(program) << endl;
 注意点：
 
 - **源码是 `u16string`**（UTF-16），不是 `std::string`。整个前端都在 UTF-16 上工作。
-- `Compile()` 返回 `Result`，失败时按约定会**把 `out` 复原为空**（见 `compiler_test_plan.md` §2）。
+- `Compile()` 返回 `Result`，失败时按约定会**把 `out` 复原为空**（见 `compiler-test-plan.md` §2）。
 - **参数都传引用**：`Parser parser(lexer)`、`ParseProgram(tree)`、`Compile(tree, program)`
   前面不加 `&`。只有真正可能为空的依赖才用指针（`Parser` 第二参、`Compiler` 构造参），
   约定见 `development.md` §7。
@@ -156,7 +156,7 @@ cout << DisasmNoCustom(program) << endl;
   产物里有自定义指令时改用 `Disasm(program, &config)`（见 §9 与 `demo/03-custom-opcode.cpp`）。
 
 这一节用到的五个类型（`Lexer` `Parser` `AST::Prog` `Compiler` `Program`）是**编译器接口**，
-它围绕的正是标准里规定的那一层 —— `Program` 的编码契约（`compiler_test_plan.md` §2），
+它围绕的正是标准里规定的那一层 —— `Program` 的编码契约（`compiler-test-plan.md` §2），
 所以这段代码相对稳定、值得照抄。**到此为止就是一个完整的 Stope 编译器用法**，
 后面三节只是「怎么把产物跑起来」的一种示例。
 
@@ -180,7 +180,7 @@ BasicVM::API api;
   所以**必须先有 `alloc`**。
 - **`API`** 持有 33 条内置指令的实现表（`static inline std::array<OpFunc, kOpCount> opFuncs`），
   `State::Run()` 就是拿 `api->opFuncs[opcode](*api, *this)` 循环；想单步就改用
-  `State::Step()`（一条指令一步，终止条件自己用 `state.i` 判，见 `basic_vm.md` §1）。
+  `State::Step()`（一条指令一步，终止条件自己用 `state.i` 判，见 `basic-vm.md` §1）。
   目前没有可替换 `API` 的余地，但 `SetAPI` 是必需的——漏了 `api` 就是空指针。
 
 生命周期：`alloc` 要活得比 `constants` 和 `state` 都长。都在同一个作用域里时，
@@ -333,7 +333,7 @@ int main() {
 | `cmake -B build` 报找不到编译器 | 缺 `-G "MinGW Makefiles"`，或删 `build/` 没删干净 |
 | 4 组 `parser-depth-*` 用例忽然全过 | 加了 `-DCMAKE_BUILD_TYPE=Release`，栈帧变小后「应崩溃」的用例不崩了 |
 
-更多约定：`nextToken()` 的规则见 `parser_test_plan.md` §2.2，
+更多约定：`nextToken()` 的规则见 `parser-test-plan.md` §2.2，
 栈深度阈值、行尾、构建陷阱见 `development.md`。
 
 ---
@@ -345,8 +345,8 @@ int main() {
   `cpp/demo/03-custom-opcode.cpp` 是可编译的完整例子（只编译 + 反汇编），
   它同时演示了 `Disasm(program, &config)` —— 产物含自定义指令时必须带
   config，否则名字和变长指令后面那个参数个数都无从得知。
-  **教程见 `custom-opcode.md`（本目录）**，规则见 `compiler_test_plan.md` §4.4。
+  **教程见 `custom-opcode.md`（本目录）**，规则见 `compiler-test-plan.md` §4.4。
 - 想换掉内置的虚拟机：读 `../../docs/zh-cn/vm-guide.md`。它讲的是「`Program` 的契约 +
   执行器必须实现出哪些语义」，`basic_vm.hpp` 只是其中一种写法；你可以只保留本文 §3 的
   编译环节，执行部分整段自己写。
-- 想看各模块怎么测的：四份 `*_test_plan.md`。
+- 想看各模块怎么测的：四份 `*-test-plan.md`。

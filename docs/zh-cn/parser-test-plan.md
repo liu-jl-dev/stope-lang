@@ -14,7 +14,7 @@
 > **本文所有期望值都是机器生成的**：由桥接 `cpp/include/stope/parser.hpp` 与
 > `cpp/test/test_common.hpp::shapeProg()` 的探针实测导出（2026-10-18），不是手推的。
 > 面向语言的规格见 [syntax-reference.md](syntax-reference.md)；C++ 侧实现笔记与缺陷流水见
-> `cpp/docs/parser_test_plan.md`。
+> `cpp/docs/parser-test-plan.md`。
 
 ## 目录
 
@@ -118,7 +118,7 @@
 
 **B-9 `ExprStmt.line` 与 `AssignStmt.line` 取左侧表达式的行**，不是分号的行。
 
-**B-10 常量折叠默认开启**，可关闭。折叠规则见 `cpp/docs/expr_optim.md` §4。
+**B-10 常量折叠默认开启**，可关闭。折叠规则见 `cpp/docs/expr-optim.md` §4。
 
 **B-11 错误不去重。** 同一行的多个错误全部上报，级联错误的条数会成倍上升。
 
@@ -316,7 +316,7 @@
 | O-14 | `"ab" * 3;` | `ExprStmt(Str("ababab"))` | 串 × 整数 = 重复 |
 | O-15 | `'01 ' + '02 ';` | `ExprStmt(BinArr[01,02])` | 二进制数组相加为连接 |
 
-> 完整行为矩阵见 `cpp/docs/expr_optim.md` §4（行为矩阵总表）。
+> 完整行为矩阵见 `cpp/docs/expr-optim.md` §4（行为矩阵总表）。
 > O 组只锁「有代表性的格子 + 禁止折叠的边界」。
 
 ---
@@ -346,7 +346,7 @@ ctest --test-dir build
 parser 相关：`test_parser_stmt` / `test_parser_expr` / `test_parser_prec` /
 `test_parser_postfix` / `test_parser_custom` / `test_parser_flow` / `test_parser_fold`。
 深嵌套用例（B 组）仍独立进程跑（要构造 12000 层的输入，混在主包里会拖慢并遮住其它结论），
-见 `cpp/docs/parser_test_plan.md` §8。
+见 `cpp/docs/parser-test-plan.md` §8。
 
 ### GDScript
 

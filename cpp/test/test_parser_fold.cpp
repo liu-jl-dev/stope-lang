@@ -2,7 +2,7 @@
 // 默认开启（Parser::constFolding = true）。本文件锁定「折叠后」的树形。
 //
 // 与之对应：P 组与 L-02 用 parseAll(..., nullptr, false) 关折叠，锁定「未折叠」树形。
-// 行为矩阵与「一律不折叠」清单见 cpp/stope/expr_optim.md §4 / §5 / §8。
+// 行为矩阵与「一律不折叠」清单见 cpp/stope/expr-optim.md §4 / §5 / §8。
 #include "test_common.hpp"
 
 namespace Stope {
@@ -28,7 +28,7 @@ void runFoldTests() {
       // ---- 比较：内层折掉，外层因跨类型停住（仍可见结合性）----
       {"O-09", u"1 == 2 != 3;", "ExprStmt(Bin(NE, Bool(false), Int(3)))"},
       {"O-10", u"1 < 2 < 3;", "ExprStmt(Bin(LT, Bool(true), Int(3)))"},
-      // ---- 字符串 / 二进制数组（本项目自定规则，见 expr_optim.md §4.9）----
+      // ---- 字符串 / 二进制数组（本项目自定规则，见 expr-optim.md §4.9）----
       {"O-11", u"\"ab\" + \"cd\";", "ExprStmt(Str(\"abcd\"))"},
       {"O-12", u"\"ab\" * 3;", "ExprStmt(Str(\"ababab\"))"},
       {"O-13", u"3 * \"ab\";", "ExprStmt(Str(\"ababab\"))"},  // 双向都支持
@@ -47,7 +47,7 @@ void runFoldTests() {
       {"O-24", u"null * 5;", "ExprStmt(Bin(Mul, Null, Int(5)))"},
       {"O-24b", u"null - 5;", "ExprStmt(Bin(Sub, Null, Int(5)))"},
       {"O-24c", u"null != 5;", "ExprStmt(Bool(true))"},
-      // ---- 一律不折叠的边界（expr_optim.md §5 / §6）----
+      // ---- 一律不折叠的边界（expr-optim.md §5 / §6）----
       {"O-25", u"1 / 0;", "ExprStmt(Bin(Div, Int(1), Int(0)))"},
       // 整数溢出**不检查**：按 64 位补码回绕，仍然折叠（与参考实现一致）
       {"O-26", u"9223372036854775807 + 1;", "ExprStmt(Int(-9223372036854775808))"},

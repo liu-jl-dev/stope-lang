@@ -18,7 +18,7 @@
 >
 > 另有 GDScript 参考实现（`gdscript/addons/stope/parser.gd`），C++ 侧在**错误恢复**与**顶层 `}`**
 > 两处有意与之不同，差异集中列在 §7。
-> 行为细节以 `cpp/docs/parser_test_plan.md`、`cpp/docs/lexer_test_plan.md` 中的实测用例为准。
+> 行为细节以 `cpp/docs/parser-test-plan.md`、`cpp/docs/lexer-test-plan.md` 中的实测用例为准。
 > 文中所有边界行为（数字切分、转义、二进制数组、缺分号等）均于 **2026-10-16** 用探针实测核对过。
 > 实现层面的已知缺陷（PD 编号、源码位置、修法建议）不在本文展开，
 > 见[syntax-impl.md §10](syntax-impl.md#10-已知缺陷清单)。
@@ -456,7 +456,7 @@ not true;       // → false
 `INT64_MIN % -1` 是 `Int(0)`。
 
 > 注意：折叠后 AST 不再与源码逐节点对应（上面第一行在树里就是一个 `Int(7)`）。
-> 完整的行为矩阵与调整方式见 `cpp/include/stope/expr_optim.md` §4。
+> 完整的行为矩阵与调整方式见 `cpp/docs/expr-optim.md` §4。
 
 ---
 

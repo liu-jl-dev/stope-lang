@@ -11,7 +11,7 @@
 > | **syntax-impl.md（本文）** | 改 Lexer / Parser 的人 | Token 表、优先级数值、AST、错误点清单、已知缺陷 |
 >
 > 本文只描述 **C++ 实现（`cpp/`）的现状**，含未修复缺陷与其编号（PD-x，与
-> `cpp/docs/parser_test_plan.md`、`cpp/docs/lexer_test_plan.md` 中的编号一致）。
+> `cpp/docs/parser-test-plan.md`、`cpp/docs/lexer-test-plan.md` 中的编号一致）。
 > 实测环境：g++ (MinGW-w64 x86_64-win32-seh) 15.2.0，`-std=c++20`，默认 8 MB 栈，2026-10-16。
 
 ## 目录
@@ -45,7 +45,7 @@
 | `cpp/include/stope/parse_binarr.hpp` | 二进制数组字面量内容解析 | 被 `parser.hpp` 以 `parseBinaryArray` 挂进 prefix 表 |
 | `cpp/include/stope/custom_opcode.hpp` | `CustomOpcodeConfig` / `CustomOpcode` | 宿主注册自定义指令 |
 | `cpp/docs/development.md` | 布局 / 构建 / ODR / 行尾 / 文档约定 | 动 `cpp/` 前必读 |
-| `cpp/docs/basic_vm.md` | 虚拟机的语义约定（句柄与引用计数、栈、宿主接口） | 动 VM 前必读 |
+| `cpp/docs/basic-vm.md` | 虚拟机的语义约定（句柄与引用计数、栈、宿主接口） | 动 VM 前必读 |
 | `cpp/docs/quick-start.md` | 在 C++ 里嵌入 Stope 的四步（编译 → 装配 → State → 运行） | 配 `cpp/demo/01-quick-start.cpp` 食用 |
 | `cpp/docs/stml.md` | STML 上手：回调决定内容怎么切，含 12 条语法注意事项 | 配 `cpp/demo/02-stml.cpp` 食用 |
 | `cpp/docs/custom-opcode.md` | 自定义指令：`CustomOpcodeConfig` → 编译 → `Disasm` 反汇编 | 配 `cpp/demo/03-custom-opcode.cpp` 食用 |
@@ -339,7 +339,7 @@ void nextToken() { curTokenIdx = (curTokenIdx + 1) % 2;
 
 - **`Node` 必须有 `virtual ~Node()`。** 没有它，按基类指针删除派生节点时派生部分
   不析构 → 泄漏。加上后 `sizeof(Node)` 从 8 变 16（vptr），
-  8 个正确路径用例 `new == delete` **完全配平**（`parser_test_plan.md` 的 B 组锁住）。
+  8 个正确路径用例 `new == delete` **完全配平**（`parser-test-plan.md` 的 B 组锁住）。
 - **成员层面天然 Rule of Zero**：子节点用 `std::vector<std::unique_ptr<...>>` 持有，
   不手写析构/拷贝；拷贝构造已被禁用。
 - **使用约定**：用 `unique_ptr` 持有；**不按值传递**（按值会切掉派生部分）；
@@ -398,7 +398,7 @@ interp.Visit(&tree);
 | **`Visit(AST::Node*)` 是唯一入口** | 没有 `visitProg(Prog&)` 这种便利重载了（`compiler.hpp` 开头记过这个坑）。`Prog` 不是 `Stmt`，它走 `visitMap` 里自己的表项 `onVisitProg` |
 | **重写里不调基类版 = 不再下钻** | 基类 `onVisitXxx` 全部是「按源码顺序递归子节点」。要子节点的值就得自己 `Visit`（或先调基类），要语句的语义就别调 —— 于是**同一个钩子既能当遍历、又能当求值**，不需要两套代码 |
 | **`onVisitOrExpr` / `onVisitAndExpr` 是为后端留的** | 基类 `onVisitBinaryOpExpr` 先分流 `or` / `and` 到这两个钩子，**默认实现会老老实实遍历两侧**（没有短路）。解释器想短路就只重写这两个；编译器不需要特判（它出 `If` / `GoTo`），所以没重写 |
-| **`curLine` 在基类** | `visit()` 顺带更新，供没有专属行号的诊断用。子类**不要**再声明一个同名字段 —— 名字隐藏会让实际被更新的那个读不到（`Compiler` 踩过，见 `compiler_test_plan.md` §4.5） |
+| **`curLine` 在基类** | `visit()` 顺带更新，供没有专属行号的诊断用。子类**不要**再声明一个同名字段 —— 名字隐藏会让实际被更新的那个读不到（`Compiler` 踩过，见 `compiler-test-plan.md` §4.5） |
 
 三个「骨架不管」的地方，实现时得自己记住：
 
@@ -593,13 +593,13 @@ void error(int line, const char* msg) {
 
 在 MinGW 该工具链上，`stringstream` 的内部分配**不经过**可替换的全局 `operator new`，
 释放却走 sized `operator delete`，导致「重载 new/delete 计数」时 `delete == new + error 条数`
-恒成立——看起来像泄漏，实际不是。测内存计量时要知道这一点（详见 `cpp/docs/parser_test_plan.md` §10 风险 5）。
+恒成立——看起来像泄漏，实际不是。测内存计量时要知道这一点（详见 `cpp/docs/parser-test-plan.md` §10 风险 5）。
 
 ---
 
 ## 9. 错误恢复约定
 
-### 9.1 四条约定（`cpp/docs/parser_test_plan.md` §2.2 有同步记录）
+### 9.1 四条约定（`cpp/docs/parser-test-plan.md` §2.2 有同步记录）
 
 1. **绝不推进 `Eof` 与块内的 `}`** —— 在 `Eof` 上 `nextToken()` 不前进会死循环；
    前进又会吞掉外层块的 `}`。
@@ -627,14 +627,14 @@ void error(int line, const char* msg) {
 | 出错后是否推进 token | `parse_break_stmt` / `parse_args_expr` / `parse_call_expr` / `parse_custom_inst` 等出错后都 `next_token()`（吞掉后续内容） | 只报错、不推进（约定 2） |
 | 顶层孤立 `}` | `prog_end_tokens` 让解析静默结束，后续语句被丢弃 | 报错并跳过继续解析（约定 4） |
 
-改动这两处会同时影响：本文档、`cpp/docs/parser_test_plan.md`、
-`cpp/docs/parser_test_plan.md`、以及 S-26/28/29/32、S-36、X-12、F-15/16、K-11 这组断言。
+改动这两处会同时影响：本文档、`cpp/docs/parser-test-plan.md`、
+`cpp/docs/parser-test-plan.md`、以及 S-26/28/29/32、S-36、X-12、F-15/16、K-11 这组断言。
 
 ---
 
 ## 10. 已知缺陷清单
 
-编号与 `cpp/docs/parser_test_plan.md` §3 一致，测试里以 `KNOWN("PD-x", ...)` 挂起。
+编号与 `cpp/docs/parser-test-plan.md` §3 一致，测试里以 `KNOWN("PD-x", ...)` 挂起。
 
 ### 10.1 已修（回归保护，勿回退）
 
@@ -730,11 +730,11 @@ ctest --test-dir build                 # 10/10
    否则整个测试目标编译不过（踩过：`AtExpr::indices` → `keyExprs`、构造函数加 config 参数）。
 2. **动了错误路径的 `nextToken()`** → 先确认没破坏 §9.1 约定 1 与 §9.2 的不变量，再跑
    B-01（全前缀截断，166 例）验证不挂死。
-3. **加了/改了 `error()` 调用点** → 同步更新 §8 的表、`cpp/docs/parser_test_plan.md` 的 R-01 与 §6 覆盖统计。
+3. **加了/改了 `error()` 调用点** → 同步更新 §8 的表、`cpp/docs/parser-test-plan.md` 的 R-01 与 §6 覆盖统计。
 4. **修好某个 PD** → 框架会报 `FIXED-PENDING-FLIP`（退出码 2）；把 `KNOWN` 翻成普通断言，
-   并在 `cpp/docs/parser_test_plan.md` §3 标 `[已修 YYYY-MM-DD]`、§7.1 补一行记录。
+   并在 `cpp/docs/parser-test-plan.md` §3 标 `[已修 YYYY-MM-DD]`、§7.1 补一行记录。
 5. **改了语义** → 三份文档一起更新：`syntax-intro.md`、`syntax-reference.md`、本文，
-   外加 `cpp/docs/parser_test_plan.md` §2.2。
+   外加 `cpp/docs/parser-test-plan.md` §2.2。
 6. **新增 AST 节点** → 同步 `test_common.hpp` 的 `nodeName()` 与 shape 序列化，否则
    NodeType 覆盖自检会失败。
 7. **header-only ODR** → `test_common.hpp` 里所有自由函数/命名空间变量必须 `inline` 或
