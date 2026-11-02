@@ -200,6 +200,7 @@ GDScript 侧专属的坑表）在 [`quick-start.md`](quick-start.md)。
 | 每个 API 怎么调、参数与返回 | [usage.md](usage.md) |
 | **解析 STML 文档**：回调 → 解析 → 读树 + 最小骨架 | [stml.md](stml.md) |
 | **给编译器加自定义指令**：登记 → 编译 → 反汇编 → 执行 | [custom-opcode.md](custom-opcode.md) |
+| **编译前先导出宿主变量**（形参先进作用域） | [../../docs/zh-cn/pre-export.md](../../docs/zh-cn/pre-export.md) |
 | **报错了**该改哪（按阶段查文案） | [troubleshooting.md](troubleshooting.md) |
 | 测试怎么跑、数据怎么重生成 | [testing.md](testing.md) |
 | GDScript 本身的坑与实现约定 | [gdscript-notes.md](gdscript-notes.md) |
@@ -226,6 +227,7 @@ GDScript 侧专属的坑表）在 [`quick-start.md`](quick-start.md)。
 | STML 语法细节 12 条 | `stml.md` §6 | **不重复**；语言版 §6 只写 GD 侧的两条差异（GD-S-17/18） |
 | 自定义指令：登记 → 编译 → 反汇编 | [`custom-opcode.md`](../../cpp/docs/custom-opcode.md) | [`custom-opcode.md`](custom-opcode.md) §2–§5 |
 | 自定义指令：怎么真的执行 | `custom-opcode.md` §6 | 语言版 §6（含可跑的 `op_map` 扩表代码） |
+| 预导出：编译前先占好槽位 | [`docs/zh-cn/pre-export.md`](../../docs/zh-cn/pre-export.md) | **不重复**：两侧无语言差异，共用一份（签名见其 §7） |
 | 执行器（栈、宿主接口、返回值） | [`basic-vm.md`](../../cpp/docs/basic-vm.md) | [`usage.md`](usage.md) §9 |
 | `Value` / 引用计数 / 生命周期 | `basic-vm.md` §2、§7 | **不适用**：本实现用 `Variant` + 引擎 GC |
 | 常量折叠规则总表 | [`expr-optim.md`](../../cpp/docs/expr-optim.md) | [`usage.md`](usage.md) §8 只写调用方式，语义只维护 C++ 那一份 |

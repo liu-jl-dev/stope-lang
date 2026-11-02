@@ -336,6 +336,7 @@ parser 识别 `myop`（把它变成 `Custom` token），编译器这边查不到
 
 跨实现的用例编号是 `CM-73…CM-78`（见 `../../docs/zh-cn/compiler-test-plan.md` §4.9）；
 这里手写一遍，是因为 C++ 是权威实现 —— 别只靠另外四份比对 golden 才发现自己错了。
+「要不要用、怎么用、有哪些坑」不在本文，见 `../../docs/zh-cn/pre-export.md`。
 
 | ID | 预导出 | 输入 | 锁什么 |
 | --- | --- | --- | --- |

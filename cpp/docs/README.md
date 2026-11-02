@@ -51,7 +51,7 @@
 | 单步执行 / 自己写调试器 | [`basic-vm.md`](basic-vm.md) §1（`State::Step()` 的终止条件与错误态约定） |
 | 解析一份 STML 文档 | [`stml.md`](stml.md)（配 `demo/02-*.cpp`） |
 | 给编译器加一条自己的指令 | [`custom-opcode.md`](custom-opcode.md)（配 `demo/03-*.cpp`） |
-| 编译前先导出几个宿主变量 | [`compiler-test-plan.md`](compiler-test-plan.md) §5.9（配 `demo/04-*.cpp`） |
+| 编译前先导出几个宿主变量 | [`docs/zh-cn/pre-export.md`](../../docs/zh-cn/pre-export.md)（配 `demo/04-*.cpp`；契约见 [`compiler-test-plan.md`](compiler-test-plan.md) §5.9） |
 | 查 Stope 的语法与错误文案 | [`docs/zh-cn/syntax-reference.md`](../../docs/zh-cn/syntax-reference.md) |
 | 查 Stope 从零开始的介绍 | [`docs/zh-cn/syntax-intro.md`](../../docs/zh-cn/syntax-intro.md) |
 | 查常量折叠会折掉什么 | [`docs/zh-cn/constant-folding.md`](../../docs/zh-cn/constant-folding.md) |

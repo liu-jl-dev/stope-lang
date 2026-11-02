@@ -145,7 +145,7 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 | 每个类 / 方法 / 字段 / 返回码 | [`docs/usage.md`](docs/usage.md) |
 | STML 怎么用（逐段讲 `demo/02-stml.py`） | [`docs/stml.md`](docs/stml.md) |
 | 自定义指令（逐段讲 `demo/03-custom-opcode.py`） | [`docs/custom-opcode.md`](docs/custom-opcode.md) |
-| 预导出：编译前先占好槽位（`demo/04-pre-export.py`） | [`../docs/zh-cn/compiler-test-plan.md`](../docs/zh-cn/compiler-test-plan.md) §4.9 |
+| 预导出：编译前先占好槽位（`demo/04-pre-export.py`） | [`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md) |
 | **改实现**：测试怎么跑、数据怎么来、Python 特有的坑 | [`docs/testing.md`](docs/testing.md) |
 | STML / 自定义指令的**语义权威** | [`cpp/docs/stml.md`](../cpp/docs/stml.md)、[`cpp/docs/custom-opcode.md`](../cpp/docs/custom-opcode.md) |
 | 语言本身 | [`docs/zh-cn/syntax-intro.md`](../docs/zh-cn/syntax-intro.md)、[`syntax-reference.md`](../docs/zh-cn/syntax-reference.md) |
