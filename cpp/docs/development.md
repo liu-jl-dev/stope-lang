@@ -224,7 +224,7 @@ VSCode 里格式化按钮的等价效果，就是 `--style=file`（改完设置�
 
 | 文档 | 记什么 |
 | --- | --- |
-| `../../docs/zh-cn/*` | 跨实现通用的**规格与契约**（语法、测试计划） |
+| `../../docs/zh-cn/*` | 跨实现通用的**规格与契约**（语法、测试计划、提交信息规范） |
 | `lexer-test-plan.md` / `parser-test-plan.md` / `compiler-test-plan.md` / `stml-test-plan.md` | 各模块**测了什么** + 缺陷编号 |
 | `expr-optim.md` | 常量折叠的规则总表 |
 | `basic-vm.md` | 虚拟机的语义约定 |

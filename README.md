@@ -317,6 +317,7 @@ Python 侧另有几处宿主语言语义要兜（`1.0 / 0` 抛异常、`-7 // 2`
 | 解析 STML 文档（上手） | [C++](cpp/docs/stml.md) · [GDScript](gdscript/docs/stml.md) · [Node.js](nodejs/docs/stml.md) · [C#](csharp/docs/stml.md) · [Python](python/docs/stml.md) |
 | 加自定义指令（上手） | [C++](cpp/docs/custom-opcode.md) · [GDScript](gdscript/docs/custom-opcode.md) · [Node.js](nodejs/docs/custom-opcode.md) · [C#](csharp/docs/custom-opcode.md) · [Python](python/docs/custom-opcode.md) |
 | 构建 / 测试 / 行尾约定 | [cpp/docs/development.md](cpp/docs/development.md)               |
+| 提交信息规范         | [docs/zh-cn/commit-convention.md](docs/zh-cn/commit-convention.md) |
 | 内置虚拟机（基础 VM）   | [cpp/docs/basic-vm.md](cpp/docs/basic-vm.md)                     |
 | 自己实现一个虚拟机       | [docs/zh-cn/vm-guide.md](docs/zh-cn/vm-guide.md)                 |
 | GDScript 实现与插件安装 | [gdscript/docs/README.md](gdscript/docs/README.md)               |
