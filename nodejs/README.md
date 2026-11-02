@@ -20,12 +20,13 @@ Stope 语言的 Node.js 实现。**零第三方依赖**，测试用 Node 内置�
 
 无需 `npm install` —— 这个包没有任何依赖。
 
-想先看效果就跑三个 demo（demo 只在仓库里，发布的包不含 `demo/`）：
+想先看效果就跑四个 demo（demo 只在仓库里，发布的包不含 `demo/`）：
 
 ```bash
 node demo/01-quick-start.js     # 编译 + 运行：反汇编 + 求和结果
 node demo/02-stml.js            # 只解析 STML，不编译不执行
 node demo/03-custom-opcode.js   # 自定义指令：只编译 + 反汇编
+node demo/04-pre-export.js      # 预导出：宿主先塞形参，再编译函数体
 ```
 
 demo 的输出以可读为准，不追求跨实现逐字节相同 —— 五份 demo 现在大致一致，但那是
@@ -94,7 +95,8 @@ nodejs/
 ├── demo/
 │   ├── 01-quick-start.js      # 编译 + 运行（对应 cpp/demo/01、gdscript/demo_01）
 │   ├── 02-stml.js             # 只解析 STML
-│   └── 03-custom-opcode.js    # 自定义指令：只编译 + 反汇编
+│   ├── 03-custom-opcode.js    # 自定义指令：只编译 + 反汇编
+│   └── 04-pre-export.js       # 预导出（Compile 的第三参）
 ├── test/
 │   ├── smoke.test.js     # 工程自检：ESM / 零依赖 / exports 不悬空
 │   ├── helpers.js        # lexer 的断言族（对应 C++ 的 EXPECT_* 宏）

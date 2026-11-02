@@ -33,9 +33,10 @@ Stope 的标准只覆盖三件事：**语言**、**STML**、**编译器的产物
 dotnet run --project csharp/demo/01-quick-start   # 编译 + 运行：反汇编 + 求和结果
 dotnet run --project csharp/demo/02-stml          # 只解析 STML
 dotnet run --project csharp/demo/03-custom-opcode # 自定义指令：只编译 + 反汇编
+dotnet run --project csharp/demo/04-pre-export    # 预导出：形参先进作用域
 ```
 
-三个 demo 的输出以**可读**为准，不追求跨实现逐字节相同。`01` 的输出：
+四个 demo 的输出以**可读**为准，不追求跨实现逐字节相同。`01` 的输出：
 
 ```
 [0]     PushId     0
@@ -272,7 +273,7 @@ if (state.Run() != Result.Success)
 Console.WriteLine(state.Returns[0]);   // 3
 ```
 
-三个 demo 没有用顶层语句，而是显式写了 `<c>internal static class Demo01 { static int Main() }</c>`
+四个 demo 没有用顶层语句，而是显式写了 `<c>internal static class Demo01 { static int Main() }</c>`
 —— 就是为了避开下面 §8 第一条那个撞名。
 
 ## 8. C# 专属坑

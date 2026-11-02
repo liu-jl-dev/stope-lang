@@ -1,0 +1,104 @@
+"""Demo 04：预导出（preExports）—— 宿主先把形参塞进作用域，再编译函数体。
+
+场景：STML 文档里定义函数，参数表写在标签属性上（``params="a b"``），函数体是
+Stope 源码。编译函数体时把 params 里的名字当 preExports 传进去，它们就先占好槽位、
+进 ``Program.exports``；宿主在 ``run()`` 之前把实参写进这些槽位，函数体里的 a、b
+直接就能读到。
+
+为什么不靠「未声明标识符自动导出」？那条路也行，但导出的是**函数体里用到的名字**，
+顺序取决于出现位置、没用到的形参根本不会存在。预导出让「参数表」只有一份、且顺序
+固定为标签里写的顺序，宿主可以照参数表直接写槽位。
+
+运行：python demo/04-pre-export.py
+"""
+
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from stope import (AST, Api, Compiler, Lexer, Parser, Program, Result,  # noqa: E402
+                   State, StmlElement, StmlLexer, StmlParser, StmlState, disasm)
+
+sys.stdout.reconfigure(encoding="utf-8")
+
+DOC = """
+<stml>
+<func name="add" params="a b" stope>
+    return a + b;
+</func>
+</stml>
+"""
+
+
+def content_kind(tag, attrs):
+    """带 stope 属性的元素，内容按 Stope 代码扫；切出来的 text 就是原样源码。"""
+    return StmlState.Stope if "stope" in attrs else StmlState.Xml
+
+
+def child(ele, tag):
+    """按名字找子元素。"""
+    return next((c for c in ele.children if c.tag == tag), None)
+
+
+def compile_src(src, pre_exports, out):
+    """编译一段源码，pre_exports 原样交给 Compiler。失败时打印错误并返回 False。"""
+    lexer = Lexer(src)
+    parser = Parser(lexer)
+    tree = AST.Prog()
+    parser.parse_program(tree)
+    for e in lexer.errors:
+        print("  lexer: " + e)
+    for e in parser.errors:
+        print("  parser: " + e)
+
+    compiler = Compiler()
+    rc = compiler.compile(tree, out, pre_exports)
+    for e in compiler.errors:
+        print("  compiler: " + e)
+    return rc == Result.Success and not lexer.errors and not parser.errors
+
+
+def main():
+    # ---------------- 1. 从 STML 里取出函数定义 ----------------
+    lexer = StmlLexer(DOC)
+    parser = StmlParser(lexer)
+    root = StmlElement()
+    if parser.parse(root, content_kind) != Result.Success:
+        raise SystemExit("\n".join(lexer.errors + parser.errors))
+
+    fn = child(root, "func")
+    name = fn.attrs["name"]
+    params = fn.attrs["params"].split()  # "a b" -> ["a", "b"]
+    print(f"[1] 从 <func> 取出：{name}({', '.join(params)})")
+
+    # ---------------- 2. 用参数表当 preExports 编译 ----------------
+    # 形参先占槽位（a=0、b=1），函数体里的 a、b 于是解析到文件作用域 ——
+    # 反汇编里是 PushValue(0) / PushValue(1)。
+    program = Program()
+    print("\n[2] 编译函数体（preExports = 形参表）：")
+    if not compile_src(fn.text, params, program):
+        raise SystemExit(1)
+    print(disasm(program))
+    print("  exports: " + " ".join(f"{k}={v}" for k, v in program.exports.items()))
+
+    # ---------------- 3. 塞实参、运行 ----------------
+    # 编译期就知道槽位，所以 run() 之前就能把值写进去 —— 这才是预导出的用处：
+    # 宿主的「调用」就是写变量 + 跑一遍，不需要额外的参数传递机制。
+    state = State()
+    state.reset(Api(), program)
+    state.variables[program.exports["a"]] = 3
+    state.variables[program.exports["b"]] = 4
+
+    state.run()
+    print(f"\n[3] add(3, 4) = {state.returns[0]}")
+
+    # ---------------- 4. 陷阱：预导出的名字不能再声明 ----------------
+    # 名字已经进了文件作用域，源码里再 export 同名、或顶层 let 同名，都是 duplicate。
+    # 预导出的变量只能赋值（a = 1;），不能重新声明。
+    print("\n[4] 函数体里又写 export a;：")
+    compile_src("export a; return a;", params, Program())
+
+
+if __name__ == "__main__":
+    main()

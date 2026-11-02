@@ -62,12 +62,13 @@ bug 会修、`Program` 演进时同步、五份实现的语义彼此对齐；接
 ## 1. 先跑起来
 
 把 `addons/stope/` 拷进目标工程并启用插件（两步，见 [`README.md`](README.md) §4），
-然后在**本仓库**里可以直接跑三个 demo：
+然后在**本仓库**里可以直接跑四个 demo：
 
 ```bash
 godot --headless --path gdscript res://demo/demo_01.tscn   # 编译 + 运行
 godot --headless --path gdscript res://demo/demo_02.tscn   # 只解析 STML
 godot --headless --path gdscript res://demo/demo_03.tscn   # 只编译 + 反汇编
+godot --headless --path gdscript res://demo/demo_04.tscn   # 预导出：形参先进作用域
 ```
 
 `demo_01` 的完整输出（本文所有输出都是实际跑出来的，末尾空白已裁掉）：

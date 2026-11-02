@@ -262,6 +262,7 @@ GODOT="/c/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/godot_console.exe"
 "$GODOT" --headless --path gdscript res://demo/demo_01.tscn                     # 跑 demo 01
 "$GODOT" --headless --path gdscript res://demo/demo_02.tscn                     # 跑 demo 02
 "$GODOT" --headless --path gdscript res://demo/demo_03.tscn                     # 跑 demo 03
+"$GODOT" --headless --path gdscript res://demo/demo_04.tscn                     # 跑 demo 04
 ```
 
 重生成期望值不在这张表里 —— 它走 C++ 侧的 CMake target（数据已入库，跑测试不需要 C++）：

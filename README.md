@@ -242,9 +242,9 @@ godot --headless --path gdscript res://demo/demo_02.tscn
 godot --headless --path gdscript res://demo/demo_03.tscn
 ```
 
-第一条跑 3231 条断言（词法 / 语法 / 编译器 / STML / 执行器五组，前四组对齐 C++）；三个 demo 与 `cpp/demo/` 下的
+第一条跑 3231 条断言（词法 / 语法 / 编译器 / STML / 执行器五组，前四组对齐 C++）；四个 demo 与 `cpp/demo/` 下的
 `0N-*.cpp` 一一对应
-（`01` 编译+运行 / `02` STML 解析 / `03` 自定义指令）。
+（`01` 编译+运行 / `02` STML 解析 / `03` 自定义指令 / `04` 预导出）。
 更多见 [gdscript/docs/testing.md](gdscript/docs/testing.md)。
 
 ---
@@ -271,9 +271,9 @@ C++ 工具链**。更多见 [nodejs/README.md](nodejs/README.md)。
 需要 .NET SDK 10（实测 10.0.401），**零 NuGet 依赖**，`dotnet build` 不联网：
 
 ```bash
-dotnet build csharp/Stope.slnx                  # 库 + 测试 + 三个 demo
+dotnet build csharp/Stope.slnx                  # 库 + 测试 + 四个 demo
 dotnet run --project csharp/Stope.Tests         # 3232 条断言：词法 / 折叠 / 语法编译器 / 深度 / 反汇编 / STML / 执行器
-dotnet run --project csharp/demo/01-quick-start # 编译 + 运行（还有 02-stml / 03-custom-opcode）
+dotnet run --project csharp/demo/01-quick-start # 编译 + 运行（还有 02-stml / 03-custom-opcode / 04-pre-export）
 ```
 
 测试跑器是**控制台程序**而不是 xUnit/NUnit：断言与分组汇总自己实现，输出格式与
@@ -292,7 +292,7 @@ python python/tests/run_tests.py         # 3293 条断言：词法 / 折叠 / �
 python python/demo/01-quick-start.py     # 编译 + 运行（还有 02-stml / 03-custom-opcode）
 ```
 
-`tests/run_tests.py` 与三个 demo 都自己把 `python/` 插进 `sys.path`，所以在仓库根目录
+`tests/run_tests.py` 与四个 demo 都自己把 `python/` 插进 `sys.path`，所以在仓库根目录
 或 `python/` 下都能直接跑。测试跑器是普通脚本而不是 pytest：`tests/report.py` 只有
 「比一下、记一笔」。期望值同样读 `gdscript/test/data/` 那一份 golden 数据，所以
 **跑 Python 测试也不需要 C++ 工具链**。更多见 [python/README.md](python/README.md)。

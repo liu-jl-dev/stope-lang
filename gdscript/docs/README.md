@@ -81,6 +81,7 @@ gdscript/
     demo_01.gd/.tscn     编译 + 运行（对齐 cpp/demo/01-quick-start.cpp）
     demo_02.gd/.tscn     解析 STML（对齐 cpp/demo/02-stml.cpp）
     demo_03.gd/.tscn     自定义指令：登记 → 编译 → 反汇编（对齐 03-custom-opcode.cpp）
+    demo_04.gd/.tscn     预导出：宿主先塞形参，再编译函数体（对齐 04-pre-export.cpp）
   test/                  run_tests.gd + 五组测试 + golden 数据（数据由 cpp/tools/ 生成）
   docs/                  本目录
   project.godot          Godot 工程文件（已启用本插件）
@@ -165,17 +166,18 @@ godot --headless --path gdscript res://demo/demo_01.tscn
 
 预期输出 `[Host] 结果为: 15` 与 `result: 15`，与 `cpp/demo/01-quick-start.cpp` 一致。
 
-另两个 demo 与 C++ 侧同名同序：
+另三个 demo 与 C++ 侧同名同序：
 
 | demo | 跑法 | 对齐 |
 | --- | --- | --- |
 | `demo_02.gd` | `... res://demo/demo_02.tscn` | `cpp/demo/02-stml.cpp`（只解析，不执行） |
 | `demo_03.gd` | `... res://demo/demo_03.tscn` | `cpp/demo/03-custom-opcode.cpp`（只编译 + 反汇编） |
+| `demo_04.gd` | `... res://demo/demo_04.tscn` | `cpp/demo/04-pre-export.cpp`（预导出 + 执行） |
 
 > `demo_02` 的宿主回调（`config` → Nevext、带 `stope` 属性 → Stope、其余 → Xml）与
 > `cpp/demo/02-stml.cpp` 的 lambda 逐条对应，输入文档也是同一份。
 
-上面这段骨架只是「够跑通」。**逐段讲解版**（每一步为什么这么写、三个 demo 的完整输出、
+上面这段骨架只是「够跑通」。**逐段讲解版**（每一步为什么这么写、四个 demo 的完整输出、
 GDScript 侧专属的坑表）在 [`quick-start.md`](quick-start.md)。
 
 ## 6. 改动顺序

@@ -30,9 +30,10 @@ Stope 的标准只覆盖三件事：**语言**、**STML**、**编译器的产物
 python python/demo/01-quick-start.py     # 编译 + 运行：反汇编 + 求和结果
 python python/demo/02-stml.py            # 只解析 STML
 python python/demo/03-custom-opcode.py   # 自定义指令：只编译 + 反汇编
+python python/demo/04-pre-export.py      # 预导出：形参先进作用域
 ```
 
-三个 demo 的目的是**教用法**：输出以可读为准，不追求与另外四套实现逐字节相同。
+四个 demo 的目的是**教用法**：输出以可读为准，不追求与另外四套实现逐字节相同。
 `01` 的输出：
 
 ```
@@ -315,7 +316,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "python"))
 ```
 
-三个 demo 与 `tests/run_tests.py` 开头都是第一种写法。
+四个 demo 与 `tests/run_tests.py` 开头都是第一种写法。
 
 ## 8. Python 专属坑
 

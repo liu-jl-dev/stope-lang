@@ -65,6 +65,7 @@ BigInt / Number / string / 二进制数组 / 函数）。这是能力边界，�
 node demo/01-quick-start.js   # 编译 + 运行
 node demo/02-stml.js          # 只解析 STML
 node demo/03-custom-opcode.js # 只编译 + 反汇编
+node demo/04-pre-export.js    # 预导出：形参先进作用域
 ```
 
 `01` 的完整输出（本文所有输出都是实际跑出来的，末尾空白已裁掉）：

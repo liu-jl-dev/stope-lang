@@ -5,5 +5,6 @@
     <Project Path="demo/01-quick-start/01-quick-start.csproj" />
     <Project Path="demo/02-stml/02-stml.csproj" />
     <Project Path="demo/03-custom-opcode/03-custom-opcode.csproj" />
+    <Project Path="demo/04-pre-export/04-pre-export.csproj" />
   </Folder>
 </Solution>

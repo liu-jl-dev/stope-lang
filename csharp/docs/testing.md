@@ -24,10 +24,10 @@ dotnet run --project csharp/Stope.Tests
 只想编译不跑：
 
 ```bash
-dotnet build csharp/Stope.slnx      # 库 + 测试跑器 + 三个 demo，0 警告
+dotnet build csharp/Stope.slnx      # 库 + 测试跑器 + 四个 demo，0 警告
 ```
 
-三个 demo（`demo/0{1,2,3}`）**不进测试**，要单独跑：
+四个 demo（`demo/0{1,2,3,4}`）**不进测试**，要单独跑：
 
 ```bash
 dotnet run --project csharp/demo/01-quick-start

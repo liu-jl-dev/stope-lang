@@ -134,7 +134,7 @@ int main() {
   if (!compileAndReport(fn->text, params, program)) {
     return 1;
   }
-  cout << DisasmNoCustom(program);
+  cout << DisasmNoCustom(program) << endl;
   cout << "  exports:";
   for (const auto& kv : program.exports) {
     cout << " " << UTF::Utf16ToUtf8(kv.first) << "=" << kv.second;
