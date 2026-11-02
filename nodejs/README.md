@@ -105,7 +105,7 @@ nodejs/
 │   ├── compiler.test.js  # golden.txt 的产物 / 错误
 │   ├── binary.test.js    # 二进制数组 + 常量折叠矩阵
 │   ├── disasm.test.js    # 反汇编输出（逐字节）
-│   ├── stml.test.js      # STML 词法 + 语法（121 条共用清单）
+│   ├── stml.test.js      # STML 词法 + 语法（125 条共用清单）
 │   └── vm.test.js        # 执行器：算术语义、宿主接口、运行期错误
 └── docs/
     ├── quick-start.md      # 四步上手：编译 → 装执行器 → 传参 → 跑，附最小骨架与坑表

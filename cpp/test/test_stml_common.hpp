@@ -165,12 +165,14 @@ struct SParseResult {
 };
 
 inline SParseResult sparseAll(std::u16string src,
-                              LexerStateFunc sf = defaultStateFunc) {
+                              LexerStateFunc sf = defaultStateFunc,
+                              int maxDepth = 256) {
   auto holder = std::make_shared<std::u16string>(std::move(src));
   SParseResult r;
   r.src = holder;
   Lexer lx(*holder);
   Parser p(lx);
+  p.maxDepth = maxDepth;
   r.result = p.Parse(r.root, sf);
   r.errors = p.errors;
   r.lexErrors = lx.errors;

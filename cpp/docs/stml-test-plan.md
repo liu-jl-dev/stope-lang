@@ -191,7 +191,8 @@ struct SParseResult {
   Stope::Result result;
   std::string shape() const;
 };
-SParseResult sparseAll(std::u16string src, LexerStateFunc sf = defaultStateFunc);
+SParseResult sparseAll(std::u16string src, LexerStateFunc sf = defaultStateFunc,
+                       int maxDepth = 256);
 ```
 
 两个"保险丝"，**不要删**：
@@ -358,14 +359,16 @@ STML 自己的代码在 `-Wall -Wextra` 下是零告警。）
 | ✅ | 接入 `CMakeLists.txt`，`ctest` 收录（`test_stml`，13 项全绿） |
 | ⬜ | TD-7：让 `parseElement` 返回 `bool`，消掉级联报错 |
 | ⬜ | TD-9：Xml 属性字符串支持转义（需先定夺，影响 TD-8 文案统一） |
-| ✅ | GDScript 侧整改（GD-S-01…16 里的 14 条）+ `gdscript/test/` 的 STML 用例 121 条（2026-10-28）；残留 GD-S-17/18 |
+| ✅ | GDScript 侧整改（GD-S-01…16 里的 14 条）+ `gdscript/test/` 的 STML 用例 125 条（2026-10-28 / 2026-11-02）；残留 GD-S-17/18 |
+| ✅ | `stml_parser` 加嵌套深度上限（`maxDepth` 默认 256、0=不限、根算第 1 层、超限 1 条错不级联），清单新增 PARSE-PR 4 条 + `MD` 字段，五实现同步（2026-11-02） |
 
 ---
 
 ## 10. 风险与注意事项
 
-1. **深嵌套没有保护**：`parseElement` 递归无深度上限。PF-04 只测到 50 层，
-   真要防栈溢出得照 `test_parser_depth` 的做法单独探测阈值。
+1. **深嵌套已有保护，但别调大上限**（2026-11-02 起）：`parseElement` 受 `maxDepth`
+   （默认 256，0=不限）保护，PARSE-PR 锁行为。上限调大时每层栈帧照旧递归，
+   真要放宽得先照 `test_parser_depth` 的做法探测栈阈值。
 2. **属性顺序是"不保证"而不是"字典序"**：现在恰好是字典序（`std::map`），
    但语义上不要依赖它。换 `unordered_map` 那天，PB-06 / PB-07 会红。
 3. **`lexeme` 是 view**：任何把 `Element` 或 `Token` 存下来跨函数用的写法都会悬空。

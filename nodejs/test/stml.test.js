@@ -26,7 +26,7 @@ const LEXEME_TYPES = new Set([
   TokenType.StopeSrc,
 ])
 
-// 用例清单：ID / KIND / ST / SF / SRC / TIMES
+// 用例清单：ID / KIND / ST / SF / SRC / TIMES / MD
 function readCases() {
   const out = []
   for (const line of readText('stml_cases.txt').split('\n')) {
@@ -44,6 +44,7 @@ function readCases() {
       state: one.ST ?? 'Xml',
       stateFunc: one.SF ?? '',
       src: unesc(one.SRC ?? '').repeat(Number(one.TIMES ?? 1)),
+      md: Number(one.MD ?? 256), // 嵌套深度上限（0 = 不限），仅语法用例
     })
   }
   return out
@@ -162,6 +163,7 @@ describe('STML：语法（SP 族）', () => {
       const g = golden.get(c.id)
       const lx = new Lexer(c.src)
       const p = new Parser(lx)
+      p.maxDepth = c.md
       const root = new Element()
       const sf =
         c.stateFunc === 'null'

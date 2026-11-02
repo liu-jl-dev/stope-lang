@@ -28,21 +28,35 @@ def default_state_func(tag: str, attrs) -> LexerState:
 
 
 class Parser:
-    __slots__ = ("lexer", "state_func", "errors", "token")
+    __slots__ = ("lexer", "state_func", "errors", "token", "max_depth", "aborted")
 
     def __init__(self, lexer: Lexer):
         self.lexer = lexer
         self.state_func = None
         self.errors: list[str] = []
         self.token = Token()
+        # 元素嵌套深度上限（根元素算第 1 层），0 = 不限。与 Stope 解析器的
+        # max_depth 同语义、同文案；STML 每层至少要 <a></a> 7 字节，正常文档
+        # 到不了 256，这个限制兜底的是自动生成的畸形输入。
+        self.max_depth = 256
+        self.aborted = False
 
     def parse(self, root: Element, state_func=default_state_func) -> Result:
         self.state_func = state_func
+        self.aborted = False
         self._next_token()
-        self._parse_element(root)
+        self._parse_element(root, 1)  # 根元素算第 1 层
         return Result.Success if not self.errors else Result.Error
 
-    def _parse_element(self, e: Element) -> None:
+    def _parse_element(self, e: Element, depth: int) -> None:
+        # 深度检查：唯一递归点在子元素分支，检查放入口即可。aborted 之后逐层
+        # 提前 return，不再消费任何 token —— 与 Stope 解析器「中止但不逐层
+        # 传染」同款，25 万层畸形输入只报一条错。
+        if self.aborted:
+            return
+        if self.max_depth > 0 and depth > self.max_depth:
+            self._abort_too_deep()
+            return
         # 进入元素一律先回到 Xml 状态：自闭合分支与出错提前返回的路径都走不到下面的
         # state_func，留着上一次的 Text / Nevext / Stope 会污染后续 token
         self.lexer.state = LexerState.Xml
@@ -95,7 +109,9 @@ class Parser:
                 if self.token.type == TokenType.LAngle:  # < 子元素
                     child = Element()
                     e.children.append(child)
-                    self._parse_element(child)
+                    self._parse_element(child, depth + 1)
+                    if self.aborted:
+                        return  # 超限的那层已报过错，逐层直接返回，不级联
                 else:
                     self._error('expected "<" or "</". ')
                     return
@@ -123,7 +139,14 @@ class Parser:
     def _next_token(self) -> None:
         self.token = self.lexer.next_token()
 
+    def _abort_too_deep(self) -> None:
+        self._error("nesting too deep (max %d). " % self.max_depth)  # 必须在置位之前记账
+        self.aborted = True
+
     def _error(self, msg: str) -> None:
+        # 超限中止之后的错误都是连锁反应，不再记账 —— 与 Stope 的 Parser 同款
+        if self.aborted:
+            return
         self.errors.append(f"line {self.token.line}: {msg}")
 
 

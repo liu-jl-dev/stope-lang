@@ -262,7 +262,7 @@ GD 是 `3 Add: msg`）。所以比两类东西：
 | [lexer-test-plan.md](../../docs/zh-cn/lexer-test-plan.md) | 空白与注释、行号、整数、浮点、标识符、关键字与自定义指令、字符串、二进制数组、标点、混合 |
 | [parser-test-plan.md](../../docs/zh-cn/parser-test-plan.md) | 语句、表达式与字面量、优先级、调用 / 索引 / 括号、自定义指令、行号、错误恢复、折叠；外加二进制数组 + 折叠矩阵 |
 | [compiler-test-plan.md](../../docs/zh-cn/compiler-test-plan.md) | `CM-01…CM-72`：字面量、变量与作用域、一元 / 二元运算、调用索引、`return`、控制流、自定义指令、错误场景、折叠与编译的配合 |
-| [stml-test-plan.md](../../docs/zh-cn/stml-test-plan.md) | §4 全部 121 条：词法 62 条 + 语法 59 条 |
+| [stml-test-plan.md](../../docs/zh-cn/stml-test-plan.md) | §4 全部 125 条：词法 62 条 + 语法 63 条 |
 
 用例的分节与每条的意图都在四份计划的 §4，改用例前先看那里。执行器组不对应任何计划
 （VM 不是标准），它测什么见 §5.2。

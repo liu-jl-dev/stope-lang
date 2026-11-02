@@ -11,12 +11,20 @@ import { Result } from './common.js'
 import { Element, TokenType } from './stml.js'
 import { State } from './stml_lexer.js'
 
+// 元素嵌套深度上限的默认值，与 C++ 的 STML::Parser::maxDepth 相同（0 = 不限），
+// 错误文案也逐字相同（两侧测试逐字比对）。
+const kDefaultMaxDepth = 256
+
 class Parser {
   constructor(lex) {
     this.lexer = lex
     this.stateFunc = null
     this.token = null
     this.errors = []
+    // 嵌套深度上限（根元素算第 1 层），0 = 不限。与语言解析器的 maxDepth 同语义；
+    // STML 每层至少要 <a></a> 7 字节，正常文档到不了 256，兜底的是畸形输入。
+    this.maxDepth = kDefaultMaxDepth
+    this.aborted = false
   }
 
   // 顶层只解析**一个**元素（B-15），根之后的剩余输入被忽略。
@@ -25,12 +33,21 @@ class Parser {
   // 返回值是 Result.Success / Result.Error（与编译器共用同一份 Result）。
   Parse(root, stateFunc = null) {
     this.stateFunc = stateFunc
+    this.aborted = false
     this.nextToken()
-    this.parseElement(root)
+    this.parseElement(root, 1) // 根元素算第 1 层
     return this.errors.length === 0 ? Result.Success : Result.Error
   }
 
-  parseElement(e) {
+  parseElement(e, depth) {
+    // 深度检查：唯一递归点在子元素分支，检查放入口即可。aborted 之后逐层
+    // 提前 return，不再消费任何 token —— 与语言解析器「中止但不逐层传染」
+    // 同款，25 万层畸形输入只报一条错。
+    if (this.aborted) return
+    if (this.maxDepth > 0 && depth > this.maxDepth) {
+      this.abortTooDeep()
+      return
+    }
     // 进入元素一律先回到 Xml：自闭合分支与出错提前返回的路径都走不到
     // stateFunc，留着上一次的 Text/Nevext/Stope 会污染后续 token
     this.lexer.state = State.Xml
@@ -87,7 +104,8 @@ class Parser {
         else if (this.token.type === TokenType.LAngle) {
           const child = new Element()
           e.children.push(child)
-          this.parseElement(child)
+          this.parseElement(child, depth + 1)
+          if (this.aborted) return // 超限的那层已报过错，逐层直接返回，不级联
         } else {
           this.error('expected "<" or "</". ')
           return
@@ -128,7 +146,14 @@ class Parser {
     return this.token
   }
 
+  abortTooDeep() {
+    this.error(`nesting too deep (max ${this.maxDepth}). `) // 必须在置位之前记账
+    this.aborted = true
+  }
+
   error(msg) {
+    // 超限中止之后的错误都是连锁反应，不再记账 —— 与 Stope 的 Parser 同款
+    if (this.aborted) return
     this.errors.push(`line ${this.token.line}: ${msg}`)
   }
 }

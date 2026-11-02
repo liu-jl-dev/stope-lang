@@ -14,6 +14,10 @@ class Parser:
 	var state_func:Callable
 	var token:STML.Token
 	var errors:Array[String]
+	# 嵌套深度上限（根元素算第 1 层），0 = 不限。与 parser.gd 的 max_depth 同语义；
+	# STML 每层至少要 <a></a> 7 字节，正常文档到不了 256，兜底的是畸形输入。
+	var max_depth:int = 256
+	var _aborted:bool = false
 	func _init(lex:STMLLexer.Lexer) -> void:
 		lexer = lex
 
@@ -23,12 +27,20 @@ class Parser:
 	# 返回值是 StopeResult.Success / StopeResult.Error（与 C++ 共用同一份 Result）。
 	func parse(root:STML.Element, state_func_:Callable) -> int:
 		state_func = state_func_
+		_aborted = false
 		next_token()
-		parse_element(root)
+		parse_element(root, 1) # 根元素算第 1 层
 		return StopeResult.Success if errors.is_empty() else StopeResult.Error
 
-	func parse_element(e:STML.Element) -> void:
+	func parse_element(e:STML.Element, depth:int) -> void:
 		var T := STML.Token.Type
+		# 深度检查：唯一递归点在子元素分支，检查放入口即可。_aborted 之后逐层
+		# 提前 return，不再消费任何 token —— 与 parser.gd「中止但不逐层传染」
+		# 同款，25 万层畸形输入只报一条错。
+		if _aborted: return
+		if max_depth > 0 and depth > max_depth:
+			abort_too_deep()
+			return
 		# 进入元素一律先回到 Xml：自闭合分支与出错提前返回的路径都走不到
 		# state_func，留着上一次的 Text/Nevext/Stope 会污染后续 token
 		lexer.state = STMLLexer.State.Xml
@@ -72,7 +84,8 @@ class Parser:
 				elif token.type == T.LAngle:
 					var child := STML.Element.new()
 					e.children.append(child)
-					parse_element(child)
+					parse_element(child, depth + 1)
+					if _aborted: return # 超限的那层已报过错，逐层直接返回，不级联
 				else:
 					error('expected "<" or "</". '); return
 		else: # Text / Nevext / Stope：整段内容由 Lexer 一次性给出
@@ -93,5 +106,10 @@ class Parser:
 	func next_token() -> STML.Token:
 		token = lexer.next_token()
 		return token
+	func abort_too_deep() -> void:
+		error('nesting too deep (max %d). ' % max_depth) # 必须在置位之前记账
+		_aborted = true
 	func error(msg:String) -> void:
+		# 超限中止之后的错误都是连锁反应，不再记账 —— 与 Stope 的 Parser 同款
+		if _aborted: return
 		errors.append(str('line ',token.line,': ',msg))

@@ -7,7 +7,7 @@ namespace Stope.Tests;
 /// <summary>
 /// STML 两组测试：词法（STOK 族）与语法（SP 族），<b>全部由 golden 数据驱动</b>。
 /// <para>
-/// 用例清单 <c>stml_cases.txt</c>（121 条）是四方共用的唯一真源：C++ 探针读它 dump 出
+/// 用例清单 <c>stml_cases.txt</c>（125 条）是五方共用的唯一真源：C++ 探针读它 dump 出
 /// <c>golden_stml.txt</c>，本文件读同一份清单 + golden 逐字段比对。加删用例只改清单。
 /// </para>
 /// <para>
@@ -26,6 +26,7 @@ public static class StmlTests
         public string State = "Xml";
         public string StateFunc = "";
         public string Src = "";
+        public int MaxDepth = 256;
     }
 
     private static List<Case> ReadCases()
@@ -44,6 +45,7 @@ public static class StmlTests
             if (!one.ContainsKey("ID")) continue;
             string src = Data.UnescapeLex(one.GetValueOrDefault("SRC", ""));
             int times = int.TryParse(one.GetValueOrDefault("TIMES", "1"), out int t) ? t : 1;
+            int md = int.TryParse(one.GetValueOrDefault("MD", "256"), out int m) ? m : 256;
             outList.Add(new Case
             {
                 Id = one["ID"],
@@ -51,6 +53,7 @@ public static class StmlTests
                 State = one.GetValueOrDefault("ST", "Xml"),
                 StateFunc = one.GetValueOrDefault("SF", ""),
                 Src = string.Concat(System.Linq.Enumerable.Repeat(src, times)),
+                MaxDepth = md,
             });
         }
         return outList;
@@ -121,7 +124,7 @@ public static class StmlTests
     private static void RunParse(Report rep, Case c, Dictionary<string, string> g)
     {
         var lx = new Stml.Lexer(c.Src);
-        var p = new Stml.Parser(lx);
+        var p = new Stml.Parser(lx) { MaxDepth = c.MaxDepth };
         var root = new Stml.Element();
         Stml.Parser.LexerStateFunc? sf = c.StateFunc switch
         {

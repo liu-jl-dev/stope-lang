@@ -233,6 +233,7 @@ if (r != Result::Success) {
 | 返回值 | `Result::Success` **当且仅当** `parser.errors` 为空 |
 | 错误去哪 | 累加进 `parser.errors`，格式 `line N: msg`；**不抛异常、不 exit** |
 | 顶层 | 只解析**一个**元素，根之后的输入静默忽略（§6.7） |
+| 嵌套深度 | 元素嵌套默认最多 **256 层**（根算第 1 层），`parser.maxDepth = 0` 表示不限。超限报 1 条 `nesting too deep (max 256). ` 并中止，剩余输入忽略、**不级联** |
 | 出错后 | `root` 是"部分成功"的状态，别假设它是完整的一棵树 |
 
 词法错误在 `lexer.errors`，语法错误在 `parser.errors`，**两边不合并** ——

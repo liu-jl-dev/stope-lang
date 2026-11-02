@@ -139,7 +139,7 @@ STML 可以用来管理相互调用的 Stope 程序，或实现面向对象等�
 五者出现分歧时**以 C++ 的实测行为为准**，差异登记在对应测试计划的 §7。
 
 > **`gdscript/`、`nodejs/`、`csharp/`、`python/` 都是参考实现，不是第二套标准。** 词法 / 语法 / 编译器 / STML
-> 四块已与 C++ 逐项对齐 —— 期望值全部由 C++ 探针 dump，各侧都不手写（STML 那 121 条用例
+> 四块已与 C++ 逐项对齐 —— 期望值全部由 C++ 探针 dump，各侧都不手写（STML 那 125 条用例
 > 跑的是**同一份清单** `gdscript/test/data/stml_cases.txt`）。残留的两条差异见
 > [stml-test-plan.md](docs/zh-cn/stml-test-plan.md) §7 的 GD-S-17/18；`nodejs/` 的整数用
 > `BigInt`（对应 int64）、字符串是 UTF-16（与 C++ 的 `u16string` 一致），`python/` 的整数

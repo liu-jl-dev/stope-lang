@@ -1,4 +1,4 @@
-// golden 数据生成器：把 docs/zh-cn/stml-test-plan.md §4 的 121 条用例在 C++ 侧的
+// golden 数据生成器：把 docs/zh-cn/stml-test-plan.md §4 的 125 条用例在 C++ 侧的
 // 真实输出 dump 成机器可读文本，供 GDScript 测试直接引用（期望值不手推）。
 //
 // 与另三个 golden*.cpp 的差别：**用例不内嵌在本文件里**，而是读
@@ -136,13 +136,14 @@ void dumpLex(const std::string& id, const std::u16string& src, LexerState st) {
 
 void dumpParse(const std::string& id,
                const std::u16string& src,
-               const std::string& sf) {
+               const std::string& sf,
+               int maxDepth) {
   LexerStateFunc f = defaultStateFunc;
   if (sf == "null")
     f = nullptr;
   else if (sf == "text")
     f = textStateFunc;
-  const SParseResult r = sparseAll(src, f);
+  const SParseResult r = sparseAll(src, f, maxDepth);
   std::cout << "ID=" << id << "\tKIND=parse\tSHAPE=" << r.shape()
             << "\tRESULT="
             << (r.result == Stope::Result::Success ? "Success" : "Error")
@@ -172,6 +173,7 @@ int main(int argc, char** argv) {
       continue;
     std::string id, kind, st, sf, src;
     int times = 1;
+    int maxDepth = 256;
     for (const auto& part : split(raw, '\t')) {
       std::string k, v;
       if (!splitKV(part, k, v))
@@ -188,6 +190,8 @@ int main(int argc, char** argv) {
         src = v;
       else if (k == "TIMES")
         times = std::atoi(v.c_str());
+      else if (k == "MD")
+        maxDepth = std::atoi(v.c_str());
     }
     if (id.empty())
       continue;
@@ -197,7 +201,7 @@ int main(int argc, char** argv) {
       all += one;
     const std::u16string u = UTF::Utf8ToUtf16(all);
     if (kind == "parse")
-      dumpParse(id, u, sf);
+      dumpParse(id, u, sf, maxDepth);
     else
       dumpLex(id, u, parseState(st));
   }

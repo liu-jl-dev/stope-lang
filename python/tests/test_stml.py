@@ -1,4 +1,4 @@
-"""STML：``stml_cases.txt``（121 条用例清单）+ ``golden_stml.txt``（C++ 探针 dump）。
+"""STML：``stml_cases.txt``（125 条用例清单）+ ``golden_stml.txt``（C++ 探针 dump）。
 
 与其它几组不同，这里**用例清单也是数据文件**：加删用例只改
 ``gdscript/test/data/stml_cases.txt``，然后重跑 ``cmake --build cpp/build --target gen-golden``。
@@ -100,6 +100,7 @@ def _run_parse(rep, case, want, src) -> None:
     cid = case["ID"]
     lx = stml_lexer.Lexer(src)
     ps = stml_parser.Parser(lx)
+    ps.max_depth = int(case.get("MD", "256"))  # 嵌套深度上限（0 = 不限）
     root = stml.Element()
     sf = case.get("SF", "default")
     if sf == "null":

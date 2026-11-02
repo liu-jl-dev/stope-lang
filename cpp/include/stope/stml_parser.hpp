@@ -30,12 +30,18 @@ struct Parser {
   LexerStateFunc stateFunc = nullptr;
   std::vector<std::string> errors;
   Token token;
+  // 元素嵌套深度上限（根元素算第 1 层），0 = 不限。
+  // 与 Stope::Parser::maxDepth 同语义、同文案。STML 每层至少要 <a></a> 7 字节，
+  // 正常文档到不了 256，这个限制兜底的是自动生成的畸形输入。
+  int maxDepth = 256;
   Parser(Lexer& lexer);
   Result Parse(Element& root, LexerStateFunc stateFunc);
 
  private:
-  void parseElement(Element& e);
+  bool aborted = false;  // 超限中止：此后不再消费 token，剩余输入全部忽略
+  void parseElement(Element& e, int depth);
   void nextToken();
   void error(const char* msg);
+  void abortTooDeep();
 };
 }  // namespace Stope::STML

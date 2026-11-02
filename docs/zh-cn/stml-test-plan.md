@@ -158,6 +158,12 @@ errors = parser.errors
 进入每个元素时**强制把 lexer.state 重置为 `Xml`**：自闭合分支与出错提前返回的路径
 都走不到 stateFunc，留着上一次的状态会污染后续 token。
 
+**嵌套深度上限**：元素嵌套默认最多 **256 层**（根元素算第 1 层），`maxDepth = 0` 表示
+不限（与 `Stope::Parser::maxDepth` 同语义）。超限时在**唯一递归点**（子元素解析）之上
+报一条错并中止：`line N: nesting too deep (max 256). `，此后不再消费任何 token、剩余
+输入全部忽略，**不级联**。STML 每层至少要 `<a></a>` 7 字节，正常文档到不了 256，这个
+限制兜底的是自动生成的畸形输入（见 PARSE-PR）。
+
 ### 2.7 元素模型
 
 ```
@@ -216,6 +222,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | 解析入口 | `p.Parse(Element& root, LexerStateFunc) -> Result` | `p.parse(root, state_func) -> int` |
 | 内容状态决策 | `LexerStateFunc(tag, attrs)` 回调 | 宿主 `Callable(tag, attrs) -> int`；传 `Callable()` 等价于 `nullptr` |
 | 错误 | `lx.errors` / `p.errors`，**两者不合并** | `lx.errors` / `p.errors`，同样不合并 |
+| 深度上限 | `p.maxDepth : int`（默认 256，0=不限） | `p.max_depth : int`（默认 256，0=不限） |
 | 结果枚举 | `Stope::Result::Success / Error` | `StopeResult.Success / Error`（与编译器共用同一份，见 gdscript/docs/usage.md 开头） |
 
 ---
@@ -242,6 +249,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | **B-14** | 每个错误分支都**提前 return**，不在同一处级联（**例外见 TD-7**） | PARSE-PE-01…PE-11 |
 | **B-15** | 顶层只解析**一个**元素；根之后的剩余输入被忽略（**TD-5**） | PARSE-PA-09 |
 | **B-16** | `lexer.errors` 与 `parser.errors` **不合并**，调用方要查两处（**TD-6**） | PARSE-PE-06、PARSE-PE-11 |
+| **B-17** | 元素嵌套默认最多 **256 层**（根算第 1 层，`maxDepth=0` 不限）；超限在第 257 层入口报 1 条 `nesting too deep (max 256). ` 并中止，不再消费 token、不级联 | PARSE-PR-01…PR-04 |
 
 **错误文案（必须逐字命中；英文，末尾带一个空格和句号）**
 
@@ -263,7 +271,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 
 ## 4. 用例清单
 
-> 共 **121 个用例 / 215 条断言**，C++ 侧落地在
+> 共 **125 个用例 / 222 条断言**，C++ 侧落地在
 > `cpp/test/test_stml_lexer.cpp` 与 `cpp/test/test_stml_parser.cpp`。
 > 用例 ID 就是源码里的 ID 字符串，便于反查。
 
@@ -362,7 +370,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | SR-05 | 200 个 `"` | 100 个空 `String` + `Eof`，0 错 |
 | SR-06 | `<!--` | 只有 `Eof` |
 
-### 4.2 语法（59 用例 / 96 断言）
+### 4.2 语法（63 用例 / 103 断言）
 
 > `stateFunc` 缺省行为：`<sto>` → Stope、`<nev>` → Nevext、`<p>` → Text、其余 → Xml。
 
@@ -460,6 +468,15 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | PH-03 | `<nev>title "a\nb"; /* x\ny */ size 1;</nev>` | 整段原样（含跨行引号与注释） |
 | PH-04 | `<a><img src="i.png" alt=""/><p>cap</p></a>` | 自闭合 + 文本兄弟 |
 
+#### PARSE-PR 嵌套深度上限（4）
+
+| 用例 | 输入 | 期望 |
+| --- | --- | --- |
+| PR-01 | `<a>` 重复 256 次 | **不触发**上限；深度 256，报的是 EOF 的正常级联（256 条 `expected "<" or "</".`） |
+| PR-02 | `<a>` 重复 257 次 | 第 257 层中止，**只报 1 条** `nesting too deep (max 256). `，不级联 |
+| PR-03 | `<a><b><c><d>`，`MD=2` | 自定义上限生效：第 3 层中止，1 条 `nesting too deep (max 2). ` |
+| PR-04 | 10 层闭合嵌套，`MD=0` | `maxDepth = 0` = 不限：成功，深度 10 |
+
 PH-01 的完整形状串：
 
 ```
@@ -472,7 +489,7 @@ Elem(div, L1, @class="box", @hidden, C=[Elem(p, L2, T="hello") Elem(sto, L3, T="
 
 | 维度 | 门槛 |
 | --- | --- |
-| 功能通过率 | §4 全部 121 个用例通过。**任一实现有 1 条不过就要在 §7 登记** |
+| 功能通过率 | §4 全部 125 个用例通过。**任一实现有 1 条不过就要在 §7 登记** |
 | 两实现一致性 | C++ 与 GDScript 用**同一份**用例数据，不允许出现「GDScript 版少测几条」 |
 | Token 覆盖 | 12 种 `TokenType` 全部被至少 1 个用例产出（C++ 侧由 `stmlTypeCoverage()` 自动查，当前 12/12） |
 | 错误文案 | §3 表格里明写的英文子串必须逐字命中 |
@@ -496,7 +513,7 @@ GDScript 侧由 `test/test_stml.gd` 承担，且它的期望值不是手写的 �
 ```bash
 cd E:/lib/stope-lang/cpp
 cmake -B build && cmake --build build
-ctest --test-dir build          # 13 项，其中 stml 是新增的那一项
+ctest --test-dir build          # 15 项
 ./build/test_stml.exe           # 单独跑 STML，看逐条断言
 ```
 
@@ -507,7 +524,7 @@ ctest --test-dir build          # 13 项，其中 stml 是新增的那一项
 | `cpp/test/test_stml.cpp` | 入口，跑词法 + 语法，打印覆盖统计与已知问题清单 |
 | `cpp/test/test_stml_common.hpp` | 断言框架（S 前缀宏）、`slexAll` / `sparseAll` 驱动、`shapeElem` 形状串 |
 | `cpp/test/test_stml_lexer.cpp` | §4.1 的 62 个词法用例 |
-| `cpp/test/test_stml_parser.cpp` | §4.2 的 59 个语法用例 |
+| `cpp/test/test_stml_parser.cpp` | §4.2 的 63 个语法用例 |
 
 退出码：`0` 全过；`1` 有断言失败；`2` 全过但有 `FIXED-PENDING-FLIP`。
 
@@ -515,20 +532,20 @@ ctest --test-dir build          # 13 项，其中 stml 是新增的那一项
 
 ### GDScript
 
-121 条用例全部落地在 `gdscript/test/`，随其它三组一起跑：
+125 条用例全部落地在 `gdscript/test/`，随其它三组一起跑：
 
 ```bash
 "/c/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/godot_console.exe" \
     --headless --path gdscript --script res://test/run_tests.gd
 ```
 
-输出里 `[4/4] STML` 那一段就是本组，602 条断言（62 × 4 + 59 × 6）。
+输出里 STML 那一段就是本组，golden 逐字段比对 626 条断言（62 × 4 + 63 × 6）。
 
 与另三组不同，这一组**用例清单本身也是数据文件**，因为两侧要跑同一批输入：
 
 | 文件 | 谁写 | 作用 |
 | --- | --- | --- |
-| `gdscript/test/data/stml_cases.txt` | 手写 | §4 的 121 条：ID / `KIND` / `ST`（词法初始状态）/ `SF`（宿主回调）/ `SRC` / `TIMES` |
+| `gdscript/test/data/stml_cases.txt` | 手写 | §4 的 125 条：ID / `KIND` / `ST`（词法初始状态）/ `SF`（宿主回调）/ `SRC` / `TIMES` / `MD`（语法用例的深度上限，默认 256） |
 | `cpp/tools/golden_stml.cpp` | 手写 | C++ 侧探针。读清单 → dump 期望值 |
 | `gdscript/test/data/golden_stml.txt` | **机器生成** | 期望值，勿手工编辑 |
 | `gdscript/test/test_stml.gd` | 手写 | GDScript 侧 runner。读清单 + golden，逐字段比对 |
@@ -567,7 +584,7 @@ ctest --test-dir build          # 13 项，其中 stml 是新增的那一项
 | **GD-S-15** | 元素内出现裸文本时，`parse_element()` 的 `else` 分支**只报错不推进**，`while true` 卡在同一个 token 上：`<a name="x">plain</a>` 实测**永不返回** | 报错后推进，或把文本切成 `Text` 交给上层 | ✅ 已修 2026-10-28（`else` 报错后 return，不再空转） |
 | **GD-S-16** | `scan_text()` / `scan_nevext()` / `scan_stope()` **不去尾部空白**：`<sto>let a=1;\n   </sto>` 实测 text = `let a=1;\n   ` | B-8：`Text` / 代码段的 lexeme **不含尾部空白**（`trimTrailingWs`） | ✅ 已修 2026-10-28（加 `trim_trailing_ws`） |
 | **GD-S-17** | `Element.attrs` 是 `Dictionary`，**遍历顺序是插入序**（源码顺序）；形状串能对齐是因为 `shape_elem()` 先 `keys.sort()` | `std::map`，遍历顺序是键的字典序 | 未修（直接遍历 `attrs` 的宿主代码会看到不同顺序；要用顺序就自己排序） |
-| **GD-S-18** | `String` 按**码点**推进，非 BMP 字符（emoji）一次吃掉整个字符 | `char16_t` 按 **UTF-16 码元**推进，非 BMP 字符会被当成两个 `Invalid` | 未修。§4 的用例不含非 BMP 字符，所以 121 条全绿也覆盖不到 |
+| **GD-S-18** | `String` 按**码点**推进，非 BMP 字符（emoji）一次吃掉整个字符 | `char16_t` 按 **UTF-16 码元**推进，非 BMP 字符会被当成两个 `Invalid` | 未修。§4 的用例不含非 BMP 字符，所以 125 条全绿也覆盖不到 |
 
 ### TD 编号索引
 

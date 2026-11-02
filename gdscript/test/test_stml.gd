@@ -1,5 +1,5 @@
 class_name StopeTestSTML
-# STML 测试。契约见 docs/zh-cn/stml-test-plan.md（§4 的 121 条用例）。
+# STML 测试。契约见 docs/zh-cn/stml-test-plan.md（§4 的 125 条用例）。
 #
 # 与其它三组不同，这一组的**用例清单也是数据文件**：
 #   data/stml_cases.txt  输入（两侧共用：C++ 探针也读它）
@@ -32,7 +32,7 @@ static func run(rep:StopeTestUtil.Report) -> void:
 			rep.add_fail(str('  FAIL ', id, '：golden 里没有这条，先重跑探针'))
 			continue
 		if c.get('KIND', 'lex') == 'parse':
-			_run_parse(rep, id, src, c.get('SF', 'default'), g)
+			_run_parse(rep, id, src, c.get('SF', 'default'), int(c.get('MD', '256')), g)
 		else:
 			_run_lex(rep, id, src, c.get('ST', 'Xml'), g)
 	_check_attrs_copy(rep)
@@ -58,9 +58,10 @@ static func _run_lex(rep:StopeTestUtil.Report, id:String, src:String,
 		StopeTestUtil.join_esc(lx.errors, StopeTestUtil.esc_shape))
 
 static func _run_parse(rep:StopeTestUtil.Report, id:String, src:String,
-		sf_name:String, g:Dictionary) -> void:
+		sf_name:String, max_depth:int, g:Dictionary) -> void:
 	var lx := STMLLexer.Lexer.new(src)
 	var parser := STMLParser.Parser.new(lx)
+	parser.max_depth = max_depth # 嵌套深度上限（0 = 不限）
 	var root := STML.Element.new()
 	var result:int = parser.parse(root, _state_func(sf_name))
 	rep.check(id, 'SHAPE', g.get('SHAPE', ''), shape_elem(root))

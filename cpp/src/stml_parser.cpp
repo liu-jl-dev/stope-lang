@@ -1,5 +1,6 @@
 #include <stope/stml_parser.hpp>
 
+#include <cstdio>
 #include <map>
 #include <sstream>
 #include <string>
@@ -14,12 +15,22 @@ Parser::Parser(Lexer& lexer) {
 
 Result Parser::Parse(Element& root, LexerStateFunc stateFunc) {
   this->stateFunc = stateFunc;
+  aborted = false;
   nextToken();
-  parseElement(root);
+  parseElement(root, 1);  // 根元素算第 1 层
   return errors.empty() ? Result::Success : Result::Error;
 }
 
-void Parser::parseElement(Element& e) {
+void Parser::parseElement(Element& e, int depth) {
+  // 深度检查：唯一递归点在子元素分支，检查放入口即可。
+  // aborted 之后逐层提前 return，不再消费任何 token —— 与 Stope::Parser
+  // 「中止但不逐层传染」同款，25 万层畸形输入只报一条错。
+  if (aborted)
+    return;
+  if (maxDepth > 0 && depth > maxDepth) {
+    abortTooDeep();
+    return;
+  }
   // 进入元素一律先回到 Xml 状态：自闭合分支与出错提前返回的路径都走不到
   // 下面的 stateFunc，留着上一次的 Text/Nevext/Stope 会污染后续 token
   lexer->state = LexerState::Xml;
@@ -76,7 +87,9 @@ void Parser::parseElement(Element& e) {
       if (token.type == TokenType::CLAngle) {  // </
         break;
       } else if (token.type == TokenType::LAngle) {  // < 子元素
-        parseElement(e.children.emplace_back());
+        parseElement(e.children.emplace_back(), depth + 1);
+        if (aborted)
+          return;  // 超限的那层已报过错，逐层直接返回，不级联
       } else {
         error("expected \"<\" or \"</\". ");
         return;
@@ -112,7 +125,18 @@ void Parser::nextToken() {
   lexer->NextToken(token);
 }
 
+void Parser::abortTooDeep() {
+  char buf[64];
+  std::snprintf(buf, sizeof buf, "nesting too deep (max %d). ", maxDepth);
+  error(buf);  // 必须在置 aborted 之前，否则会被下面那句直接吞掉
+  aborted = true;
+}
+
 void Parser::error(const char* msg) {
+  // 超限中止之后的错误都是连锁反应，不再记账 —— 与 Stope::Parser 同款。
+  // 有了这道闸，abortTooDeep 只要保证自己那条先记上就行。
+  if (aborted)
+    return;
   std::stringstream ss;
   ss << "line " << token.line << ": " << msg;
   errors.push_back(ss.str());

@@ -26,8 +26,16 @@ public sealed class Parser
     private readonly Lexer _lexer;
     private LexerStateFunc? _stateFunc;
     private Token _token = new();
+    private bool _aborted;
 
     public readonly List<string> Errors = new();
+
+    /// <summary>
+    /// 元素嵌套深度上限（根元素算第 1 层），0 = 不限制。与 <c>Stope.Parser.MaxDepth</c>
+    /// 同语义、同文案；STML 每层至少要 <c>&lt;a&gt;&lt;/a&gt;</c> 7 字节，正常文档到不了
+    /// 256，这个限制兜底的是自动生成的畸形输入。
+    /// </summary>
+    public int MaxDepth = 256;
 
     public Parser(Lexer lex) => _lexer = lex;
 
@@ -38,13 +46,23 @@ public sealed class Parser
     public Result Parse(Element root, LexerStateFunc? stateFunc = null)
     {
         _stateFunc = stateFunc;
+        _aborted = false;
         NextToken();
-        ParseElement(root);
+        ParseElement(root, 1); // 根元素算第 1 层
         return Errors.Count == 0 ? Result.Success : Result.Error;
     }
 
-    private void ParseElement(Element e)
+    private void ParseElement(Element e, int depth)
     {
+        // 深度检查：唯一递归点在子元素分支，检查放入口即可。aborted 之后逐层
+        // 提前 return，不再消费任何 token —— 与语言解析器「中止但不逐层传染」
+        // 同款，25 万层畸形输入只报一条错。
+        if (_aborted) return;
+        if (MaxDepth > 0 && depth > MaxDepth)
+        {
+            AbortTooDeep();
+            return;
+        }
         // 进入元素一律先回到 Xml：自闭合分支与出错提前返回的路径都走不到 stateFunc，
         // 留着上一次的 Text/Nevext/Stope 会污染后续 token
         _lexer.CurrentState = Lexer.State.Xml;
@@ -120,7 +138,8 @@ public sealed class Parser
                 {
                     var child = new Element();
                     e.Children.Add(child);
-                    ParseElement(child);
+                    ParseElement(child, depth + 1);
+                    if (_aborted) return; // 超限的那层已报过错，逐层直接返回，不级联
                 }
                 else
                 {
@@ -162,5 +181,16 @@ public sealed class Parser
 
     private void NextToken() => _token = _lexer.NextToken();
 
-    private void Error(string msg) => Errors.Add("line " + _token.Line + ": " + msg);
+    private void AbortTooDeep()
+    {
+        Error("nesting too deep (max " + MaxDepth + "). "); // 必须在置位之前记账
+        _aborted = true;
+    }
+
+    private void Error(string msg)
+    {
+        // 超限中止之后的错误都是连锁反应，不再记账 —— 与 Stope 的 Parser 同款
+        if (_aborted) return;
+        Errors.Add("line " + _token.Line + ": " + msg);
+    }
 }

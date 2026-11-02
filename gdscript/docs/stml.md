@@ -192,6 +192,7 @@ if parser.parse(root, _state_func) != StopeResult.Success:
 | 返回值 | `StopeResult.Success`（**`== 0`**）当且仅当 `parser.errors` 为空 |
 | 错误去哪 | 累加进 `parser.errors`，格式 `line N: msg`；**不抛异常、不中断** |
 | 顶层 | 只解析**一个**元素，根之后的输入静默忽略 |
+| 嵌套深度 | 元素嵌套默认最多 **256 层**（根算第 1 层），`parser.max_depth = 0` 表示不限。超限报 1 条 `nesting too deep (max 256). ` 并中止，剩余输入忽略、**不级联** |
 | 出错后 | `root` 是「部分成功」的状态 |
 
 词法错误在 `lexer.errors`，语法错误在 `parser.errors`，**两边不合并** —— 排查时两个都要看。
@@ -417,7 +418,7 @@ func _ready() -> void:
 | `addons/stope/stml_lexer.gd` | 四态扫描；`<!--` 只在 `Xml` 生效的实现就在这 |
 | `addons/stope/stml_parser.gd` | 属性循环、回调调用点、错误分支 |
 | `demo/demo_02.gd` | 本文讲的 demo，场景 `demo_02.tscn`；**只解析，不编译不执行** |
-| `test/test_stml.gd` | 121 条共用清单（`test/data/stml_cases.txt`）的词法 + 语法断言 |
+| `test/test_stml.gd` | 125 条共用清单（`test/data/stml_cases.txt`）的词法 + 语法断言 |
 | [`usage.md`](usage.md) §10 | API 表与四条宿主侧注意事项 |
 | [`../../cpp/docs/stml.md`](../../cpp/docs/stml.md) | 语义权威 + 12 条语法坑 |
 | [`../../docs/zh-cn/stml-test-plan.md`](../../docs/zh-cn/stml-test-plan.md) | 跨实现行为契约（GD-S-17/18 两条差异登记在 §7） |

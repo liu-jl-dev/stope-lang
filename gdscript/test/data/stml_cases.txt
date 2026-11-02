@@ -1,4 +1,4 @@
-# STML 用例清单 —— docs/zh-cn/stml-test-plan.md §4 的 121 条。
+# STML 用例清单 —— docs/zh-cn/stml-test-plan.md §4 的 125 条。
 #
 # 这一份是**唯一真源**：两侧都读它。
 #   · C++ 探针 cpp/tools/golden_stml.cpp 读它，dump 出 data/golden_stml.txt（期望值）；
@@ -11,6 +11,7 @@
 #                    其余 Xml / text=一律 Text）
 #   SRC        输入，转义规则：\\ \n \r \t（与 StopeTestUtil.unesc 一致）
 #   TIMES      SRC 重复几次（默认 1）
+#   MD         语法用例的嵌套深度上限 maxDepth（默认 256，0=不限；词法用例无此字段）
 ID=LEX-SX-01	KIND=lex	ST=Xml	SRC=<a>
 ID=LEX-SX-02	KIND=lex	ST=Xml	SRC=</a>
 ID=LEX-SX-03	KIND=lex	ST=Xml	SRC=<a/>
@@ -132,3 +133,11 @@ ID=PARSE-PH-01	KIND=parse	SF=default	SRC=<div class="box" hidden>\n<p>hello</p>\
 ID=PARSE-PH-02	KIND=parse	SF=default	SRC=<sto>if a < b { s = "x</y"; t = '01 02'; /* c */ }</sto>
 ID=PARSE-PH-03	KIND=parse	SF=default	SRC=<nev>title "a\nb"; /* x\ny */ size 1;</nev>
 ID=PARSE-PH-04	KIND=parse	SF=default	SRC=<a><img src="i.png" alt=""/><p>cap</p></a>
+# 嵌套深度上限（根元素算第 1 层，maxDepth=256，与 Stope::Parser 同语义）：
+# PR-01 边界 —— 256 层恰好不触发，报的是 EOF 的正常级联；
+# PR-02 超限 —— 第 257 层中止，只报一条 nesting too deep，不级联。
+ID=PARSE-PR-01	KIND=parse	SF=default	SRC=<a>	TIMES=256
+ID=PARSE-PR-02	KIND=parse	SF=default	SRC=<a>	TIMES=257
+# PR-03/04：maxDepth 配置化 —— 自定义上限生效（第 3 层中止）与 0=不限
+ID=PARSE-PR-03	KIND=parse	SF=default	SRC=<a><b><c><d>	MD=2
+ID=PARSE-PR-04	KIND=parse	SF=default	SRC=<a><b><c><d><e><f><g><h><i><j></j></i></h></g></f></e></d></c></b></a>	MD=0

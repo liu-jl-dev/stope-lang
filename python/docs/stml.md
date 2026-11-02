@@ -91,6 +91,7 @@ for e in parser.errors:     # 语法错误
 | 返回值 | `Result.Success` / `Result.Error`，同样别写 `if result:` |
 | `root` 是容器 | 调用前是空 `StmlElement()`，`parse()` 往里填。`line` 是根元素开始标签的行号 |
 | 只解析一个根 | STML 文档就是一个根元素（demo 里的 `<stml>`），根后面还有内容不会报错，但也不会被解析 |
+| 嵌套深度 | 元素嵌套默认最多 **256 层**（根算第 1 层），`parser.max_depth = 0` 表示不限。超限报 1 条 `nesting too deep (max 256). ` 并中止，剩余输入忽略、**不级联** |
 
 ## 4. 第三步：读树
 
