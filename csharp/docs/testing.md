@@ -49,13 +49,13 @@ npm test --prefix nodejs
 ```
 [1/7] 词法（golden_lex.txt）                    588 条
 [2/7] 二进制数组 + 常量折叠（golden_binarr.txt）   87 条
-[3/7] 语法 + 编译器（golden.txt）               1756 条
+[3/7] 语法 + 编译器（golden.txt）               1810 条
 [4/7] 嵌套深度上限                                21 条
 [5/7] 反汇编（golden_disasm.txt）                 12 条
-[6/7] STML（stml_cases.txt + golden_stml.txt）   602 条
+[6/7] STML（stml_cases.txt + golden_stml.txt）   626 条
 [7/7] 参考执行器                                  88 条
 ====================================================
-全部通过：共 3154 条断言
+全部通过：共 3232 条断言
 ```
 
 ## 2. 目录

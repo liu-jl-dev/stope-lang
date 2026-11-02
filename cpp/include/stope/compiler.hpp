@@ -94,8 +94,16 @@ struct Compiler : public ASTVisitor {
   // 编译 ast，结果直接写进 out。
   // 有错误时返回 Result::Error，并把 out 复原为空 —— 等价于参考实现出错时返回
   // null：半成品 Program 跑不了，留着反而误导。
-  // 参数一律传引用：两者都不允许为空，和 ParseProgram(AST::Prog&) 保持一种写法。
-  Result Compile(AST::Prog& ast, Program& out);
+  // 参数一律传引用：前两个都不允许为空，和 ParseProgram(AST::Prog&) 保持一种写法。
+  //
+  // preExports：在遍历 AST **之前**先导出的标识符（宿主注入的全局）。
+  //   * 每个名字按给定顺序占一个「永不回收」的槽位，所以**源码里所有变量的编号整体
+  //     后移**；同一份源码配不同的 preExports 产出不同字节码，别跨配置比 Program。
+  //   * 名字进了文件作用域，于是源码里再 `export 同名;` 或顶层 `let 同名` 都会报
+  //     duplicate —— 预导出的变量只能赋值（`a = 1;`），不能重新声明。
+  //   * 空名字、重名都是编译错误（行号记 0：这些名字不来自源码）。
+  Result Compile(AST::Prog& ast, Program& out,
+                 const std::vector<std::u16string>& preExports = {});
 
  private:
   VariableAllocator varAlloc;
@@ -110,6 +118,8 @@ struct Compiler : public ASTVisitor {
 
   void reset(Program& out);
   void clearOutput();
+  // 预导出：必须在 reset() 之后调用（reset 会重建 varAlloc、清空 out.exports）。
+  void exportPreExports(const std::vector<std::u16string>& names);
 
   // ---------------- 指令输出：直接写进 prog->opcodes ----------------
   int codeSize() const;

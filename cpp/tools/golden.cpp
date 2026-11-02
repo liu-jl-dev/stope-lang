@@ -177,7 +177,25 @@ static std::string stmtLines(const AST::Prog& p) {
   return o;
 }
 
-static void one(const char* id, const char* src, bool fold) {
+// pre：预导出名单，逗号分隔（空串表示不预导出）；中间的空元素表示一个空名字。
+static std::vector<std::u16string> splitPre(const char* pre) {
+  std::vector<std::u16string> out;
+  if (pre == nullptr || *pre == '\0') return out;
+  std::u16string cur;
+  for (const char* p = pre;; ++p) {
+    if (*p == ',' || *p == '\0') {
+      out.push_back(cur);
+      cur.clear();
+      if (*p == '\0') break;
+    } else {
+      cur += char16_t(static_cast<unsigned char>(*p));
+    }
+  }
+  return out;
+}
+
+static void one(const char* id, const char* src, bool fold,
+                const char* pre = nullptr) {
   auto holder = std::make_shared<std::u16string>(U(src));
   Lexer lx(*holder);
   Parser ps(lx, g_cfg);
@@ -187,10 +205,11 @@ static void one(const char* id, const char* src, bool fold) {
 
   Program out;
   Compiler c(g_cfg);
-  auto rc = c.Compile(prog, out);
+  auto rc = c.Compile(prog, out, splitPre(pre));
 
-  printf("ID=%s\tSRC=%s\tFOLD=%d\tSHAPE=%s\tLINES=%s\tPERR=%zu\tLEXERR=%zu\tPERRS=%s\tLEXERRS=%s\tCMP=%s\tOUT=%s\tCERRS=%s\n",
-         id, E_(src).c_str(), fold ? 1 : 0,
+  printf("ID=%s\tSRC=%s\tPRE=%s\tFOLD=%d\tSHAPE=%s\tLINES=%s\tPERR=%zu\tLEXERR=%zu\tPERRS=%s\tLEXERRS=%s\tCMP=%s\tOUT=%s\tCERRS=%s\n",
+         id, E_(src).c_str(), pre == nullptr ? "" : E_(pre).c_str(),
+         fold ? 1 : 0,
          E_(shapeProg(prog)).c_str(), stmtLines(prog).c_str(),
          ps.errors.size(), lx.errors.size(), join(ps.errors).c_str(),
          join(lx.errors).c_str(),
@@ -422,6 +441,25 @@ int main() {
       {"CM-72", "1 / 0;", true},
   };
   for (auto& c : cms) one(c.id, c.src, c.fold);
+
+  // ================= 预导出（preExports）=================
+  // PRE 逗号分隔；空元素表示一个空名字。
+  struct PC { const char* id; const char* pre; const char* src; };
+  static const PC pres[] = {
+      // 两个形参先占 0、1，源码里 a / b 直接解析到文件作用域
+      {"CM-73", "a,b", "a + b;"},
+      // 名单内重名
+      {"CM-74", "a,a", "a;"},
+      // 空名字（中间那个元素）
+      {"CM-75", "a,,b", "a;"},
+      // 与源码里的 export 撞名
+      {"CM-76", "a", "export a;"},
+      // 槽位后移：b 是第 2 个变量，编号 1 而不是 0
+      {"CM-77", "a", "let b = 1;"},
+      // 顶层 let 同名会报 duplicate —— 预导出的变量只能赋值，不能重新声明
+      {"CM-78", "a", "let a = 1;"},
+  };
+  for (const auto& p : pres) one(p.id, p.src, false, p.pre);
 
   return 0;
 }

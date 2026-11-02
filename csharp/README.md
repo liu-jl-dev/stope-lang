@@ -14,7 +14,7 @@ Stope 语言的 C# 实现：**词法 / 语法 / 编译器 / STML / 参考执行�
 ```bash
 # 在仓库根目录下：
 dotnet build csharp/Stope.slnx                    # 库 + 测试 + 三个 demo 一起构建
-dotnet run --project csharp/Stope.Tests           # 跑测试（3154 条断言）
+dotnet run --project csharp/Stope.Tests           # 跑测试（3232 条断言）
 dotnet run --project csharp/demo/01-quick-start   # 编译 + 运行一段 Stope 代码
 ```
 
@@ -87,7 +87,7 @@ C++ 是**权威实现**，四份出现分歧时以 C++ 的实测行为为准。�
 [6/7] STML（stml_cases.txt + golden_stml.txt）      602 条
 [7/7] 参考执行器                                     88 条
 ------------------------------------------------------
-全部通过：共 3154 条断言
+全部通过：共 3232 条断言
 ```
 
 测试跑器是**控制台程序**，不是 xUnit/NUnit：自己实现 `Check(id, 字段, 期望, 实际)` 与

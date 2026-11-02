@@ -33,14 +33,14 @@ dotnet run --project csharp/Stope.Tests
 ```
 [1/8] 词法（golden_lex.txt）                        588 条
 [2/8] 二进制数组 + 常量折叠（golden_binarr.txt）       87 条
-[3/8] 语法（golden.txt）                           1171 条
-[4/8] 编译器（golden.txt）                          585 条
+[3/8] 语法（golden.txt）                           1207 条
+[4/8] 编译器（golden.txt）                          603 条
 [5/8] 嵌套深度上限                                    21 条
 [6/8] 反汇编（golden_disasm.txt）                     17 条
-[7/8] STML（stml_cases.txt + golden_stml.txt）      604 条
+[7/8] STML（stml_cases.txt + golden_stml.txt）      628 条
 [8/8] 参考执行器                                     142 条
 -------------------------------------------------------
-全部通过：共 3215 条断言
+全部通过：共 3293 条断言
 ```
 
 每组断言数怎么算出来的：
@@ -49,11 +49,11 @@ dotnet run --project csharp/Stope.Tests
 | --- | --- | --- |
 | 词法 | 588 | 147 条用例 × 4 个字段（`TOKS` / `LEXEMES` / `ERRN` / `ERRS`） |
 | 二进制数组 + 折叠 | 87 | 1 条「行数一致」自检 + 86 行逐行比对 |
-| 语法 | 1171 | 195 条用例 × 6 个字段 + 1 条「用例数」自检 |
-| 编译器 | 585 | 195 条用例 × 3 个字段（`CMP` / `OUT` / `CERRS`） |
+| 语法 | 1207 | 201 条用例 × 6 个字段 + 1 条「用例数」自检 |
+| 编译器 | 603 | 201 条用例 × 3 个字段（`CMP` / `OUT` / `CERRS`） |
 | 嵌套深度 | 21 | 各深度档位 + 默认值 + `max_depth=0` 不检查 |
 | 反汇编 | 17 | 12 条逐字节比对 + 5 条单测（见 §6） |
-| STML | 604 | 62 条词法 × 4 + 59 条语法 × 6 + 2 条完整性自检 |
+| STML | 628 | 62 条词法 × 4 + 63 条语法 × 6 + 2 条完整性自检 |
 | 执行器 | 142 | 值语义 + 实参表 + 两条驱动路径（见 §6） |
 
 ## 3. 目录
@@ -67,10 +67,10 @@ python/
     ├── golden.py               # 数据定位、转义、读取、dump_program（单行产物格式）
     ├── test_lexer.py           # 588
     ├── test_binarr.py          # 87（二进制数组 + 常量折叠矩阵）
-    ├── test_parser.py          # 1171 + run_depth()（深度那 21 条）
-    ├── test_compiler.py        # 585
+    ├── test_parser.py          # 1207 + run_depth()（深度那 21 条）
+    ├── test_compiler.py        # 603
     ├── test_disasm.py          # 17
-    ├── test_stml.py            # 604
+    ├── test_stml.py            # 628
     └── test_vm.py              # 142
 ```
 

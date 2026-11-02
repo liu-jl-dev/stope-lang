@@ -1,7 +1,7 @@
 class_name StopeTestCompiler
 # 编译器测试。契约见 docs/zh-cn/compiler-test-plan.md。
 #
-# 期望值来自 C++ 侧探针 dump 的 test/data/golden.txt（195 条）的
+# 期望值来自 C++ 侧探针 dump 的 test/data/golden.txt（201 条）的
 # CMP / OUT / CERRS 三个字段，走完整 Lexer -> Parser -> Compiler，
 # 比对返回码、Program 序列化串、编译器错误列表。
 
@@ -17,13 +17,16 @@ static func run(rep:StopeTestUtil.Report) -> void:
 		var id:String = c.get('ID', '')
 		var src := StopeTestUtil.unesc(c.get('SRC', ''))
 		var fold:bool = c.get('FOLD', '0') == '1'
-		var got := _one(src, fold)
+		# PRE：预导出名单，逗号分隔（空元素表示一个空名字）；字段为空 = 不预导出
+		var pre_field:String = c.get('PRE', '')
+		var pre:Array = pre_field.split(',') if pre_field != '' else []
+		var got := _one(src, fold, pre)
 		for k in ['CMP', 'OUT', 'CERRS']:
 			rep.check(id, k, c.get(k, ''), got[k])
 	_check_dup(rep)
 	_check_disasm(rep)
 
-static func _one(src:String, fold:bool) -> Dictionary:
+static func _one(src:String, fold:bool, pre:Array = []) -> Dictionary:
 	# 前端：Lexer + Parser
 	var cfg := StopeTestUtil.custom_config()
 	var lx := StopeLexer.Lexer.new(src)
@@ -35,7 +38,7 @@ static func _one(src:String, fold:bool) -> Dictionary:
 	# 后端：Compiler
 	var c := StopeCompiler.Compiler.new(cfg)
 	var out := StopeTestUtil.new_program()
-	var rc:int = c.compile(ast, out)
+	var rc:int = c.compile(ast, out, pre)
 	return {
 		'CMP': 'OK' if rc == StopeResult.Success else 'ERR',
 		'OUT': StopeTestUtil.esc_(StopeTestUtil.dump_program(out, cfg.opcodes)),

@@ -5,7 +5,7 @@ using System.Text;
 namespace Stope.Tests;
 
 /// <summary>
-/// 语法 + 编译器：<c>golden.txt</c>（195 条，<c>cpp/tools/golden.cpp</c> dump）+ 嵌套深度上限。
+/// 语法 + 编译器：<c>golden.txt</c>（201 条，<c>cpp/tools/golden.cpp</c> dump）+ 嵌套深度上限。
 /// <para>
 /// 每条用例断言九件事：AST 形状串、语句行号序列、语法 / 词法错误条数与文案、
 /// 单行产物（<see cref="Data.DumpProgram"/>）、编译状态、编译错误。期望值不手写 ——
@@ -24,7 +24,7 @@ public static class ParserTests
             rep.AddFail("语法", "golden.txt 一条都没读到");
             return;
         }
-        rep.CheckInt("golden.txt", "用例数", 195, cases.Count);
+        rep.CheckInt("golden.txt", "用例数", 201, cases.Count);
         foreach (var rec in cases)
         {
             string id = rec.GetValueOrDefault("ID", "");
@@ -67,6 +67,9 @@ public static class ParserTests
     {
         string src = Data.Unescape(rec.GetValueOrDefault("SRC", ""));
         bool fold = rec.GetValueOrDefault("FOLD", "") == "1";
+        // PRE：预导出名单，逗号分隔（空元素表示一个空名字）；字段为空 = 不预导出
+        string pre = rec.GetValueOrDefault("PRE", "");
+        string[]? preExports = pre.Length == 0 ? null : pre.Split(',');
 
         var lx = new Lexer(src);
         var ps = new Parser(lx, Cfg) { ConstFolding = fold };
@@ -75,7 +78,7 @@ public static class ParserTests
 
         var outProg = new Program();
         var c = new Compiler(Cfg);
-        var rc = c.Compile(tree, outProg);
+        var rc = c.Compile(tree, outProg, preExports);
 
         return new CaseResult
         {

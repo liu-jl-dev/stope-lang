@@ -134,7 +134,7 @@ STML 可以用来管理相互调用的 Stope 程序，或实现面向对象等�
 | 定位      | **权威实现**                 | 参考实现（逐项按 C++ 对齐）                | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            |
 | 布局      | Pitchfork Layout（编译型静态库） | Godot 工程，以 `addons/stope/` 插件分发 | npm 包，纯 ESM、`src/` 下按模块分文件   | `dotnet` 类库 + 控制台测试跑器，`slnx` 解决方案 | 纯 Python 包，`stope/` 下按模块分文件   |
 | 标准 / 依赖 | C++20，零第三方依赖             | Godot 4（实测 4.7.2），零第三方插件         | Node >= 20，零第三方依赖           | .NET 10（实测 SDK 10.0.401），零第三方包 | Python 3.9+（实测 3.14.9），零第三方包 |
-| 测试      | ctest 15 组，1505 条断言全绿    | 3153 条断言全绿                      | `npm test` 780 条断言全绿        | `dotnet run` 3154 条断言全绿      | `python tests/run_tests.py` 3215 条断言全绿 |
+| 测试      | ctest 15 组，1514 条断言全绿    | 3231 条断言全绿                      | `npm test` 796 条断言全绿        | `dotnet run` 3232 条断言全绿      | `python tests/run_tests.py` 3293 条断言全绿 |
 
 五者出现分歧时**以 C++ 的实测行为为准**，差异登记在对应测试计划的 §7。
 
@@ -214,7 +214,7 @@ cd cpp
 cmake -B build -G "MinGW Makefiles"
 cmake --build build
 ctest --test-dir build
-./build/demo01.exe
+./build/demo01.exe                        # 编译 + 运行；还有 demo02 STML / demo03 自定义指令 / demo04 预导出
 cmake --build build --target gen-golden   # 重生成 GDScript 侧的期望值，不属于 ctest
 ```
 
@@ -242,7 +242,7 @@ godot --headless --path gdscript res://demo/demo_02.tscn
 godot --headless --path gdscript res://demo/demo_03.tscn
 ```
 
-第一条跑 3153 条断言（词法 / 语法 / 编译器 / STML / 执行器五组，前四组对齐 C++）；三个 demo 与 `cpp/demo/` 下的
+第一条跑 3231 条断言（词法 / 语法 / 编译器 / STML / 执行器五组，前四组对齐 C++）；三个 demo 与 `cpp/demo/` 下的
 `0N-*.cpp` 一一对应
 （`01` 编译+运行 / `02` STML 解析 / `03` 自定义指令）。
 更多见 [gdscript/docs/testing.md](gdscript/docs/testing.md)。
@@ -256,7 +256,7 @@ godot --headless --path gdscript res://demo/demo_03.tscn
 ```bash
 cd nodejs
 node demo/01-quick-start.js   # 编译 + 运行（还有 02-stml / 03-custom-opcode）
-npm test                  # 780 条断言：词法 / 语法 / 编译器 / 反汇编 / 执行器 / STML
+npm test                  # 796 条断言：词法 / 语法 / 编译器 / 反汇编 / 执行器 / STML
 npm run test:cov          # 覆盖率 + 阈值门禁（行 80% / 分支 70%）
 ```
 
@@ -272,7 +272,7 @@ C++ 工具链**。更多见 [nodejs/README.md](nodejs/README.md)。
 
 ```bash
 dotnet build csharp/Stope.slnx                  # 库 + 测试 + 三个 demo
-dotnet run --project csharp/Stope.Tests         # 3154 条断言：词法 / 折叠 / 语法编译器 / 深度 / 反汇编 / STML / 执行器
+dotnet run --project csharp/Stope.Tests         # 3232 条断言：词法 / 折叠 / 语法编译器 / 深度 / 反汇编 / STML / 执行器
 dotnet run --project csharp/demo/01-quick-start # 编译 + 运行（还有 02-stml / 03-custom-opcode）
 ```
 
@@ -288,7 +288,7 @@ golden 数据，所以**跑 C# 测试也不需要 C++ 工具链**。更多见
 无需构建，也无需 `pip install`（零第三方依赖，只用标准库）：
 
 ```bash
-python python/tests/run_tests.py         # 3215 条断言：词法 / 折叠 / 语法 / 编译器 / 深度 / 反汇编 / STML / 执行器
+python python/tests/run_tests.py         # 3293 条断言：词法 / 折叠 / 语法 / 编译器 / 深度 / 反汇编 / STML / 执行器
 python python/demo/01-quick-start.py     # 编译 + 运行（还有 02-stml / 03-custom-opcode）
 ```
 

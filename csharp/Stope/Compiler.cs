@@ -51,9 +51,16 @@ public sealed class Compiler : AstVisitor
     /// <see cref="Result.Error"/> 并把 <paramref name="out"/> 复原为空 —— 半成品 Program
     /// 跑不了，留着反而误导。
     /// </summary>
-    public Result Compile(Prog ast, Program outProg)
+    /// <param name="preExports">
+    /// 遍历 AST 之前先导出的标识符（宿主注入的全局）。每个名字按给定顺序占一个
+    /// 「永不回收」的槽位，所以源码里所有变量的编号整体后移；名字进了文件作用域，
+    /// 源码里再 <c>export</c> 同名、或顶层 <c>let</c> 同名，都会报 duplicate ——
+    /// 预导出的变量只能赋值。空名字与重名都是编译错误（行号记 0：这些名字不来自源码）。
+    /// </param>
+    public Result Compile(Prog ast, Program outProg, IReadOnlyList<string>? preExports = null)
     {
         ResetCompile(outProg);
+        ExportPreExports(preExports);
         Visit(ast);
         if (Errors.Count > 0)
         {
@@ -63,6 +70,31 @@ public sealed class Compiler : AstVisitor
         outProg.VariableNum = _varAlloc.Num();
         outProg.RequiredStackSize = _stackSizeMgr.MaxSize;
         return Result.Success;
+    }
+
+    /// <summary>
+    /// 预导出：必须在 <see cref="ResetCompile"/> 之后调用（reset 会重建分配器、清空 exports）。
+    /// 走 NewUniqueVar，并且先于源码里任何变量分配 —— 这一步定了整个程序的槽位编号。
+    /// </summary>
+    private void ExportPreExports(IReadOnlyList<string>? names)
+    {
+        if (names == null) return;
+        var fs = FileScope();
+        foreach (var n in names)
+        {
+            // 行号记 0：这些名字不来自源码，硬套 CurLine（此刻是 -1）只会误导
+            if (string.IsNullOrEmpty(n))
+            {
+                Error(0, "empty name in pre-exports. ");
+                continue;
+            }
+            if (fs.IdMap.ContainsKey(n))
+            {
+                Error(0, "duplicate export of \"" + n + "\". ");
+                continue;
+            }
+            DeclareExported(n, _varAlloc.NewUniqueVar(n));
+        }
     }
 
     private void ResetCompile(Program outProg)

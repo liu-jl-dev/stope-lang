@@ -30,6 +30,8 @@ function stmtLines(p) {
 export function runCase(rec) {
   const src = unescape(rec.SRC ?? '')
   const fold = rec.FOLD === '1'
+  // PRE：预导出名单，逗号分隔（空元素表示一个空名字）；字段为空 = 不预导出
+  const pre = rec.PRE ? rec.PRE.split(',') : []
   const lx = new Lexer(src)
   const ps = new Parser(lx, cfg)
   ps.constFolding = fold
@@ -37,7 +39,7 @@ export function runCase(rec) {
   ps.ParseProgram(tree)
   const out = new Program()
   const c = new Compiler(cfg)
-  const rc = c.Compile(tree, out)
+  const rc = c.Compile(tree, out, pre)
   return {
     SRC: src,
     SHAPE: shapeProg(tree),

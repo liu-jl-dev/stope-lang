@@ -13,7 +13,7 @@ Stope 语言的 Python 实现：**词法 / 语法 / 编译器 / STML / 参考执
 
 ```bash
 # 在仓库根目录下：
-python python/tests/run_tests.py            # 跑测试（3215 条断言）
+python python/tests/run_tests.py            # 跑测试（3293 条断言）
 python python/demo/01-quick-start.py        # 编译 + 运行一段 Stope 代码
 python python/demo/02-stml.py               # 只解析一份 STML 文档
 python python/demo/03-custom-opcode.py      # 只编译 + 反汇编（自定义指令）
@@ -108,7 +108,7 @@ C++ 是**权威实现**，出现分歧时以 C++ 的实测行为为准。本实�
 [7/8] STML（stml_cases.txt + golden_stml.txt）      604 条
 [8/8] 参考执行器                                     142 条
 -------------------------------------------------------
-全部通过：共 3215 条断言
+全部通过：共 3293 条断言
 ```
 
 测试跑器是**普通脚本**，不是 pytest：`tests/report.py` 只有「比一下、记一笔」，

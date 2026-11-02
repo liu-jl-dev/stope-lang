@@ -4,7 +4,7 @@
   同目录的基类 `ast_visitor.hpp` 的测试在 `test_ast_visitor.cpp`；另外依赖 `scope_context.hpp`，
   AST 侧依赖 `ast.hpp`、`opcode.hpp`、`program.hpp`、`custom_opcode.hpp`）
 - 计划版本：v1.3（2026-10-22）：**全部测试落地并全绿** ——
-  53 个用例（C-01…C-52 + C-37b）/ 98 断言 / 0 失败，Opcode 覆盖 **33/33**；
+  57 个用例（C-01…C-56 + C-37b）/ 107 断言 / 0 失败，Opcode 覆盖 **33/33**；
   基类另有 `test_ast_visitor` 的 V 组 36 断言 / 0 失败；
   另有 `test_vm` 的 VM 组 156 断言 / 0 失败；`ctest` **15/15**。
   - v1.3 的变化只有一处：`Opcode` 新增 `PushValue`（编号 8），读变量与「当赋值
@@ -21,8 +21,8 @@
 
 ### 1.1 目标
 
-1. 为 `Compiler::Compile(AST::Prog&, Program&)` 建立回归基线：指令字节序、常量池去重、
-   变量编号与回收、导出表、跳转目标回填、`maxReturnNum`、`requiredStackSize`。
+1. 为 `Compiler::Compile(AST::Prog&, Program&, preExports)` 建立回归基线：指令字节序、常量池去重、
+   变量编号与回收、导出表、跳转目标回填、`maxReturnNum`、`requiredStackSize`、预导出的槽位顺序。
 2. 把「相对参考实现的 4 处偏离」逐条钉住（见 §3），防止后来者"照着参考实现改回去"。
 3. 覆盖 33 个 `Opcode` 的全部产生路径（当前 33/33），未覆盖的要在 README 里点名。
 4. 同时验证**折叠开 / 折叠关**两条端到端路径：`parser.constFolding` 的开关会影响指令长短。
@@ -45,7 +45,8 @@ struct Compiler : public ASTVisitor {            // 基类见 ast_visitor.hpp
   std::vector<std::string> errors;               // public，格式 "line N: msg"
   // 自定义指令配置只在构造时注入；两个必填参数都传引用（见 development.md §7）
   Compiler(const CustomOpcodeConfig* custom = nullptr);
-  Result Compile(AST::Prog& ast, Program& out);
+  Result Compile(AST::Prog& ast, Program& out,
+                 const std::vector<std::u16string>& preExports = {});  // 预导出，默认空
 };
 ```
 
@@ -244,7 +245,7 @@ parser 识别 `myop`（把它变成 `Custom` token），编译器这边查不到
 
 ## 5. 用例清单
 
-共 **53 个用例 / 98 条断言**，全绿（`./build/test_compiler.exe` 的实测值）。
+共 **57 个用例 / 107 条断言**，全绿（`./build/test_compiler.exe` 的实测值）。
 
 ### 5.1 C-01…C-12 字面量、变量、作用域
 
@@ -331,14 +332,26 @@ parser 识别 `myop`（把它变成 `Custom` token），编译器这边查不到
 | C-51 | `while a { while b { break; } continue; }` | `break` / `continue` 归**最近**的那层 |
 | C-52 | `while a { if b { break; } else { continue; } }` | 循环里嵌 if 时跳转目标仍正确 |
 
+### 5.9 C-53…C-56 预导出（`preExports`）
+
+跨实现的用例编号是 `CM-73…CM-78`（见 `../../docs/zh-cn/compiler-test-plan.md` §4.9）；
+这里手写一遍，是因为 C++ 是权威实现 —— 别只靠另外四份比对 golden 才发现自己错了。
+
+| ID | 预导出 | 输入 | 锁什么 |
+| --- | --- | --- | --- |
+| C-53 | `a,b` | `a + b;` | 形参先占槽位：`PushValue(0) PushValue(1) Add Pop`，`exports = {a:0, b:1}` |
+| C-54 | `a` | `let b = 1;` | **槽位后移**：`b` 的编号是 1，`variableNum == 2` |
+| C-55 | `a,a` / `a,,b` | `a;` | 名单内重名、空名字各报 1 条；空名字的行号记 **0** |
+| C-56 | `a` | `export a;` / `let a = 1;` / `{ let a = 1; }` | 前两个 duplicate，第三个（块内遮蔽）合法 |
+
 ---
 
 ## 6. 覆盖率与验收标准
 
 | 口径 | 当前值 | 验收线 |
 | --- | --- | --- |
-| 用例数 | 53 | — |
-| 断言数 | 98 | 全部通过 |
+| 用例数 | 57 | — |
+| 断言数 | 107 | 全部通过 |
 | `Opcode` 覆盖 | 33/33 | **必须保持 33/33**。测试里统计见过的 opcode，缺哪个会打印名字 |
 | `AST::NodeType` 产生路径 | 26 个可编译节点全覆盖 | — |
 | 错误路径 | 7 类 error + 6 类错误信息全覆盖 | — |

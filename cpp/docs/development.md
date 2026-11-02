@@ -21,7 +21,7 @@
 | 编译单元 | `src/` 9 个 `*.cpp`：`ast` `ast_visitor` `compiler` `expr_optim` `lexer` `parse_binarr` `parser` `stml_lexer` `stml_parser` |
 | 产物 | `add_library(stope STATIC ...)` → `build/libstope.a` |
 | 测试 | ctest **15/15**：`lexer` `parser` `compiler` `ast_visitor` `stml` `vm` 六个目标 + 9 组 `parser-depth-*` |
-| 示例 | `demo/01-quick-start.cpp` → `demo01`；`demo/02-stml.cpp` → `demo02`；`demo/03-custom-opcode.cpp` → `demo03`（都未接 ctest） |
+| 示例 | `demo/01-quick-start.cpp` → `demo01`；`demo/02-stml.cpp` → `demo02`；`demo/03-custom-opcode.cpp` → `demo03`；`demo/04-pre-export.cpp` → `demo04`（都未接 ctest） |
 | 依赖 | **零第三方**。C++20 |
 
 19 个头文件里，只有 **`basic_vm.hpp` 与 `debug.hpp` 是 header-only**（内部全是 `inline`）；
@@ -284,7 +284,7 @@ clang-format 管不了的「风格」在这里定死，改接口前先对一遍�
 
 | 情况 | 写法 | 例子 |
 | --- | --- | --- |
-| 必填的输入 / 输出 | **引用**（改不改由 `const` 标注） | `Lexer` 由 `Parser(Lexer&, ...)` 借用、`ParseProgram(AST::Prog&)`、`Compile(AST::Prog&, Program&)`、`Arguments::at(..., Value& out)` |
+| 必填的输入 / 输出 | **引用**（改不改由 `const` 标注） | `Lexer` 由 `Parser(Lexer&, ...)` 借用、`ParseProgram(AST::Prog&)`、`Compile(AST::Prog&, Program&, const std::vector<std::u16string>&)`、`Arguments::at(..., Value& out)` |
 | 真正可以为空的依赖 | 指针，默认 `= nullptr` | `Parser(..., CustomOpcodeConfig* = nullptr)`、`Compiler(const CustomOpcodeConfig* = nullptr)` |
 | 会被改的借用对象 | 非 const 指针 / 引用 | `Parser` 持有 `Lexer*`（要 `NextToken()` 推进位置） |
 
@@ -304,6 +304,10 @@ clang-format 管不了的「风格」在这里定死，改接口前先对一遍�
 `nullptr` 会把构造时传的配置覆盖掉，属于「传了等于没传」的静默 bug。需要换配置就新建
 一个 `Compiler`。
 
+`preExports`（`Compile` 的第三个参数，2026-11-02 加）**不违反这条**：它不是自定义指令
+配置的第二个入口，而是「这一次编译要预先导出哪些名字」的输入，属于调用参数、不是对象
+配置 —— 所以它出现在 `Compile` 上，且只有它一个。
+
 ### 7.3 所有权：谁声明，谁持有
 
 - 前端全部是**借用**：`Parser` 不拥有 `Lexer`，`Compiler::prog` 不拥有 `Program`，
@@ -312,6 +316,8 @@ clang-format 管不了的「风格」在这里定死，改接口前先对一遍�
 - `Lexer(std::u16string_view)` **不拷贝源码**，`src` 必须活得比 `Lexer` 长。
 - 需要「传进来还要留着」的地方不用 `unique_ptr` 成员，直接在文档里写清生命周期，
   保持结构体可平凡移动。
+- `Compile(..., const std::vector<std::u16string>& preExports)` 只在**本次调用内**读这张表，
+  不存指针、不拷贝 —— 传临时对象（`Compile(ast, out, {u"a", u"b"})`）也安全。
 
 ### 7.4 历史
 

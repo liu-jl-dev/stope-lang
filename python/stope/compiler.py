@@ -200,13 +200,19 @@ class Compiler(ASTVisitor):
         self.custom_opcodes = custom
 
     # ---------------- 对外接口 ----------------
-    def compile(self, ast, out) -> Result:
+    def compile(self, ast, out, pre_exports=()) -> Result:
         """编译 ``ast``，结果直接写进 ``out``。
 
         有错误时返回 ``Result.Error`` 并把 ``out`` 复原为空 —— 半成品 ``Program``
         跑不了，留着反而误导。
+
+        ``pre_exports``：遍历 AST 之前先导出的标识符（宿主注入的全局）。每个名字按给定
+        顺序占一个「永不回收」的槽位，所以源码里所有变量的编号整体后移；名字进了文件
+        作用域，源码里再 ``export`` 同名、或顶层 ``let`` 同名，都会报 duplicate ——
+        预导出的变量只能赋值。空名字与重名都是编译错误（行号记 0：这些名字不来自源码）。
         """
         self._reset_compile(out)
+        self._export_pre_exports(pre_exports)
         self.visit(ast)
         if self.errors:
             self.prog.clear()
@@ -214,6 +220,22 @@ class Compiler(ASTVisitor):
         out.variable_num = self.var_alloc.num()
         out.required_stack_size = self.stack_size_mgr.max_size
         return Result.Success
+
+    def _export_pre_exports(self, names) -> None:
+        """预导出：必须在 :meth:`_reset_compile` 之后调用（reset 会重建分配器、清空 exports）。
+
+        走 ``new_unique_var``，并且先于源码里任何变量分配 —— 这一步定了整个程序的槽位编号。
+        """
+        fs = self.file_scope()
+        for n in names:
+            # 行号记 0：这些名字不来自源码，硬套 cur_line（此刻是 -1）只会误导
+            if not n:
+                self.error(0, "empty name in pre-exports. ")
+                continue
+            if n in fs.id_map:
+                self.error(0, 'duplicate export of "%s". ' % n)
+                continue
+            self.declare_exported(n, self.var_alloc.new_unique_var(n))
 
     def _reset_compile(self, out) -> None:
         self.errors = []

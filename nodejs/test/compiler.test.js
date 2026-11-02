@@ -1,4 +1,4 @@
-// 编译器：golden.txt 的 CMP / OUT / CERRS 三个字段（195 条）。
+// 编译器：golden.txt 的 CMP / OUT / CERRS 三个字段（201 条）。
 //
 // OUT 是「单行比对格式」（docs/zh-cn/compiler-test-plan.md §2.3）：
 //   code[PushId(0) PushInt(0) Assign] vars=1 stack=2 maxRet=0 ints=[1] …

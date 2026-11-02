@@ -205,8 +205,14 @@ class Compiler extends ASTVisitor {
   // ---------------- 对外接口 ----------------
   // 编译 ast，结果直接写进 out。有错误时返回 Result.Error 并把 out 复原为空 ——
   // 半成品 Program 跑不了，留着反而误导。
-  Compile(ast, out) {
+  //
+  // preExports：遍历 AST 之前先导出的标识符（宿主注入的全局）。每个名字按给定顺序
+  // 占一个「永不回收」的槽位，所以源码里所有变量的编号整体后移；名字进了文件作用域，
+  // 源码里再 export 同名、或顶层 let 同名，都会报 duplicate —— 预导出的变量只能赋值。
+  // 空名字与重名都是编译错误（行号记 0：这些名字不来自源码）。
+  Compile(ast, out, preExports = []) {
     this.resetCompile(out)
+    this.exportPreExports(preExports)
     this.visit(ast)
     if (this.errors.length > 0) {
       clearProgram(this.prog)
@@ -616,6 +622,23 @@ class Compiler extends ASTVisitor {
   declareExported(name, idx) {
     this.fileScope().idMap.set(name, idx)
     this.prog.exports.set(name, idx)
+  }
+  // 预导出：必须在 resetCompile() 之后调用（reset 会重建 varAlloc、清空 out.exports）。
+  // 走 newUniqueVar，并且先于源码里任何变量分配 —— 这一步定了整个程序的槽位编号。
+  exportPreExports(names) {
+    const fs = this.fileScope()
+    for (const n of names) {
+      // 行号记 0：这些名字不来自源码，硬套 curLine（此刻是 -1）只会误导
+      if (n === '') {
+        this.error(0, 'empty name in pre-exports. ')
+        continue
+      }
+      if (fs.idMap.has(n)) {
+        this.error(0, `duplicate export of "${n}". `)
+        continue
+      }
+      this.declareExported(n, this.varAlloc.newUniqueVar(n))
+    }
   }
   // 块 / if 分支 / 循环体在 AST 里都是裸 Prog（没有 BlockStmt 包着），
   // 这里补一层 BlockScope，让内部 let 的变量在离开时被回收。

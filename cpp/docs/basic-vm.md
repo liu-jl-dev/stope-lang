@@ -233,3 +233,6 @@ struct Arguments {
 
 `ProgramConstants(alloc, program)` 在**构造时**就把常量装进 `alloc`，
 所以必须先有 `alloc`；一个 `Allocator` 可以被多个 `State` 共享。
+
+写给宿主看的上手版（两个池、计数怎么加减、五条会静默出错的）在
+[`quick-start.md`](quick-start.md) §9；本节和 §2 是同一件事的实现侧说法。

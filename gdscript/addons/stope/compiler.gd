@@ -44,9 +44,14 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	# ---------------- 对外接口 ----------------
 	# 编译 ast，结果直接写进 out。有错误时返回 StopeResult.Error 并把 out 复原为空 ——
 	# 半成品 Program 跑不了，留着反而误导。
-	# 两个参数都必填（同 C++ 的 Compile(Prog&, Program&)）。
-	func compile(ast:StopeAst.Prog, out:StopeProgram.Program) -> int:
+	# pre_exports：遍历 AST 之前先导出的标识符（宿主注入的全局）。每个名字按给定顺序
+	# 占一个「永不回收」的槽位，所以源码里所有变量的编号整体后移；名字进了文件作用域，
+	# 源码里再 export 同名、或顶层 let 同名，都会报 duplicate —— 预导出的变量只能赋值。
+	# 空名字与重名都是编译错误（行号记 0：这些名字不来自源码）。
+	func compile(ast:StopeAst.Prog, out:StopeProgram.Program,
+			pre_exports:Array = []) -> int:
 		_reset(out)
+		_export_pre_exports(pre_exports)
 		visit(ast)
 		if not errors.is_empty():
 			_clear_output()
@@ -368,6 +373,20 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	func _declare_exported(name:String, idx:int) -> void:
 		_file_scope().id_map[name] = idx
 		prog.exports[name] = idx
+	# 预导出：必须在 _reset() 之后调用（reset 会重建 var_alloc、清空 out.exports）。
+	# 走 new_unique_var，并且先于源码里任何变量分配 —— 这一步定了整个程序的槽位编号。
+	func _export_pre_exports(names:Array) -> void:
+		var fs:FileScope = _file_scope()
+		for n in names:
+			var name := String(n)
+			# 行号记 0：这些名字不来自源码，硬套 cur_line（此刻是 -1）只会误导
+			if name.is_empty():
+				error(0, 'empty name in pre-exports. ')
+				continue
+			if name in fs.id_map:
+				error(0, str('duplicate export of "', name, '". '))
+				continue
+			_declare_exported(name, var_alloc.new_unique_var(name))
 	# 块 / if 分支 / 循环体在 AST 里都是裸 Prog（没有 BlockStmt 包着），
 	# 这里补一层 BlockScope，让内部 let 的变量在离开时被回收。
 	func _visit_body_as_block(p:StopeAst.Prog) -> void:

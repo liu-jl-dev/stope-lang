@@ -34,8 +34,10 @@ void VariableAllocator::freeVar(int idx) {
   std::push_heap(recycled.begin(), recycled.end(), std::greater<int>());
 }
 
-Result Compiler::Compile(AST::Prog& ast, Program& out) {
+Result Compiler::Compile(AST::Prog& ast, Program& out,
+                         const std::vector<std::u16string>& preExports) {
   reset(out);
+  exportPreExports(preExports);
   Visit(&ast);
   if (!errors.empty()) {
     clearOutput();
@@ -44,6 +46,24 @@ Result Compiler::Compile(AST::Prog& ast, Program& out) {
   out.variableNum = varAlloc.num();
   out.requiredStackSize = stackSize.maxSize;
   return Result::Success;
+}
+
+// 预导出的名字走 newUniqueVar（不回收），并且先于源码里的任何变量分配 ——
+// 这一步定了整个程序的槽位编号，所以顺序必须固定在 Visit 之前。
+void Compiler::exportPreExports(const std::vector<std::u16string>& names) {
+  FileScope* fs = fileScope();
+  for (const auto& name : names) {
+    // 行号记 0：这些名字不来自源码，硬套 curLine（此刻是 -1）只会误导。
+    if (name.empty()) {
+      error(0, "empty name in pre-exports. ");
+      continue;
+    }
+    if (fs->idMap.find(name) != fs->idMap.end()) {
+      error(0, "duplicate export of \"" + narrowAscii(name) + "\". ");
+      continue;
+    }
+    declareExported(name, varAlloc.newUniqueVar(name));
+  }
 }
 
 void Compiler::reset(Program& out) {

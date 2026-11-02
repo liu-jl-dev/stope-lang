@@ -193,6 +193,23 @@ inline CompileResult compileSrc(std::u16string src,
   return r;
 }
 
+// preExports 版：只是多传一个第三参，其余与 compileSrc 相同。
+inline CompileResult compilePre(std::u16string src,
+                                const std::vector<std::u16string>& pre) {
+  auto holder = std::make_shared<std::u16string>(std::move(src));
+  CompileResult r;
+  r.src = holder;
+  Lexer lx(*holder);
+  Parser p(lx, nullptr);
+  AST::Prog prog;
+  p.ParseProgram(prog);
+  r.pErrors = p.errors;
+  Compiler c(nullptr);
+  r.ok = c.Compile(prog, r.prog, pre) == Result::Success;
+  r.errors = c.errors;
+  return r;
+}
+
 // 期望：code 文本 + 错误条数（默认 0）
 inline void expectCode(const CompileResult& r,
                        const char* want,
@@ -571,6 +588,41 @@ void runCompilerTests() {
         "PushValue(0) If(16) PushValue(1) If(12) GoTo(16) GoTo(14) GoTo(0) "
         "GoTo(0)",
         "C-52");
+  }
+  // ---------- C-53…C-56 预导出 ----------
+  // 与 golden.txt 的 CM-73…CM-78 对应，只是这里手写：C++ 是权威实现，别只靠
+  // 另外四份比对 golden 才发现自己错了。
+  {  // C-53 形参先占槽位，且顺序就是名单顺序
+    auto r = compilePre(u"a + b;", {u"a", u"b"});
+    expectCode(r, "PushValue(0) PushValue(1) Add Pop", "C-53");
+    check(r.prog.exports.size() == 2 && r.prog.exports.at(u"a") == 0 &&
+              r.prog.exports.at(u"b") == 1,
+          "C-53", "exports = {a:0, b:1}", "got=" +
+              std::to_string(r.prog.exports.size()) + " 条");
+  }
+  {  // C-54 槽位后移：源码里的第一个变量编号是 1
+    auto r = compilePre(u"let b = 1;", {u"a"});
+    expectCode(r, "PushId(1) PushInt(0) Assign", "C-54");
+    check(r.prog.variableNum == 2, "C-54", "variableNum == 2",
+          "got=" + std::to_string(r.prog.variableNum));
+  }
+  {  // C-55 名单内重名 / 空名字：各报一条，行号记 0
+    auto r = compilePre(u"a;", {u"a", u"a"});
+    expectErrCount(r, 1, "C-55");
+    r = compilePre(u"a;", {u"a", u"", u"b"});
+    check(r.errors.size() == 1 &&
+              r.errors[0] == "line 0: empty name in pre-exports. ",
+          "C-55b", "empty name -> line 0", "got=[" +
+              (r.errors.empty() ? std::string() : r.errors[0]) + "]");
+  }
+  {  // C-56 与源码冲突：导出同名、顶层 let 同名都算 duplicate
+    auto r = compilePre(u"export a;", {u"a"});
+    expectErrCount(r, 1, "C-56");
+    r = compilePre(u"let a = 1;", {u"a"});
+    expectErrCount(r, 1, "C-56b");
+    // 块内 let 是遮蔽，不算冲突
+    r = compilePre(u"{ let a = 1; }", {u"a"});
+    expectErrCount(r, 0, "C-56c");
   }
 }
 

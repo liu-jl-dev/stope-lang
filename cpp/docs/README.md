@@ -19,7 +19,7 @@
 
 | 文件 | 讲什么 |
 | --- | --- |
-| [`quick-start.md`](quick-start.md) | 四步把 Stope 嵌进自己的程序：编译 → 装配 → 执行 → 取返回值 |
+| [`quick-start.md`](quick-start.md) | 四步把 Stope 嵌进自己的程序：编译 → 装配 → 执行 → 取返回值；另附虚拟机怎么管内存（句柄 / 引用计数，§9） |
 | [`stml.md`](stml.md) | STML 文档怎么解析：树的形状归解析器，内容怎么切归宿主 |
 | [`custom-opcode.md`](custom-opcode.md) | 给编译器加自己的指令：登记 → 编译 → 反汇编 |
 | [`basic-vm.md`](basic-vm.md) | 内置**基础虚拟机**的语义约定与能力边界（**不属于标准**，但会一直维护，见 §3） |
@@ -51,6 +51,7 @@
 | 单步执行 / 自己写调试器 | [`basic-vm.md`](basic-vm.md) §1（`State::Step()` 的终止条件与错误态约定） |
 | 解析一份 STML 文档 | [`stml.md`](stml.md)（配 `demo/02-*.cpp`） |
 | 给编译器加一条自己的指令 | [`custom-opcode.md`](custom-opcode.md)（配 `demo/03-*.cpp`） |
+| 编译前先导出几个宿主变量 | [`compiler-test-plan.md`](compiler-test-plan.md) §5.9（配 `demo/04-*.cpp`） |
 | 查 Stope 的语法与错误文案 | [`docs/zh-cn/syntax-reference.md`](../../docs/zh-cn/syntax-reference.md) |
 | 查 Stope 从零开始的介绍 | [`docs/zh-cn/syntax-intro.md`](../../docs/zh-cn/syntax-intro.md) |
 | 查常量折叠会折掉什么 | [`docs/zh-cn/constant-folding.md`](../../docs/zh-cn/constant-folding.md) |
@@ -84,7 +85,7 @@ cpp/
   src/             编译单元（.cpp）
   test/            ctest 用例，按模块分成多个二进制
   tools/           golden 数据生成器（gen-golden 用；不属于标准，不进 ctest）
-  demo/            01-quick-start / 02-stml / 03-custom-opcode 三个可运行示例
+  demo/            01-quick-start / 02-stml / 03-custom-opcode / 04-pre-export 四个可运行示例
   cmake/           run_gen.cmake（gen-golden 的驱动脚本）
   docs/            本目录
   CMakeLists.txt   libstope.a + 各测试目标 + demo 目标 + gen-golden

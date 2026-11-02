@@ -32,6 +32,11 @@ add_executable(demo03 demo/03-custom-opcode.cpp)
 target_include_directories(demo03 PUBLIC include)
 target_link_libraries(demo03 PRIVATE stope)
 
+# 预导出：参数表写在 STML 标签上，编译函数体时当 preExports 交给 Compiler，再跑。
+add_executable(demo04 demo/04-pre-export.cpp)
+target_include_directories(demo04 PUBLIC include)
+target_link_libraries(demo04 PRIVATE stope)
+
 if(MSVC)
     add_compile_options(/utf-8)
 endif()

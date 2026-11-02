@@ -121,8 +121,8 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 
 ## 3. 行为基线
 
-**B-1 编译入口。** `Compile(AST::Prog&, Program&) -> Result`，`CustomOpcodeConfig` 由构造函数
-注入（不再作为 `Compile` 的参数）。成功写满 `out`；失败返回 Error 并把
+**B-1 编译入口。** `Compile(AST::Prog&, Program&, const std::vector<std::u16string>& preExports = {}) -> Result`，
+`CustomOpcodeConfig` 由构造函数注入（不再作为 `Compile` 的参数）。成功写满 `out`；失败返回 Error 并把
 `out` **清空**（半成品 Program 跑不了，留着反而误导）。
 
 **B-2 二元 `-` 必须用 `Sub`（20），不是 `Minus`（12）。**
@@ -154,6 +154,16 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 
 **B-11 索引超过实现能表示的范围时要报错**（C++ 侧是 int16 越界检查），
 不能让回绕出来的跳转目标把 VM 带飞。
+
+**B-12 预导出（`preExports`）在遍历 AST 之前生效。** 三份必须一致：
+
+1. 名单里的每个名字按**给定顺序**占一个 `newUniqueVar`（不回收）的槽位，先于源码里任何
+   变量分配 —— 所以**源码中所有变量的编号整体后移**，同一份源码配不同的 `preExports`
+   产出不同字节码，别跨配置比对 `Program`。
+2. 名字进文件作用域：源码里再 `export 同名` 或**顶层** `let 同名` 都按 duplicate 报错
+   （块内 `let` 是遮蔽，不受影响）。预导出的变量只能赋值（`a = 1;`）。
+3. 名单内**空名字**报 `line 0: empty name in pre-exports. `，**重名**报
+   `line 0: duplicate export of "a". ` —— 行号记 0，因为这些名字不来自源码。
 
 ---
 
@@ -283,6 +293,20 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 | CM-70 | `"ab" + "cd";` | `code[PushString(0) Pop]` | `strs=[abcd]` |
 | CM-71 | `f(1 + 2);` | `code[PushValue(0) PushInt(0) Call(1) Pop]` | `ints=[3]`，Call 保留 |
 | CM-72 | `1 / 0;` | `code[PushInt(0) PushInt(1) Div Pop]` | `ints=[1,0]`，除零不折 |
+
+### 4.9 CM-73…CM-78 预导出（`preExports`）
+
+「预导出」列是传给 `Compile` 第三参的名单，逗号分隔；空元素表示一个空名字。
+它兑现的是「宿主在编译前就把全局声明好」—— 形参表写在文档标签上，不必在源码里重复。
+
+| ID | 预导出 | 输入 | 输出 | 附加 |
+| --- | --- | --- | --- | --- |
+| CM-73 | `a,b` | `a + b;` | `code[PushValue(0) PushValue(1) Add Pop]` | `vars=2 exports=[a:0,b:1]`，形参先占 0、1 |
+| CM-74 | `a,a` | `a;` | 失败，`line 0: duplicate export of "a".` | 名单内重名 |
+| CM-75 | `a,,b` | `a;` | 失败，`line 0: empty name in pre-exports.` | 空名字（行号 0：不来自源码） |
+| CM-76 | `a` | `export a;` | 失败，`line 1: duplicate export of "a".` | 与源码里的 export 撞名 |
+| CM-77 | `a` | `let b = 1;` | `code[PushId(1) PushInt(0) Assign]` | `vars=2 exports=[a:0]`，**槽位后移**：b 是 1 而不是 0 |
+| CM-78 | `a` | `let a = 1;` | 失败，`line 1: duplicate declaration of 'a'.` | 顶层 let 同名 —— 预导出的变量只能赋值 |
 
 ---
 

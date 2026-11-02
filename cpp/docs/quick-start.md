@@ -11,6 +11,7 @@
 | 标准范围（为什么虚拟机不算标准） | `../../README.md` |
 | 自己写一个执行器 | `../../docs/zh-cn/vm-guide.md` |
 | 虚拟机的语义约定 | `basic-vm.md`（本目录） |
+| 虚拟机怎么管内存（句柄 / 引用计数） | §9（本文件） |
 | 布局 / 构建 / 行尾 / 文档约定 | `development.md`（本目录） |
 | API 参数与所有权约定 | `development.md` §7（本目录） |
 | 常量折叠的规则总表 | `expr-optim.md`（本目录） |
@@ -163,7 +164,7 @@ cout << DisasmNoCustom(program) << endl;
 - 词法/语法/编译的错误都不抛异常，分别进 `lexer.errors`、`parser.errors`；
   `Compile()` 失败时看返回值。
 - `DisasmNoCustom()` 来自 `debug.hpp`，把 `Program` 转成可读文本，方便核对。
-  产物里有自定义指令时改用 `Disasm(program, &config)`（见 §9 与 `demo/03-custom-opcode.cpp`）。
+  产物里有自定义指令时改用 `Disasm(program, &config)`（见 §10 与 `demo/03-custom-opcode.cpp`）。
 
 这一节用到的五个类型（`Lexer` `Parser` `AST::Prog` `Compiler` `Program`）是**编译器接口**，
 它围绕的正是标准里规定的那一层 —— `Program` 的编码契约（`compiler-test-plan.md` §2），
@@ -195,6 +196,7 @@ BasicVM::API api;
 
 生命周期：`alloc` 要活得比 `constants` 和 `state` 都长。都在同一个作用域里时，
 按 `alloc` → `constants` → `state` 的顺序声明即可（析构是逆序）。
+字符串 / BinArr 到底怎么分配、谁负责还，见 §9。
 
 ---
 
@@ -341,6 +343,8 @@ int main() {
 | 取 `state.returns[0]` 崩 | 源码没有 `return` 语句时 `returns` 是空的（`Run()` 仍返回 Success）。先判 `!returns.empty()` |
 | 捕获 lambda 转不成 `HostFunction` | 函数指针没有 udata 通道，只能用不捕获的 lambda |
 | 输出的中文是乱码 | Windows 控制台要先 `SetConsoleOutputCP(CP_UTF8)`；字符串值要先 `GetString()` 再 `Utf16ToUtf8()` |
+| 宿主函数返回的字符串变成空串 / 串味 | 句柄计数错了：抄了 `args[i]` 的 handle 却没 `RefInc`，或忘了 `NewString()`。见 §9.4 |
+| 跑完 `Run()` 之后读 `returns` 崩 | `returns` 是指向栈的 `span`，`State` 一析构就悬空。见 §9.4 |
 | `cmake -B build` 报找不到编译器 | 缺 `-G "MinGW Makefiles"`，或删 `build/` 没删干净 |
 | 4 组 `parser-depth-*` 用例忽然全过 | 加了 `-DCMAKE_BUILD_TYPE=Release`，栈帧变小后「应崩溃」的用例不崩了 |
 
@@ -349,7 +353,78 @@ int main() {
 
 ---
 
-## 9. 下一步
+## 9. 内存管理：句柄 + 引用计数
+
+> 这一节讲内置虚拟机**怎么管内存**。它不是要照抄的规范 —— 换执行器时内存怎么管由你定，
+> `vm-guide.md` 只要求「别让值悬空」。上面 §8 里两条和句柄有关的错误就出在这里 —— 一旦踩错，
+> 症状都很隐蔽（不崩、只串数据），所以单独收一节讲清楚。
+
+### 9.1 两个池 + 句柄
+
+`Allocator` 里只有两个池，字符串一个、BinArr 一个：
+
+```cpp
+struct Allocator {
+  struct StringData { bool isDeleted; int refCount; std::u16string data; };
+  std::vector<StringData> strings;        // 池
+  std::vector<unsigned> recycledStrings;  // 释放过的下标（小顶堆）
+  // BinArr 一套同构的成员
+};
+```
+
+`Value` 里 `String` / `BinArr` **只放一个 `unsigned handle`**，句柄就是池里的下标，
+`GetString(handle)` / `GetBinArr(handle)` 取回引用。整数、浮点、变量槽位号、函数指针直接躺在
+union 里，根本不碰池。所以 `Value` 只有 **16 字节**（4 字节 `type` + 8 字节 union + 对齐），
+栈上推一个值就是推 16 字节，不用为每个值单独分配。
+
+`NewString()` 先把 `refCount` 置 1 再返回句柄 —— **「创建即有一次引用」**，谁拿到谁负责还。
+释放过的下标进 `recycled*`，下次 `NewString()` 优先复用最小的那个。
+
+### 9.2 计数怎么加减
+
+规则只有一条：**几个 `Value` 持有它，`refCount` 就是几**。三种场合：
+
+| 场合 | 用哪个 helper | 计数 |
+| --- | --- | --- |
+| 复制一个值（`PushString`、`PushValue`） | `Value::Copy` | **+1**，源不变 |
+| 转移所有权（`Assign`、`Call` 接宿主返回值） | `Value::Move` | **不变**，源置 `Null` |
+| 算出一个新值（`Add` 拼串、`Mul` 重复） | 本地临时 `Value` + `ShallowCopy` | `New*` 已经给到 1，进栈时不再加 |
+
+移走一个值**绝不能对源 `RefDec`**：计数的含义是「几个 `Value` 持有」，转移后持有者数量没变。
+这里写错过一次，症状极隐蔽 —— `let s = "abc";` 里变量和常量共用句柄但计数只有 1，变量一改值，
+常量那份字符串就被提前回收，之后所有读到它的地方都拿到空串。
+
+### 9.3 谁在释放
+
+- `Pop()` / `PopN(n)` 在 `stack.erase` **之前**逐个 `Clear2`。
+  `Clear` 是「减计数 + 置 `Null`」（离开作用域用），`Clear2` 是「只减计数」（马上要 pop 或被覆盖时用）。
+- 变量槽位换值：`Value::Move` 先减掉旧值的计数，再接新的。
+- `State::~State()` → `Clear()` → 清栈 + 清变量，把还持有的句柄一次全还回去。
+- `ProgramConstants` 自己也持有一份：构造时给每个常量 `New*` 一次，析构时 `Clear()` 全减。
+  所以常量表**必须活得比 `State` 长**；也正因为常量那份独立存在，`PushString` 才用 `Copy`（+1）
+  压栈 —— 否则压一次就把常量表里那份减掉了。
+
+### 9.4 五条会静默出错的
+
+1. **句柄不防悬空。** 计数归零后下标进回收池、可能立刻被下一个 `NewString()` 拿去装别的字符串。
+   还拿旧 handle 去 `GetString()` 不会崩，只会读到别人的数据 —— 比崩溃难查得多。
+2. **跨 `Allocator` 传句柄必错。** `Clear2` 减的是 `state.alloc` 那个池，把一个 `Allocator` 造的
+   值塞进另一个 `Allocator` 装配的 `State`，计数会减到不相干的槽上。要共享就共享同一个
+   `Allocator`（它不可拷贝，但可以被多个 `State` 轮流用）。
+3. **`returns` 是 `span`，指向栈**，不是拷贝。`Run()` 之后别 `state.Clear()`、也别让 `State` 析构，
+   再用 `returns[0]` 就是悬空引用 —— 要留就 `Value::Copy` 出来。
+4. **宿主函数往 `output` 填字符串要走 `NewString()`**，别把 `args[0]` 的 handle 抄过去。
+   `opCall` 收尾时用 `Move` 把 `output` 的所有权接走：抄 handle 而不 `RefInc`，等于同一个句柄被
+   两个人认领，最终减两次。反过来要返回已有的值，用 `Value::Copy`。
+5. **`Value` 只能移动、不能拷贝**（拷贝构造与拷贝赋值都 `delete`）。这不是洁癖：隐式拷贝一定会漏
+   `RefInc`。移动构造必须 `noexcept`，否则 `std::vector<Value>` 扩容会退化到拷贝，直接编译不过。
+
+另外，这台 VM **没有 GC，也不需要**：语言里没有对象，也没有往序列里回写的语法（`a[0] = 1` 运行期
+报 `no implement for value type`），构造不出循环引用，引用计数足够；好处是释放即时、时序可预测。
+
+---
+
+## 10. 下一步
 
 - 只想把 Stope 当表达式求值器：只用 step 1 的 `Compiler` + `debug.hpp` 就够。
 - 想加自己的指令：填 `CustomOpcodeConfig`，传给 `Parser` 与 `Compiler`。

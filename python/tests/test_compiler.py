@@ -1,7 +1,7 @@
-"""编译器：``golden.txt`` 的 ``CMP`` / ``OUT`` / ``CERRS`` 三个字段（195 条）。
+"""编译器：``golden.txt`` 的 ``CMP`` / ``OUT`` / ``CERRS`` 三个字段（201 条）。
 
 ``golden.txt`` 被语法组与编译器组共用：:func:`test_parser.run_case` 一次跑完
-词法 → 语法 → 编译，两边各取自己那几个字段。195 条 × 3 个字段 = 585 条断言。
+词法 → 语法 → 编译，两边各取自己那几个字段。201 条 × 3 个字段 = 603 条断言。
 """
 
 from stope.common import Result
@@ -20,9 +20,12 @@ def run(rep) -> None:
     for rec in cases:
         cid = rec.get("ID", "")
         got = run_case(rec)
+        # PRE：预导出名单，逗号分隔（空元素表示一个空名字）；字段为空 = 不预导出
+        pre = rec.get("PRE", "")
+        pre_exports = pre.split(",") if pre else ()
         prog = Program()
         c = Compiler(CFG)
-        rc = c.compile(got["tree"], prog)
+        rc = c.compile(got["tree"], prog, pre_exports)
         rep.check(cid, "CMP", rec.get("CMP", ""), "OK" if rc == Result.Success else "ERR")
         rep.check(cid, "OUT", rec.get("OUT", ""), golden.dump_program(prog, CFG))
         rep.check(cid, "CERRS", rec.get("CERRS", ""), golden.join_esc(c.errors))

@@ -2,7 +2,7 @@ class_name StopeTestParser
 # 语法分析测试。契约见 docs/zh-cn/parser-test-plan.md。
 #
 # 两组期望值，都是 C++ 侧探针 dump 出来的：
-#   1. test/data/golden.txt（195 条）的 SHAPE / LINES / PERR / LEXERR / PERRS / LEXERRS
+#   1. test/data/golden.txt（201 条）的 SHAPE / LINES / PERR / LEXERR / PERRS / LEXERRS
 #      —— 走完整 Lexer + Parser，比对 AST 形状、语句行号、两侧错误列表。
 #   2. test/data/golden_binarr.txt（86 条）
 #      —— BA 组直接打二进制数组解析器，FB / FU 组直接打常量折叠矩阵。
