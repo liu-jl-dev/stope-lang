@@ -12,6 +12,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Stope</RootNamespace>
     <AssemblyName>Stope</AssemblyName>
+    <!-- 版本号与另外四份实现保持一致：cpp/CMakeLists.txt 的 project(... VERSION)、
+         nodejs/package.json、gdscript/addons/stope/plugin.cfg、python/stope/__init__.py。 -->
+    <Version>0.1.0</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <CheckForOverflowUnderflow>false</CheckForOverflowUnderflow>

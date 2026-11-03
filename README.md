@@ -1,8 +1,14 @@
 # Stope 语言
 
+> **版本 0.1.0**（2026-11-03） —— 变更历史见 [CHANGELOG.md](CHANGELOG.md)。
+
 **Stope** 是一门面向嵌入的轻量级脚本语言，配套一个内嵌标记语言 **STML**。本仓库存放它的语言标准与实现。
 
 一般来说，Stope 不适合作为应用程序的主开发语言，而适合作为脚本语言或领域特定语言。
+
+如果您在使用文档中产生疑惑，可以提出。这有助于改进文档。
+
+如果您希望将 Stope 移植到任意宿主语言，可以提出 issue。由于 Stope 会保持足够简单，移植会很容易，使用 Agent 进行移植是足够可靠的。
 
 Stope 的特点：
 - 极简设计。Stope 的目标不是功能强大的编程语言，而是容易开发以及二次开发的语言。
@@ -341,6 +347,7 @@ Python 侧另有几处宿主语言语义要兜（`1.0 / 0` 抛异常、`-7 // 2`
 | Python 测试与数据重生成       | [python/docs/testing.md](python/docs/testing.md)                   |
 | C++ 侧实现笔记（改 `cpp/` 前看） | [cpp/docs/development.md](cpp/docs/development.md)             |
 | C++ 侧各模块实现笔记    | [cpp/docs/](cpp/docs/) 下的 `*-test-plan.md`、`expr-optim.md`       |
+| 版本与变更历史         | [CHANGELOG.md](CHANGELOG.md)                                       |
 
 ---
 

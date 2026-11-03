@@ -15,6 +15,8 @@
 虚拟机只是参考实现，换一个执行器这些名字可能一个都不存在。
 """
 
+__version__ = "0.1.0"  # 与另外四份实现保持一致（见 cpp/CMakeLists.txt 的注释）
+
 from . import ast as AST
 from .ast_visitor import ASTVisitor
 from .basic_vm import Api, Arguments, Identifier, State
