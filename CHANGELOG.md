@@ -3,15 +3,56 @@
 本文件记录 **Stope 语言**（含标准范围内的语言、STML、编译器产物 `Program`）与仓库内五份实现的变更。
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
-[语义化版本](https://semver.org/lang/zh-CN/)。版本号在五处保持同步：
+[语义化版本](https://semver.org/lang/zh-CN/)。
 
-| 实现 | 位置 |
+## 版本规则
+
+### 什么时候升哪一位
+
+| 位 | 触发条件 | 例 |
+| --- | --- | --- |
+| **主版本** `X.0.0` | 不兼容变更：删除或改写既有语法、改变 `Program` 的字段含义或指令编码、改变内置指令的集合或编号、改变已有公开 API 的签名 | `0.9.0` → `1.0.0` |
+| **次版本** `0.X.0` | 向后兼容的新增：新语法、新公开 API、新的编译期能力（不改变 `Program` 语义）、**新增一份实现** | `0.1.0` → `0.2.0` |
+| **修订号** `0.0.X` | 向后兼容的缺陷修复与文档修正 | `0.1.0` → `0.1.1` |
+
+内置指令只有 33 条（`Assign=0` … `Return=32`），宿主自定义指令从 33 起编号 —— 所以
+**内置指令集只可能整体改变，不存在“追加一条”**：那会与已注册的自定义指令撞号，按主版本处理。
+
+### 0.x 期间的承诺
+
+`0.x` 期间语法与公开 API 仍可能调整：不兼容变更**升次版本号**（`0.1.0` → `0.2.0`）并在对应
+版本的「变更」小节里标注。`1.0.0` 起承诺 `1.x` 内保持兼容，不兼容变更只能升主版本 —— 覆盖
+三件标准（语言 / STML / `Program`）、五份实现的公开 API，以及**内置 BasicVM 的公开接口**。
+
+BasicVM 不属于标准（见 [`cpp/docs/basic-vm.md`](cpp/docs/basic-vm.md) §1.1）—— 换一台执行器
+可以完全不用它；但本仓库自带的这一台会一直维护，`1.x` 内 `Api` / `State` / `Value` 这些
+公开名字与调用方式只增不减、不改签名。
+
+### 为什么全仓只用一个版本号
+
+五份实现由同一批 golden 用例（`gdscript/test/data/`）与跨实现差分测试绑成一个行为整体，
+`Program` 的字节序列本身就是跨实现的契约 —— 按实现各自定版本没有意义。
+
+正式版本用 annotated tag 锚定，tag 名带 `v` 前缀（`v0.1.0`）；五个实现内的版本字段**不带**
+`v`，因为 CMake 的 `project(... VERSION ...)` 只接受数字。
+
+### 落点与校验
+
+版本号共六处，一致性由零依赖脚本守护：
+
+| 落点 | 位置 |
 | --- | --- |
 | C++ | `cpp/CMakeLists.txt` 的 `project(Stope VERSION ...)` |
 | GDScript | `gdscript/addons/stope/plugin.cfg` 的 `version` |
 | Node.js | `nodejs/package.json` 的 `version` |
 | C# | `csharp/Stope/Stope.csproj` 的 `<Version>` |
 | Python | `python/stope/__init__.py` 的 `__version__` |
+| 本文件 | 第一个纯版本号标题 `## [x.y.z]`（`[Unreleased]` 不计） |
+
+```bash
+python tools/check_version.py          # 全部一致才返回 0
+python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
+```
 
 ## [Unreleased]
 

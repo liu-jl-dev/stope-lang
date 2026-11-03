@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
-# 版本号与另外四份实现保持一致：nodejs/package.json、gdscript/addons/stope/plugin.cfg、
-# csharp/Stope/Stope.csproj 的 <Version>、python/stope/__init__.py 的 __version__。
+# 版本号共六处落点，改这里要一并改另外五处；一致性由 tools/check_version.py 校验，
+# 各落点清单与「什么时候升哪一位」见 CHANGELOG.md 的「版本规则」一节。
 project(Stope VERSION 0.1.0)
 
 set(CMAKE_CXX_STANDARD 20)
