@@ -122,6 +122,7 @@ class Parser:
                 self._error("expected element content. ")
                 return
             e.text = self.token.lexeme  # 只有一段，不拼接（见模块注释）
+            e.text_line = self.token.line  # 词法器已跳过前导空白，这是内容的首行（PL-05）
             self._next_token()          # 停在 CLAngle，与上面 Xml 分支的 break 处汇合
 
         self._next_token()  # 结束标签名

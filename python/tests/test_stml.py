@@ -72,7 +72,7 @@ def _shape(e) -> str:
         if e.attrs[name]:
             out += '="' + _esc16(e.attrs[name]) + '"'
     if e.text:
-        out += ', T="' + _esc16(e.text) + '"'
+        out += ', T(L' + str(e.text_line) + ')="' + _esc16(e.text) + '"'
     if e.children:
         out += ", C=[" + " ".join(_shape(c) for c in e.children) + "]"
     return out + ")"

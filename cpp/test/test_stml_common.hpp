@@ -128,11 +128,11 @@ inline LexerState defaultStateFunc(
   return LexerState::Xml;
 }
 
-// Element 形状串：字段顺序固定 —— tag、行号、自闭合、属性、文本、子元素。
+// Element 形状串：字段顺序固定 —— tag、行号、自闭合、属性、文本（含首行号）、子元素。
 //   Elem(a, L1)                        空元素对
 //   Elem(a, L1, /)                     自闭合
 //   Elem(a, L1, @id="x", @flag)        属性；无值属性只写名字
-//   Elem(a, L1, T="hello")             文本
+//   Elem(a, L1, T(L2)="hello")         文本；括号里是**内容**的首行（不是标签行）
 //   Elem(a, L1, C=[Elem(b, L1, /)])    子元素
 // 属性来自 std::map，顺序是键的字典序，**不是源码顺序**（项目定夺：不保证属性顺序）。
 inline std::string shapeElem(const Element& e) {
@@ -143,7 +143,9 @@ inline std::string shapeElem(const Element& e) {
     d += ", @" + Stope::Test::escUtf8(k);
     if (!v.empty()) d += "=\"" + Stope::Test::escUtf8(v) + "\"";
   }
-  if (!e.text.empty()) d += ", T=\"" + Stope::Test::escUtf8(e.text) + "\"";
+  if (!e.text.empty())
+    d += ", T(L" + std::to_string(e.textLine) + ")=\"" +
+         Stope::Test::escUtf8(e.text) + "\"";
   if (!e.children.empty()) {
     d += ", C=[";
     for (size_t i = 0; i < e.children.size(); ++i) {
@@ -279,6 +281,11 @@ inline int stmlTypeCoverage() {
 #define EXPECT_SP_TEXT(r, U16, id)                                           \
   Stope::Test::check((r).root.text == (U16), (id), "root.text == " #U16,     \
                      Stope::STML::Test::spRootDesc(r))
+// 内容首行的物理行号（不是标签行）：宿主拿它当 Stope::Lexer::line 的初值。
+#define EXPECT_SP_TEXT_LINE(r, N, id)                                        \
+  Stope::Test::check((r).root.textLine == (N), (id), "root.textLine == " #N, \
+                     "actual=" + std::to_string((r).root.textLine) +          \
+                         "\n         " + Stope::STML::Test::spRootDesc(r))
 #define EXPECT_SP_SELFCLOSING(r, B, id)                                      \
   Stope::Test::check((r).root.selfClosing == (B), (id),                      \
                      "root.selfClosing == " #B,                              \

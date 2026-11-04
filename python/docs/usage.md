@@ -272,7 +272,7 @@ rc = ps.parse(root, state_func)           # state_func(tag, attrs) -> StmlState
 | --- | --- |
 | `StmlTokenType` | `IntEnum`，0..11（`Invalid` … `StopeSrc`），与 C++ 的值和名字都一样 |
 | `StmlState` | `IntEnum`：`Xml` / `Text` / `Nevext` / `Stope` |
-| `StmlElement` | `line` / `tag` / `attrs: dict[str,str]` / `self_closing` / `children: list` / `text`。**只有这 6 个字段** |
+| `StmlElement` | `line` / `text_line` / `tag` / `attrs: dict[str,str]` / `self_closing` / `children: list` / `text`。**只有这 7 个字段** |
 | `StmlLexer.next_token()` | `NextToken`。扫完 Text / Nevext / Stope 后自动交还 `Xml` |
 | `StmlLexer.HAS_LEXEME` | 哪些类型的 `lexeme` 是跨实现可比的（标点与 Eof 不比） |
 | `StmlParser.parse(root, state_func=default_state_func)` | 传 `None` 表示「一律 Xml」 |

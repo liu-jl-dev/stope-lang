@@ -41,9 +41,14 @@ def child(ele, tag):
     return next((c for c in ele.children if c.tag == tag), None)
 
 
-def compile_src(src, pre_exports, out):
-    """编译一段源码，pre_exports 原样交给 Compiler。失败时打印错误并返回 False。"""
+def compile_src(src, start_line, pre_exports, out):
+    """编译一段源码，pre_exports 原样交给 Compiler。失败时打印错误并返回 False。
+
+    start_line 是 src 首行的物理行号 —— 从 STML 切出来的代码段不是从 1 开始，设给
+    lexer 之后报错行号才和文档对得上（这里直接从 fn.text_line 取）。
+    """
     lexer = Lexer(src)
+    lexer.line = start_line
     parser = Parser(lexer)
     tree = AST.Prog()
     parser.parse_program(tree)
@@ -77,7 +82,7 @@ def main():
     # 反汇编里是 PushValue(0) / PushValue(1)。
     program = Program()
     print("\n[2] 编译函数体（preExports = 形参表）：")
-    if not compile_src(fn.text, params, program):
+    if not compile_src(fn.text, fn.text_line, params, program):
         raise SystemExit(1)
     print(disasm(program))
     print("  exports: " + " ".join(f"{k}={v}" for k, v in program.exports.items()))
@@ -97,7 +102,7 @@ def main():
     # 名字已经进了文件作用域，源码里再 export 同名、或顶层 let 同名，都是 duplicate。
     # 预导出的变量只能赋值（a = 1;），不能重新声明。
     print("\n[4] 函数体里又写 export a;：")
-    compile_src("export a; return a;", params, Program())
+    compile_src("export a; return a;", 1, params, Program())
 
 
 if __name__ == "__main__":

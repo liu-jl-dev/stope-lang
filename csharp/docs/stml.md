@@ -91,16 +91,21 @@ foreach (var e in parser.Errors) Console.Error.WriteLine("[parse] " + e);
 
 ## 4. 第三步：读树
 
-`Element` 只有 6 个字段（与 C++ 的 `STML::Element` 一一对应，别加字段）：
+`Element` 只有 7 个字段（与 C++ 的 `STML::Element` 一一对应，别加字段）：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `Line` | `int` | 标签的 `<` 所在行 |
+| `TextLine` | `int` | 内容首行的物理行号（不是标签行）；无内容时 -1 |
 | `Tag` | `string` | 标签名 |
 | `Attrs` | `Dictionary<string,string>` | 属性；无值属性的值是空串 |
 | `SelfClosing` | `bool` | `<a/>` |
 | `Children` | `List<Element>` | 子元素 |
 | `Text` | `string` | 元素内文本，与 `Children` **互斥**、只有一段 |
+
+`TextLine` 是**内容**的第一行：词法器切内容前跳过了前导空白（含换行），所以
+`<sto>\nlet a = 1;</sto>` 里 `Line` 是 1、`TextLine` 是 2。把切出来的代码段交给
+`Lexer` 时设 `lexer.Line = e.TextLine`（`Line` 可读写），报错行号才和原文档对得上。
 
 `demo/02` 里那两段遍历：
 
@@ -221,4 +226,4 @@ Walk(root, 0);
   [`demo/01-quick-start`](../demo/01-quick-start/Program.cs)。
 - STML 的完整语法（四态、12 条细节、`<!-- -->`、属性不转义……）：
   [`cpp/docs/stml.md`](../../cpp/docs/stml.md)。
-- 跨实现的 125 条用例清单与残留差异：`docs/zh-cn/stml-test-plan.md`。
+- 跨实现的 126 条用例清单与残留差异：`docs/zh-cn/stml-test-plan.md`。

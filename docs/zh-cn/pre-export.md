@@ -136,6 +136,18 @@ if (r != Result::Success) {
 名单在 `Compile` 内部**第一件事**就登记完，早于遍历 AST 的任何节点 —— 所以函数体里
 第一句就用 `a` 也没问题，它不是「未声明」。
 
+**顺手把行号对齐**：从 STML 里切出来的代码段不是从文档第 1 行开始的，而 `Lexer` 默认
+按 1 起算 —— 不处理的话，报错会指向「代码段的第 5 行」，不是「文档的第 5 行」。
+`Element` 的 `textLine` 就是内容首行的物理行号，赋给 `Lexer::line` 即可：
+
+```cpp
+Lexer lexer(fn->text);
+lexer.line = fn->textLine;   // <func> 在 3 行、代码 4–6 行 → 报错直接指第 5 行
+```
+
+`textLine` 是**内容**首行而不是标签行：词法器切内容时跳过了前导空白（含换行），
+所以 `<sto>\nlet a = 1;</sto>` 的 `line` 是 1、`textLine` 是 2。五份实现的写法见 §7.1。
+
 ### 3.3 运行前按 `exports` 写槽位
 
 ```cpp
@@ -278,6 +290,22 @@ returns: 0 (0=Null 1=Integer)
 - 名单只在**本次调用内**被读，不存指针也不拷贝成成员 —— 传临时对象（`{u"a", u"b"}`）也安全。
 - C++ 的 `Program` 不能拷贝（`ProgramConstants` 持有常量的引用，拷贝会二次释放）；
   其余四份没有这条限制。
+
+### 7.1 设 `Lexer` 的起始行号
+
+代码段是从文档里切出来的，行号得从 `Element.textLine` 接上（§3.2 讲了为什么）：
+
+| 实现 | 写法 |
+| --- | --- |
+| C++ | `lexer.line = fn->textLine;` |
+| GDScript | `lexer.line = fn.text_line` |
+| Node.js | `lexer.line = fn.textLine` |
+| C# | `lexer.Line = fn.TextLine;` |
+| Python | `lexer.line = fn.text_line` |
+
+C++ / GDScript / Node.js / Python 的 `line` 本来就是可写字段，构造后直接赋；C# 的
+`Lexer.Line` 有 setter。注意赋值要放在构造（或 `Reset`）**之后** —— `Reset` 会把它
+重置为 1。
 
 ## 8. 排错表
 

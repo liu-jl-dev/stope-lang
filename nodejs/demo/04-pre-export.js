@@ -46,8 +46,11 @@ function childByTag(ele, tag) {
 }
 
 // 编译一段源码，preExports 原样交给 Compile。失败时打印错误并返回 false。
-function compileAndReport(src, preExports, out) {
+// startLine 是 src 首行的物理行号 —— 从 STML 切出来的代码段不是从 1 开始，设给
+// lexer 之后报错行号才和文档对得上（这里直接从 fn.textLine 取）。
+function compileAndReport(src, startLine, preExports, out) {
   const lexer = new Lexer(src)
+  lexer.line = startLine
   const parser = new Parser(lexer)
   const tree = new AST.Prog()
   parser.ParseProgram(tree)
@@ -81,7 +84,7 @@ console.log(`[1] 从 <func> 取出：${name}(${params.join(', ')})`)
 // 反汇编里是 PushValue(0) / PushValue(1)。
 const program = new Program()
 console.log('\n[2] 编译函数体（preExports = 形参表）：')
-if (!compileAndReport(fn.text, params, program)) process.exit(1)
+if (!compileAndReport(fn.text, fn.textLine, params, program)) process.exit(1)
 console.log(DisasmNoCustom(program))
 const exported = [...program.exports].map(([k, v]) => `${k}=${v}`).join(' ')
 console.log('  exports: ' + exported)
@@ -104,4 +107,4 @@ console.log(`\n[3] add(3, 4) = ${state.returns[0]}`)
 // 名字已经进了文件作用域，源码里再 export 同名、或顶层 let 同名，都是 duplicate。
 // 预导出的变量只能赋值（a = 1;），不能重新声明。
 console.log('\n[4] 函数体里又写 export a;：')
-compileAndReport('export a; return a;', params, new Program())
+compileAndReport('export a; return a;', 1, params, new Program())

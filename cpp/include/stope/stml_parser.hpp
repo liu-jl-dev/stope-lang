@@ -16,6 +16,10 @@ STML 语法比 XML 更严格：
 namespace Stope::STML {
 struct Element {
   int line = -1;
+  // text / 代码段第一个字符的物理行号；元素没有内容时为 -1。
+  // 词法器在切内容前先跳过了前导空白（含换行），所以这是**内容**的首行而不是
+  // 标签行 —— 宿主拿它当 Stope::Lexer::line 的初值，报错行号就与文档对得上。
+  int textLine = -1;
   std::u16string_view tagName;
   std::map<std::u16string_view, std::u16string_view> attrs;
   bool selfClosing = false;

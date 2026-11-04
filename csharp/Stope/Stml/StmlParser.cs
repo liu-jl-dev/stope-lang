@@ -158,6 +158,7 @@ public sealed class Parser
                 return;
             }
             e.Text = _token.Lexeme; // 只有一段，不拼接（B-11）
+            e.TextLine = _token.Line; // 词法器已跳过前导空白，这是内容的首行（PL-05）
             NextToken(); // 停在 CLAngle，与上面 Xml 分支的 break 处汇合
         }
         NextToken(); // 结束标签名

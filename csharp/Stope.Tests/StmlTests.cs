@@ -166,7 +166,7 @@ public static class StmlTests
             string v = e.Attrs[k];
             if (v.Length != 0) sb.Append("=\"").Append(Data.Esc(v)).Append('"');
         }
-        if (e.Text.Length != 0) sb.Append(", T=\"").Append(Data.Esc(e.Text)).Append('"');
+        if (e.Text.Length != 0) sb.Append(", T(L").Append(e.TextLine).Append(")=\"").Append(Data.Esc(e.Text)).Append('"');
         if (e.Children.Count > 0)
         {
             sb.Append(", C=[");

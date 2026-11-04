@@ -31,7 +31,11 @@ public sealed class Lexer
     /// <summary>词法错误，格式 <c>line N: msg</c>。与语法错误分开放，排查时两个都要看。</summary>
     public readonly List<string> Errors = new();
 
-    public int Line => _line;
+    /// <summary>
+    /// 当前行号。宿主可以设成代码段在<b>原文档</b>里的首行，让报错行号与文档对齐
+    /// （见 <c>demo/04</c>）；<see cref="Reset"/> 会把它重置为 1。
+    /// </summary>
+    public int Line { get => _line; set => _line = value; }
 
     public Lexer(string input) => Reset(input);
 

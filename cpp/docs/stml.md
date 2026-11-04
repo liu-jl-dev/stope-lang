@@ -246,17 +246,27 @@ if (r != Result::Success) {
 
 ## 4. 第三步：读树
 
-`Element` 一共六个字段，全是值语义（`children` 直接存 `Element`，不用 `unique_ptr`）：
+`Element` 一共七个字段，全是值语义（`children` 直接存 `Element`，不用 `unique_ptr`）：
 
 ```cpp
 struct Element {
-  int line = -1;                                              // 起始行
+  int line = -1;                                              // 起始行（< 所在行）
+  int textLine = -1;                                          // 内容首行的物理行号
   std::u16string_view tagName;                                // 标签名
   std::map<std::u16string_view, std::u16string_view> attrs;   // 属性
   bool selfClosing = false;                                   // <a/> 为真
   std::vector<Element> children;                              // 子元素（Xml 模式）
   std::u16string_view text;                                   // 内容（其余三种模式）
 };
+```
+
+`textLine` 是**内容**的第一行，不是标签行 —— 词法器切内容前会跳过前导空白（含换行），
+所以 `<sto>\nlet a = 1;</sto>` 里 `line` 是 1、`textLine` 是 2。从 STML 里切出代码段
+交给 `Lexer` 时，拿它当 `Lexer::line` 的初值，报错行号才和原文档对得上：
+
+```cpp
+Stope::Lexer lx(fn->text);
+lx.line = fn->textLine;   // line 是公有字段，构造后赋值即可
 ```
 
 读这棵树时最容易搞混的三件事：
@@ -557,7 +567,7 @@ int main() {
 | 文件 | 讲什么 |
 | --- | --- |
 | `include/stope/stml_lexer.hpp` | 12 种 TokenType、4 种 `LexerState`、状态交还约定 |
-| `include/stope/stml_parser.hpp` | `Element` 六个字段、`LexerStateFunc`、`Parser` |
+| `include/stope/stml_parser.hpp` | `Element` 七个字段、`LexerStateFunc`、`Parser` |
 | `include/stope/core.hpp` | 聚合头，demo 用它一次拿到全部公共头 |
 | `src/stml_lexer.cpp` | 四种状态的扫描实现，`<!--` 只在 Xml 生效的那一行就在这 |
 | `src/stml_parser.cpp` | 属性循环为什么"每个分支自己推进"（文件头注释写清楚了） |

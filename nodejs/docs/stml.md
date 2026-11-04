@@ -32,7 +32,7 @@
 代码位置：
 
 ```
-nodejs/src/stml.js         Element（6 个字段）+ Token + TokenType（12 项）
+nodejs/src/stml.js         Element（7 个字段）+ Token + TokenType（12 项）
 nodejs/src/stml_lexer.js   Lexer + State（Xml / Text / Nevext / Stope）
 nodejs/src/stml_parser.js  Parser + 回调约定
 ```
@@ -229,11 +229,12 @@ console.log('  ' + n + ' 个 token')   // 10 —— demo 里没有这一步，�
 
 ## 4. 第三步：读树 —— demo 的 `[1]`–`[4]` 段
 
-`StmlElement` 一共六个字段（`src/stml.js`）：
+`StmlElement` 一共七个字段（`src/stml.js`）：
 
 ```js
 class Element {
   line = -1          // 起始行（< 所在的物理行）
+  textLine = -1      // 内容首行的物理行号（不是标签行）
   tag = ''           // 标签名
   attrs = new Map()  // 属性；无值属性的值是空串
   selfClosing = false
@@ -242,9 +243,13 @@ class Element {
 }
 ```
 
+`textLine` 是**内容**的第一行：词法器切内容前跳过了前导空白（含换行），所以
+`<sto>\nlet a = 1;</sto>` 里 `line` 是 1、`textLine` 是 2。把切出来的代码段交给
+`Lexer` 时设 `lexer.line = e.textLine`，报错行号才和原文档对得上。
+
 字段名跟 C++ 一致（`tag` 是例外：C++ 叫 `tagName`），跟 GDScript 的 snake_case 不同。
 
-demo 的 `[1]`–`[4]` 段把这六个字段基本都用了一遍（**原文照抄**）：
+demo 的 `[1]`–`[4]` 段把这七个字段基本都用了一遍（**原文照抄**）：
 
 ```js
 console.log(`[1] 根元素 <${root.tag}>，属性 package="${root.attrs.get('package')}"`)
@@ -420,11 +425,11 @@ walk(root, 0)
 
 | 文件 | 讲什么 |
 | --- | --- |
-| `src/stml.js` | `Element` 六个字段、`Token`、12 项 `TokenType` |
+| `src/stml.js` | `Element` 七个字段、`Token`、12 项 `TokenType` |
 | `src/stml_lexer.js` | 四态扫描；`<!--` 只在 `Xml` 生效的实现就在这 |
 | `src/stml_parser.js` | 属性循环、回调调用点、错误分支 |
 | `demo/02-stml.js` | 本文讲的 demo；**只解析，不编译不执行** |
-| `test/stml.test.js` | 125 条共用清单（`gdscript/test/data/stml_cases.txt`）的词法 + 语法断言 |
+| `test/stml.test.js` | 126 条共用清单（`gdscript/test/data/stml_cases.txt`）的词法 + 语法断言 |
 | [`usage.md`](usage.md) §10 | API 表与四条宿主侧注意事项 |
 | [`../../cpp/docs/stml.md`](../../cpp/docs/stml.md) | 语义权威 + 12 条语法坑 |
 | [`../../docs/zh-cn/stml-test-plan.md`](../../docs/zh-cn/stml-test-plan.md) | 跨实现行为契约（GD-S-17/18 登记在 §7） |

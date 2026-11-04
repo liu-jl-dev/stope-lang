@@ -93,6 +93,7 @@ class Parser:
 			if token.type != T.Text and token.type != T.NevextSrc and token.type != T.StopeSrc:
 				error('expected element content. '); return
 			e.text = token.lexeme # 只有一段，不拼接（B-11）
+			e.text_line = token.line # 词法器已跳过前导空白，这是内容的首行（PL-05）
 			next_token() # 停在 CLAngle，与上面 Xml 分支的 break 处汇合
 		next_token() # 结束标签名
 		if token.type != T.Word:

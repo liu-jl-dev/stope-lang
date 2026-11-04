@@ -49,11 +49,16 @@ internal static class Demo04
         return null;
     }
 
-    /// <summary>编译一份源码，preExports 原样交给 Compile。失败时打印错误并返回 false。</summary>
+    /// <summary>
+    /// 编译一份源码，preExports 原样交给 Compile。失败时打印错误并返回 false。
+    /// startLine 是 src 首行的物理行号 —— 从 STML 切出来的代码段不是从 1 开始，设给
+    /// Lexer 之后报错行号才和文档对得上（这里直接从 fn.TextLine 取）。
+    /// </summary>
     private static bool CompileAndReport(
-        string src, IReadOnlyList<string> preExports, Program outProg)
+        string src, int startLine, IReadOnlyList<string> preExports, Program outProg)
     {
         var lexer = new Lexer(src);
+        lexer.Line = startLine;
         var parser = new Parser(lexer);
         var tree = new Prog();
         parser.ParseProgram(tree);
@@ -100,7 +105,7 @@ internal static class Demo04
         // 反汇编里是 PushValue(0) / PushValue(1)。
         var program = new Program();
         Console.WriteLine("\n[2] 编译函数体（preExports = 形参表）：");
-        if (!CompileAndReport(fn.Text, pre, program)) return 1;
+        if (!CompileAndReport(fn.Text, fn.TextLine, pre, program)) return 1;
         Console.WriteLine(Debug.DisasmNoCustom(program));
         var parts = new List<string>();
         foreach (var kv in program.Exports) parts.Add($"{kv.Key}={kv.Value}");
@@ -127,7 +132,7 @@ internal static class Demo04
         // 名字已经进了文件作用域，源码里再 export 同名、或顶层 let 同名，都是 duplicate。
         // 预导出的变量只能赋值（a = 1;），不能重新声明。
         Console.WriteLine("\n[4] 函数体里又写 export a;：");
-        CompileAndReport("export a; return a;", pre, new Program());
+        CompileAndReport("export a; return a;", 1, pre, new Program());
         return 0;
     }
 }

@@ -95,16 +95,21 @@ for e in parser.errors:     # 语法错误
 
 ## 4. 第三步：读树
 
-`StmlElement` 只有 6 个字段，别指望更多：
+`StmlElement` 只有 7 个字段，别指望更多：
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `line` | `int` | 开始标签所在行（从 1 起） |
+| `text_line` | `int` | 内容首行的物理行号（不是标签行）；无内容时 -1 |
 | `tag` | `str` | 标签名 |
 | `attrs` | `dict[str, str]` | 属性；**无值属性的值是空串** |
 | `self_closing` | `bool` | 是不是 `/>` |
 | `children` | `list[StmlElement]` | 子元素 |
 | `text` | `str` | 元素内文本 / 代码段。与 `children` **互斥** |
+
+`text_line` 是**内容**的第一行：词法器切内容前跳过了前导空白（含换行），所以
+`<sto>\nlet a = 1;</sto>` 里 `line` 是 1、`text_line` 是 2。把切出来的代码段交给
+`Lexer` 时设 `lexer.line = e.text_line`，报错行号才和原文档对得上。
 
 ```python
 def child_by_tag(ele, tag):

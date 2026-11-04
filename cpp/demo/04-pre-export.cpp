@@ -67,10 +67,14 @@ static vector<u16string> splitParams(std::u16string_view s) {
 }
 
 // 编译一段 Stope 源码，preExports 原样交给 Compiler。失败时打印错误并返回 false。
+// startLine 是 src 第一行的物理行号：从 STML 里切出来的代码段不是从 1 开始的，
+// 设给 Lexer 之后报错行号才和文档对得上（这里直接从 fn->textLine 取）。
 static bool compileAndReport(std::u16string_view src,
+                             int startLine,
                              const vector<u16string>& preExports,
                              Program& out) {
   Lexer lexer(src);  // 借用 src，src 要活到编译结束
+  lexer.line = startLine;
   Parser parser(lexer);
   AST::Prog tree;
   parser.ParseProgram(tree);
@@ -131,7 +135,7 @@ int main() {
   // 反汇编里是 PushValue(0) / PushValue(1)。
   Program program;
   cout << "\n[2] 编译函数体（preExports = 形参表）：\n";
-  if (!compileAndReport(fn->text, params, program)) {
+  if (!compileAndReport(fn->text, fn->textLine, params, program)) {
     return 1;
   }
   cout << DisasmNoCustom(program) << endl;
@@ -171,9 +175,9 @@ int main() {
   // 名字已经进了文件作用域，源码里再 export 同名、或顶层 let 同名，都是 duplicate。
   // 预导出的变量只能赋值（a = 1;），不能重新声明。
   cout << "\n[4] 函数体里又写 export a;：\n";
-  u16string bad = u"export a; return a;";
+  u16string bad = u"export a; return a;";  // 独立片段，从第 1 行起
   Program badProgram;
-  compileAndReport(bad, params, badProgram);
+  compileAndReport(bad, 1, params, badProgram);
 
   return 0;
 }

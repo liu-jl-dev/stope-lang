@@ -169,6 +169,7 @@ errors = parser.errors
 ```
 Element {
     line        : int              # '<' 所在行，从 1 起算
+    textLine    : int              # text / 代码段第一行的物理行号；无内容时 -1
     tagName     : string
     attrs       : map<string,string>   # 无值属性的值是空串
     selfClosing : bool
@@ -194,12 +195,15 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | `/` | 自闭合 | `selfClosing == true` |
 | `@<k>` | 无值属性 | 值等于空串 |
 | `@<k>="<v>"` | 有值属性 | 值非空 |
-| `T="<text>"` | 元素内文本 | 文本非空 |
+| `T(L<n>)="<text>"` | 元素内文本 | 文本非空；`n` 是**内容首行**的物理行号（不是标签行） |
 | `C=[...]` | 子元素，用空格分隔、按源码顺序 | 非空 |
 
 **字段顺序固定**：tag → line → `/` → 属性 → 文本 → 子元素。
 **属性按"键的字典序"输出，不是源码顺序**（TD-2）。字符串里的 `"` `\` 与
 控制字符按 `\n` `\r` `\t` `\\` `\"` 转义。
+
+`T(L<n>)` 的行号来自 `Element.textLine`：词法器切内容前会跳过前导空白（含换行），
+所以它指向**内容**的第一行 —— `<sto>\nlet a = 1;</sto>` 里标签在 1 行、内容在 2 行。
 
 示例：
 
@@ -208,7 +212,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | `<a/>` | `Elem(a, L1, /)` |
 | `<a></a>` | `Elem(a, L1)` |
 | `<a id="x" flag/>` | `Elem(a, L1, /, @flag, @id="x")` |
-| `<p>hello</p>`（stateFunc → Text） | `Elem(p, L1, T="hello")` |
+| `<p>hello</p>`（stateFunc → Text） | `Elem(p, L1, T(L1)="hello")` |
 | `<a><b/><c/></a>` | `Elem(a, L1, C=[Elem(b, L1, /) Elem(c, L1, /)])` |
 
 ### 2.9 两侧 API 对照
@@ -271,11 +275,11 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 
 ## 4. 用例清单
 
-> 共 **125 个用例 / 222 条断言**，C++ 侧落地在
+> 共 **126 个用例 / 218 条断言**，C++ 侧落地在
 > `cpp/test/test_stml_lexer.cpp` 与 `cpp/test/test_stml_parser.cpp`。
 > 用例 ID 就是源码里的 ID 字符串，便于反查。
 
-### 4.1 词法（62 用例 / 119 断言）
+### 4.1 词法（62 用例）
 
 #### LEX-SX Xml 状态（10）
 
@@ -370,7 +374,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | SR-05 | 200 个 `"` | 100 个空 `String` + `Eof`，0 错 |
 | SR-06 | `<!--` | 只有 `Eof` |
 
-### 4.2 语法（63 用例 / 103 断言）
+### 4.2 语法（64 用例）
 
 > `stateFunc` 缺省行为：`<sto>` → Stope、`<nev>` → Nevext、`<p>` → Text、其余 → Xml。
 
@@ -408,11 +412,11 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 
 | 用例 | 输入 | 期望形状 / 断言 |
 | --- | --- | --- |
-| PC-01 | `<p>hello</p>` | `Elem(p, L1, T="hello")` |
+| PC-01 | `<p>hello</p>` | `Elem(p, L1, T(L1)="hello")` |
 | PC-02 | `<p>  hello  </p>` | 尾部空白已由词法裁掉 |
 | PC-03 | `<p></p>` | 空文本，不是错误 |
-| PC-04 | `<sto>let a = 1;</sto>` | `Elem(sto, L1, T="let a = 1;")` |
-| PC-05 | `<nev>x 1, 2;</nev>` | `Elem(nev, L1, T="x 1, 2;")` |
+| PC-04 | `<sto>let a = 1;</sto>` | `Elem(sto, L1, T(L1)="let a = 1;")` |
+| PC-05 | `<nev>x 1, 2;</nev>` | `Elem(nev, L1, T(L1)="x 1, 2;")` |
 | PC-06 | `<sto>let s = "a</b";</sto>` | 引号里的 `</` 不终止 |
 | PC-07 | `<nev>x "a</b";</nev>` | 同上 |
 | PC-08 | `<sto>let a = 1;\nlet b = 2;</sto>` | 换行保留在 text 里 |
@@ -421,14 +425,15 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | PC-11 | `<a>text</a>` | 1 错 `expected "<" or "</".`（B-12） |
 | PC-12 | `<nev>x "a\"b";</nev>` | Parser 不做任何解码 |
 
-#### PARSE-PL 行号（4）
+#### PARSE-PL 行号（5）
 
 | 用例 | 输入 | 期望 |
 | --- | --- | --- |
 | PL-01 | `<a>\n<b/>\n</a>` | 根 `line == 1` |
 | PL-02 | `\n\n<a/>` | 根 `line == 3` |
 | PL-03 | `<a>\n<b>\n<c/>\n</b>\n</a>` | 深度 3 |
-| PL-04 | `<sto>\nlet a = 1;\n</sto>` | 根 `line == 1`，text 是 `let a = 1;` |
+| PL-04 | `<sto>\nlet a = 1;\n</sto>` | 根 `line == 1`，text 是 `let a = 1;`，`textLine == 2` |
+| PL-05 | `<sto>\n\nlet a = 1;\n</sto>` | `textLine == 3` —— 前导空行被词法跳过，但行号跟着走 |
 
 #### PARSE-PE 错误恢复（12）
 
@@ -453,7 +458,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | --- | --- | --- |
 | PF-01 | `<a><b/></a>`，`stateFunc = null` | 同 PA-04 |
 | PF-02 | `<p>hello</p>`，`stateFunc = null` | 1 错 `expected "<" or "</".` |
-| PF-03 | `<any>hello</any>`，自定义回调 → Text | `Elem(any, L1, T="hello")` |
+| PF-03 | `<any>hello</any>`，自定义回调 → Text | `Elem(any, L1, T(L1)="hello")` |
 | PF-04 | 50 层 `<n>…</n>` | 成功，深度 50 |
 | PF-05 | `<p>` + 2000 个 `x` + `</p>` | 成功，text 原样 |
 | PF-06 | `<a><!-- c --><b/></a>` | 注释出现在子元素之间不影响 |
@@ -480,7 +485,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 PH-01 的完整形状串：
 
 ```
-Elem(div, L1, @class="box", @hidden, C=[Elem(p, L2, T="hello") Elem(sto, L3, T="let a = 1;") Elem(nev, L4, T="windowSize 1280, 720;")])
+Elem(div, L1, @class="box", @hidden, C=[Elem(p, L2, T(L2)="hello") Elem(sto, L3, T(L3)="let a = 1;") Elem(nev, L4, T(L4)="windowSize 1280, 720;")])
 ```
 
 ---
@@ -489,7 +494,7 @@ Elem(div, L1, @class="box", @hidden, C=[Elem(p, L2, T="hello") Elem(sto, L3, T="
 
 | 维度 | 门槛 |
 | --- | --- |
-| 功能通过率 | §4 全部 125 个用例通过。**任一实现有 1 条不过就要在 §7 登记** |
+| 功能通过率 | §4 全部 126 个用例通过。**任一实现有 1 条不过就要在 §7 登记** |
 | 两实现一致性 | C++ 与 GDScript 用**同一份**用例数据，不允许出现「GDScript 版少测几条」 |
 | Token 覆盖 | 12 种 `TokenType` 全部被至少 1 个用例产出（C++ 侧由 `stmlTypeCoverage()` 自动查，当前 12/12） |
 | 错误文案 | §3 表格里明写的英文子串必须逐字命中 |
@@ -532,7 +537,7 @@ ctest --test-dir build          # 15 项
 
 ### GDScript
 
-125 条用例全部落地在 `gdscript/test/`，随其它三组一起跑：
+126 条用例全部落地在 `gdscript/test/`，随其它三组一起跑：
 
 ```bash
 "/c/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/godot_console.exe" \
@@ -545,7 +550,7 @@ ctest --test-dir build          # 15 项
 
 | 文件 | 谁写 | 作用 |
 | --- | --- | --- |
-| `gdscript/test/data/stml_cases.txt` | 手写 | §4 的 125 条：ID / `KIND` / `ST`（词法初始状态）/ `SF`（宿主回调）/ `SRC` / `TIMES` / `MD`（语法用例的深度上限，默认 256） |
+| `gdscript/test/data/stml_cases.txt` | 手写 | §4 的 126 条：ID / `KIND` / `ST`（词法初始状态）/ `SF`（宿主回调）/ `SRC` / `TIMES` / `MD`（语法用例的深度上限，默认 256） |
 | `cpp/tools/golden_stml.cpp` | 手写 | C++ 侧探针。读清单 → dump 期望值 |
 | `gdscript/test/data/golden_stml.txt` | **机器生成** | 期望值，勿手工编辑 |
 | `gdscript/test/test_stml.gd` | 手写 | GDScript 侧 runner。读清单 + golden，逐字段比对 |
@@ -584,7 +589,7 @@ ctest --test-dir build          # 15 项
 | **GD-S-15** | 元素内出现裸文本时，`parse_element()` 的 `else` 分支**只报错不推进**，`while true` 卡在同一个 token 上：`<a name="x">plain</a>` 实测**永不返回** | 报错后推进，或把文本切成 `Text` 交给上层 | ✅ 已修 2026-10-28（`else` 报错后 return，不再空转） |
 | **GD-S-16** | `scan_text()` / `scan_nevext()` / `scan_stope()` **不去尾部空白**：`<sto>let a=1;\n   </sto>` 实测 text = `let a=1;\n   ` | B-8：`Text` / 代码段的 lexeme **不含尾部空白**（`trimTrailingWs`） | ✅ 已修 2026-10-28（加 `trim_trailing_ws`） |
 | **GD-S-17** | `Element.attrs` 是 `Dictionary`，**遍历顺序是插入序**（源码顺序）；形状串能对齐是因为 `shape_elem()` 先 `keys.sort()` | `std::map`，遍历顺序是键的字典序 | 未修（直接遍历 `attrs` 的宿主代码会看到不同顺序；要用顺序就自己排序） |
-| **GD-S-18** | `String` 按**码点**推进，非 BMP 字符（emoji）一次吃掉整个字符 | `char16_t` 按 **UTF-16 码元**推进，非 BMP 字符会被当成两个 `Invalid` | 未修。§4 的用例不含非 BMP 字符，所以 125 条全绿也覆盖不到 |
+| **GD-S-18** | `String` 按**码点**推进，非 BMP 字符（emoji）一次吃掉整个字符 | `char16_t` 按 **UTF-16 码元**推进，非 BMP 字符会被当成两个 `Invalid` | 未修。§4 的用例不含非 BMP 字符，所以 126 条全绿也覆盖不到 |
 
 ### TD 编号索引
 

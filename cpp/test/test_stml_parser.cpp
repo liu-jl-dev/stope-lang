@@ -109,7 +109,7 @@ static void testContent() {
   Stope::Test::section("SC 元素内容：Text / Nevext / Stope");
 
   auto r = sparseAll(u"<p>hello</p>");
-  EXPECT_SP_SHAPE(r, "Elem(p, L1, T=\"hello\")", "PC-01");
+  EXPECT_SP_SHAPE(r, "Elem(p, L1, T(L1)=\"hello\")", "PC-01");
   EXPECT_SP_TEXT(r, u"hello", "PC-01");
 
   r = sparseAll(u"<p>  hello  </p>");  // 尾部空白由 Lexer 裁掉
@@ -120,10 +120,10 @@ static void testContent() {
   EXPECT_SP_TEXT(r, u"", "PC-03");
 
   r = sparseAll(u"<sto>let a = 1;</sto>");
-  EXPECT_SP_SHAPE(r, "Elem(sto, L1, T=\"let a = 1;\")", "PC-04");
+  EXPECT_SP_SHAPE(r, "Elem(sto, L1, T(L1)=\"let a = 1;\")", "PC-04");
 
   r = sparseAll(u"<nev>x 1, 2;</nev>");
-  EXPECT_SP_SHAPE(r, "Elem(nev, L1, T=\"x 1, 2;\")", "PC-05");
+  EXPECT_SP_SHAPE(r, "Elem(nev, L1, T(L1)=\"x 1, 2;\")", "PC-05");
 
   // 代码段里的 </ 藏在引号里，不能当成结束标签
   r = sparseAll(u"<sto>let s = \"a</b\";</sto>");
@@ -168,10 +168,16 @@ static void testLine() {
   r = sparseAll(u"<a>\n<b>\n<c/>\n</b>\n</a>");
   EXPECT_SP_DEPTH(r, 3, "PL-03");
 
-  // 跨行的 Stope 段：元素行号仍是开头那行
+  // 跨行的 Stope 段：元素行号仍是开头那行，内容行号是代码首行
   r = sparseAll(u"<sto>\nlet a = 1;\n</sto>");
   EXPECT_SP_LINE(r, 1, "PL-04");
   EXPECT_SP_TEXT(r, u"let a = 1;", "PL-04");
+  EXPECT_SP_TEXT_LINE(r, 2, "PL-04");
+
+  // 标签与代码之间隔一个空行：前导空白由词法跳过，但行号跟着走
+  r = sparseAll(u"<sto>\n\nlet a = 1;\n</sto>");
+  EXPECT_SP_TEXT(r, u"let a = 1;", "PL-05");
+  EXPECT_SP_TEXT_LINE(r, 3, "PL-05");
 }
 
 // ---------------------------------------------------------------- SE 错误
@@ -254,7 +260,7 @@ static void testCallback() {
                    std::map<std::u16string_view, std::u16string_view>) {
                   return LexerState::Text;
                 });
-  EXPECT_SP_SHAPE(r, "Elem(any, L1, T=\"hello\")", "PF-03");
+  EXPECT_SP_SHAPE(r, "Elem(any, L1, T(L1)=\"hello\")", "PF-03");
 
   // 深嵌套：50 层不出错（STML 没有递归深度保护，只求默认栈下够用）
   std::u16string deep;
@@ -292,9 +298,9 @@ static void testMixed() {
       u"</div>");
   EXPECT_SP_SHAPE(r,
                   "Elem(div, L1, @class=\"box\", @hidden, C=["
-                  "Elem(p, L2, T=\"hello\") "
-                  "Elem(sto, L3, T=\"let a = 1;\") "
-                  "Elem(nev, L4, T=\"windowSize 1280, 720;\")])",
+                  "Elem(p, L2, T(L2)=\"hello\") "
+                  "Elem(sto, L3, T(L3)=\"let a = 1;\") "
+                  "Elem(nev, L4, T(L4)=\"windowSize 1280, 720;\")])",
                   "PH-01");
   EXPECT_SP_RESULT(r, Stope::Result::Success, "PH-01");
 
@@ -310,7 +316,7 @@ static void testMixed() {
   r = sparseAll(u"<a><img src=\"i.png\" alt=\"\"/><p>cap</p></a>");
   EXPECT_SP_SHAPE(r,
                   "Elem(a, L1, C=[Elem(img, L1, /, @alt, @src=\"i.png\") "
-                  "Elem(p, L1, T=\"cap\")])",
+                  "Elem(p, L1, T(L1)=\"cap\")])",
                   "PH-04");
 }
 

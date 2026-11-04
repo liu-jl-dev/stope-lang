@@ -110,6 +110,7 @@ ID=PARSE-PL-01	KIND=parse	SF=default	SRC=<a>\n<b/>\n</a>
 ID=PARSE-PL-02	KIND=parse	SF=default	SRC=\n\n<a/>
 ID=PARSE-PL-03	KIND=parse	SF=default	SRC=<a>\n<b>\n<c/>\n</b>\n</a>
 ID=PARSE-PL-04	KIND=parse	SF=default	SRC=<sto>\nlet a = 1;\n</sto>
+ID=PARSE-PL-05	KIND=parse	SF=default	SRC=<sto>\n\nlet a = 1;\n</sto>
 ID=PARSE-PE-01	KIND=parse	SF=default	SRC=<>
 ID=PARSE-PE-02	KIND=parse	SF=default	SRC=a
 ID=PARSE-PE-03	KIND=parse	SF=default	SRC=

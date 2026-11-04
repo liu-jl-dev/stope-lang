@@ -200,7 +200,7 @@ VM 不是标准，错误串前缀各实现自定（nodejs 是 `<i>: msg`，GD �
 | [lexer-test-plan.md](lexer-test-plan.md) | 本实现词法的用例清单（87 条）；`golden_lex.txt` 未接，见 §3.2 |
 | [../../docs/zh-cn/parser-test-plan.md](../../docs/zh-cn/parser-test-plan.md) | 语句、表达式与字面量、优先级、调用 / 索引 / 括号、自定义指令、行号、错误恢复、折叠（`golden.txt` 195 条）+ 深度 8 条 |
 | [../../docs/zh-cn/compiler-test-plan.md](../../docs/zh-cn/compiler-test-plan.md) | `CM-01…CM-72`（`golden.txt` 195 条）+ 作用域 / 清空输出补测 |
-| [../../docs/zh-cn/stml-test-plan.md](../../docs/zh-cn/stml-test-plan.md) | §4 全部 125 条：词法 62 条 + 语法 63 条 |
+| [../../docs/zh-cn/stml-test-plan.md](../../docs/zh-cn/stml-test-plan.md) | §4 全部 126 条：词法 62 条 + 语法 64 条 |
 
 外加两组不在任何计划里的：`disasm.test.js` 的 5 条单测（其中一条专门锁
 「`custom opcodes:` 段按**编号**排序」—— golden 那 12 条两种排序恰好一致，看不出来）、

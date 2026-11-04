@@ -52,7 +52,7 @@ func demo() -> void:
 	# 反汇编里是 PushValue(0) / PushValue(1)。
 	var program := StopeProgram.Program.new()
 	print('\n[2] 编译函数体（preExports = 形参表）：')
-	if not compile_and_report(fn.text, params, program):
+	if not compile_and_report(fn.text, fn.text_line, params, program):
 		return
 	print(StopeDebug.disasm(program))
 	var parts:Array[String] = []
@@ -77,7 +77,7 @@ func demo() -> void:
 	# 名字已经进了文件作用域，源码里再 export 同名、或顶层 let 同名，都是
 	# duplicate。预导出的变量只能赋值（a = 1;），不能重新声明。
 	print('\n[4] 函数体里又写 export a;：')
-	compile_and_report('export a; return a;', params, StopeProgram.Program.new())
+	compile_and_report('export a; return a;', 1, params, StopeProgram.Program.new())
 
 # 带 stope 属性的元素，内容按 Stope 代码扫；其余按子元素列表（Xml）解析。
 static func _state_func(_tag:String, attrs:Dictionary) -> int:
@@ -90,9 +90,12 @@ static func _child_by_tag(ele:STML.Element, tag:String) -> STML.Element:
 	return null
 
 # 编译一份源码，pre_exports 原样交给 compiler.compile。失败时打印错误并返回 false。
-static func compile_and_report(src:String, pre_exports:Array,
+# start_line 是 src 首行的物理行号 —— 从 STML 切出来的代码段不是从 1 开始，设给
+# lexer 之后报错行号才和文档对得上（这里直接从 fn.text_line 取）。
+static func compile_and_report(src:String, start_line:int, pre_exports:Array,
 		out:StopeProgram.Program) -> bool:
 	var lexer := StopeLexer.Lexer.new(src)
+	lexer.line = start_line
 	var parser := StopeParser.Parser.new(lexer)
 	var tree := StopeAst.Prog.new()
 	parser.parse_program(tree)

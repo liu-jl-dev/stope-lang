@@ -55,9 +55,9 @@ Windows 上 Godot 没进 PATH 就写全路径（本机是 mono 版，装在 C �
 [4/5] STML
   （STML 本组）  断言 3137 条，失败 0 条
 [5/5] 执行器
-  （执行器本组）  断言 3231 条，失败 0 条
+  （执行器本组）  断言 3237 条，失败 0 条
 ====================================================
-全部通过：共 3231 条断言
+全部通过：共 3237 条断言
   （其中词法组 588 条；词法+语法+编译器 2510 条；STML 3137 条；执行器 94 条）
 ```
 
@@ -78,8 +78,8 @@ gdscript/test/
     golden_lex.txt      147 条 · 词法
     golden.txt          195 条 · 语法 + 编译器共用
     golden_binarr.txt    86 条 · 二进制数组 + 常量折叠
-    stml_cases.txt      125 条 · STML **用例清单**（两侧共用）
-    golden_stml.txt     125 条 · STML 期望值（由清单 dump）
+    stml_cases.txt      126 条 · STML **用例清单**（两侧共用）
+    golden_stml.txt     126 条 · STML 期望值（由清单 dump）
     golden_disasm.txt    12 条 · 反汇编器（StopeDebug.disasm）的整段输出
 ```
 
@@ -248,7 +248,7 @@ C++ 侧有对应用例：`cpp/test/test_vm.cpp` 的 `V-31…V-34`，同样把 `R
 | [lexer-test-plan.md](../../docs/zh-cn/lexer-test-plan.md) | 空白与注释 `LEX-W`、行号 `LEX-L`、整数 `LEX-N-I`、浮点 `LEX-N-F`、标识符 `LEX-I`、关键字与自定义指令 `LEX-K`、字符串 `LEX-S`、二进制数组 `LEX-B`、标点 `LEX-P`、混合 `LEX-MIX` |
 | [parser-test-plan.md](../../docs/zh-cn/parser-test-plan.md) | 语句 `S`、表达式与字面量 `X`、优先级 `P`、调用 / 索引 / 括号 `F`、自定义指令 `K`、行号 `L`、错误恢复 `R`、折叠 `O`；外加二进制数组 + 折叠矩阵 86 条 |
 | [compiler-test-plan.md](../../docs/zh-cn/compiler-test-plan.md) | `CM-01…CM-72`：字面量、变量与作用域、一元 / 二元运算、调用索引、`return`、控制流、自定义指令、错误场景、折叠与编译的配合 |
-| [stml-test-plan.md](../../docs/zh-cn/stml-test-plan.md) | §4 全部 125 条：词法 `LEX-SX/SW/SS/ST/SN/SP/SL/SE/SR`（62 条）与语法 `PARSE-PA/PB/PC/PL/PE/PF/PH/PR`（63 条） |
+| [stml-test-plan.md](../../docs/zh-cn/stml-test-plan.md) | §4 全部 126 条：词法 `LEX-SX/SW/SS/ST/SN/SP/SL/SE/SR`（62 条）与语法 `PARSE-PA/PB/PC/PL/PE/PF/PH/PR`（64 条） |
 
 用例的分节与每条的意图都在四份计划的 §4，改用例前先看那里。第五组（执行器）不对应任何
 计划 —— VM 不是标准，它测什么见 §3.4。

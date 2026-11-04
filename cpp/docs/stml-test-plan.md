@@ -86,6 +86,7 @@ struct Lexer {
 ```cpp
 struct Element {
   int line = -1;
+  int textLine = -1;   // text / 代码段第一行的物理行号；无内容时保持 -1
   std::u16string_view tagName;
   std::map<std::u16string_view, std::u16string_view> attrs;
   bool selfClosing = false;
@@ -219,7 +220,7 @@ SParseResult sparseAll(std::u16string src, LexerStateFunc sf = defaultStateFunc,
 `shapeElem()` 的输出格式（完整定义见通用计划 §2.8）：
 
 ```
-Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> ...]] )
+Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T(L<textLine>)="<text>"][, C=[<child> ...]] )
 ```
 
 两个**必须记住**的性质：
@@ -227,6 +228,11 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> ...]] )
 1. 属性按 `std::map` 的键字典序输出，**不是源码顺序**。
 2. `id=""` 与 `id`（无值）在形状串里长得一样（map 的值都是空 view）。
    想区分只能另加断言，目前 PB-08 只锁"能解析成功 + 属性条数"。
+
+`T(L<n>)` 里的 `n` 是 `Element::textLine`：`nextToken()` 先 `skipWs()` 再给
+`token.line` 赋值，所以它是**内容首行**而不是标签行 —— `<sto>\nlet a = 1;</sto>`
+里标签在 1 行、内容在 2 行（PL-04 / PL-05）。宿主拿它当 `Stope::Lexer::line`
+的初值，切出来的代码段报错行号才和原文档对得上。
 
 ### 4.5 断言宏
 
@@ -242,6 +248,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> ...]] )
 | `EXPECT_SP_SHAPE(r, "Elem(a, L1, /)", id)` | 元素形状串 |
 | `EXPECT_SP_RESULT(r, Stope::Result::Success, id)` | `Parse` 的返回值 |
 | `EXPECT_SP_LINE` / `EXPECT_SP_TAG` / `EXPECT_SP_TEXT` | 根元素的三个标量 |
+| `EXPECT_SP_TEXT_LINE(r, N, id)` | 内容首行的物理行号（`textLine`，不是标签行） |
 | `EXPECT_SP_SELFCLOSING` / `EXPECT_SP_CHILD_COUNT` / `EXPECT_SP_ATTR_COUNT` | 根元素的结构 |
 | `EXPECT_SP_DEPTH(r, N, id)` | 树深度（根算 1） |
 | `EXPECT_SPERR_COUNT` / `EXPECT_SPERR_HAS` | 语法错误条数 / 子串 |
@@ -320,6 +327,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> ...]] )
 | 2026-10-18 | 无值属性 `<a flag>` | PB-03 / PB-04 / PB-05 |
 | 2026-10-18 | 进入元素不重置 `lexer->state` | PF-01…PF-07 |
 | 2026-10-18 | 删除 `Parser::line` 成员，改用 `e.line = token.line` | PL-01…PL-04 |
+| 2026-11-04 | `Element` 加 `textLine`（内容首行），形状串写成 `T(L<n>)="…"` | PL-04 / PL-05 |
 | 2026-10-18 | TD-1：`Word` 字符集注释含 `.` 但实现不支持 | SW-04 / SW-08 |
 
 ---
@@ -359,7 +367,7 @@ STML 自己的代码在 `-Wall -Wextra` 下是零告警。）
 | ✅ | 接入 `CMakeLists.txt`，`ctest` 收录（`test_stml`，13 项全绿） |
 | ⬜ | TD-7：让 `parseElement` 返回 `bool`，消掉级联报错 |
 | ⬜ | TD-9：Xml 属性字符串支持转义（需先定夺，影响 TD-8 文案统一） |
-| ✅ | GDScript 侧整改（GD-S-01…16 里的 14 条）+ `gdscript/test/` 的 STML 用例 125 条（2026-10-28 / 2026-11-02）；残留 GD-S-17/18 |
+| ✅ | GDScript 侧整改（GD-S-01…16 里的 14 条）+ `gdscript/test/` 的 STML 用例 126 条（2026-10-28 / 2026-11-02）；残留 GD-S-17/18 |
 | ✅ | `stml_parser` 加嵌套深度上限（`maxDepth` 默认 256、0=不限、根算第 1 层、超限 1 条错不级联），清单新增 PARSE-PR 4 条 + `MD` 字段，五实现同步（2026-11-02） |
 
 ---

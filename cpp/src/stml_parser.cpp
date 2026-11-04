@@ -103,6 +103,7 @@ void Parser::parseElement(Element& e, int depth) {
       return;
     }
     e.text = token.lexeme;  // 只有一段，不拼接（见文件头注释）
+    e.textLine = token.line;  // 词法器已跳过前导空白，这是内容的首行（PL-05）
     nextToken();            // 停在 CLAngle，与上面 Xml 分支的 break 处汇合
   }
   nextToken();  // 结束标签名

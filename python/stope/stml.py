@@ -69,10 +69,14 @@ class Token:
 class Element:
     """一个元素。``children`` 与 ``text`` 互斥；``text`` 只有一段，不拼接。"""
 
-    __slots__ = ("line", "tag", "attrs", "self_closing", "children", "text")
+    __slots__ = ("line", "text_line", "tag", "attrs", "self_closing",
+                 "children", "text")
 
     def __init__(self):
         self.line = -1
+        # text / 代码段第一个字符的物理行号；元素没有内容时为 -1。词法器切内容前
+        # 已跳过前导空白（含换行），所以这是**内容**的首行而不是标签行。
+        self.text_line = -1
         self.tag = ""            # 标签名
         self.attrs: dict[str, str] = {}   # 属性；无值属性的值是空串
         self.self_closing = False

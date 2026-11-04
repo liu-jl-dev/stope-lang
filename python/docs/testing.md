@@ -40,7 +40,7 @@ dotnet run --project csharp/Stope.Tests
 [7/8] STML（stml_cases.txt + golden_stml.txt）      628 条
 [8/8] 参考执行器                                     142 条
 -------------------------------------------------------
-全部通过：共 3293 条断言
+全部通过：共 3299 条断言
 ```
 
 每组断言数怎么算出来的：
@@ -203,7 +203,7 @@ rep.add_fail(cid, "为什么")                  # 直接记一条失败（编译
 | 语法 | `golden.txt` 195 条，含形状串、语句行号序列、错误文案与条数 |
 | 编译器 | 同一批 195 条的产物（`OUT`）+ 编译状态（`CMP`）+ 编译错误（`CERRS`） |
 | 反汇编 | 12 条（`MODE=src` 走「源码→编译→反汇编」，`MODE=raw` 直接给指令流）+ 5 条单测 |
-| STML | 125 条用例（62 词法 + 63 语法），12 个 `TokenType` 全部覆盖 |
+| STML | 126 条用例（62 词法 + 64 语法），12 个 `TokenType` 全部覆盖 |
 | 执行器 | 33 条内置指令都有用例（`V-06` … `V-15` + `V-21` 的六个程序）。**几处防御性分支没有**：`stack underflow. ` / `no implement for value type. ` / `no implement for key num != 1. ` / `no implement for container type. ` —— 正常编译产物走不到它们（编译器保证 `PushId` 只出现在赋值左端、`At` 的 key 恒为 1） |
 
 已知缺口（与另外几份实现一致，不是本实现独有的）：

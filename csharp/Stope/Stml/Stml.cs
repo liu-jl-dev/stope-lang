@@ -52,6 +52,12 @@ public sealed class Element
     /// <summary>与 <see cref="Children"/> 互斥；只有一段，不拼接。</summary>
     public string Text = "";
 
+    /// <summary>
+    /// text / 代码段第一个字符的物理行号；元素没有内容时为 -1。词法器切内容前已跳过
+    /// 前导空白（含换行），所以这是<b>内容</b>的首行而不是标签行。
+    /// </summary>
+    public int TextLine = -1;
+
     /// <summary>调试用：不一定与源文本逐字符相同（属性顺序、自闭合写法都不保留）。</summary>
     public string ToStr(int level = 0)
     {

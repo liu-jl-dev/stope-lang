@@ -33,7 +33,7 @@
 代码位置：
 
 ```
-gdscript/addons/stope/stml.gd          Element（6 个字段）+ Token + TokenType（12 项）
+gdscript/addons/stope/stml.gd          Element（7 个字段）+ Token + TokenType（12 项）
 gdscript/addons/stope/stml_lexer.gd    Lexer + State（Xml / Text / Nevext / Stope）
 gdscript/addons/stope/stml_parser.gd   Parser + 回调约定
 ```
@@ -219,11 +219,12 @@ print(n, ' 个 token')   # 10 —— demo 里没有这一步，留给你自己�
 
 ## 4. 第三步：读树 —— demo 的 `[1]`–`[4]` 段
 
-`Element` 一共六个字段（`stml.gd`），全是普通值：
+`Element` 一共七个字段（`stml.gd`），全是普通值：
 
 ```gdscript
 class Element:
 	var line: int = -1            # 起始行（< 所在的物理行）
+	var text_line: int = -1       # 内容首行的物理行号（不是标签行）
 	var tag: String = ''          # 标签名
 	var attrs: Dictionary = {}    # 属性；无值属性的值是空串
 	var self_closing: bool = false
@@ -231,10 +232,14 @@ class Element:
 	var text: String = ''         # 内容（其余三种模式）
 ```
 
+`text_line` 是**内容**的第一行：词法器切内容前跳过了前导空白（含换行），所以
+`<sto>\nlet a = 1;</sto>` 里 `line` 是 1、`text_line` 是 2。把切出来的代码段交给
+`StopeLexer.Lexer` 时设 `lexer.line = e.text_line`，报错行号才和原文档对得上。
+
 注意字段名与 C++ 的差别：C++ 是 `tagName` / `selfClosing`，GDScript 是 `tag` /
 `self_closing` —— 这是 GDScript 的 snake_case 约定，别照着 C++ 抄。
 
-demo 的 `[1]`–`[4]` 段把这六个字段基本都用了一遍（**原文照抄**）：
+demo 的 `[1]`–`[4]` 段把这七个字段基本都用了一遍（**原文照抄**）：
 
 ```gdscript
 print('[1] 根元素 <', root.tag, '>，属性 package="', root.attrs['package'], '"')
@@ -414,11 +419,11 @@ func _ready() -> void:
 
 | 文件 | 讲什么 |
 | --- | --- |
-| `addons/stope/stml.gd` | `Element` 六个字段、`Token`、12 项 `TokenType` |
+| `addons/stope/stml.gd` | `Element` 七个字段、`Token`、12 项 `TokenType` |
 | `addons/stope/stml_lexer.gd` | 四态扫描；`<!--` 只在 `Xml` 生效的实现就在这 |
 | `addons/stope/stml_parser.gd` | 属性循环、回调调用点、错误分支 |
 | `demo/demo_02.gd` | 本文讲的 demo，场景 `demo_02.tscn`；**只解析，不编译不执行** |
-| `test/test_stml.gd` | 125 条共用清单（`test/data/stml_cases.txt`）的词法 + 语法断言 |
+| `test/test_stml.gd` | 126 条共用清单（`test/data/stml_cases.txt`）的词法 + 语法断言 |
 | [`usage.md`](usage.md) §10 | API 表与四条宿主侧注意事项 |
 | [`../../cpp/docs/stml.md`](../../cpp/docs/stml.md) | 语义权威 + 12 条语法坑 |
 | [`../../docs/zh-cn/stml-test-plan.md`](../../docs/zh-cn/stml-test-plan.md) | 跨实现行为契约（GD-S-17/18 两条差异登记在 §7） |

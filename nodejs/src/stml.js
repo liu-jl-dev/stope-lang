@@ -30,6 +30,9 @@ class Element {
     this.selfClosing = false
     this.children = []
     this.text = '' // 与 children 互斥；只有一段，不拼接
+    // text / 代码段第一个字符的物理行号；元素没有内容时为 -1。词法器切内容前
+    // 已跳过前导空白（含换行），所以这是**内容**的首行而不是标签行。
+    this.textLine = -1
   }
 
   // 调试用：不一定与源文本逐字符相同（属性顺序、自闭合写法都不保留）

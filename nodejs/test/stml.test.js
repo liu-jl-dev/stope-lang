@@ -114,7 +114,7 @@ function shapeElem(e) {
     d += ', @' + esc(k)
     if (v !== '') d += '="' + esc(v) + '"'
   }
-  if (e.text !== '') d += ', T="' + esc(e.text) + '"'
+  if (e.text !== '') d += ', T(L' + e.textLine + ')="' + esc(e.text) + '"'
   if (e.children.length > 0) {
     d += ', C=['
     for (let i = 0; i < e.children.length; ++i) {

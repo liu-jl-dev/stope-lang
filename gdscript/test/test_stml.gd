@@ -85,7 +85,7 @@ static func shape_elem(e:STML.Element) -> String:
 	for k in keys:
 		d += str(', @', StopeTestUtil.esc_shape(k))
 		if e.attrs[k] != '': d += str('="', StopeTestUtil.esc_shape(e.attrs[k]), '"')
-	if e.text != '': d += str(', T="', StopeTestUtil.esc_shape(e.text), '"')
+	if e.text != '': d += str(', T(L', e.text_line, ')="', StopeTestUtil.esc_shape(e.text), '"')
 	if not e.children.is_empty():
 		d += ', C=['
 		for i in range(e.children.size()):
