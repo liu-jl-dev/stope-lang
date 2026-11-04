@@ -11,7 +11,7 @@
 
 | 实现 | 语言核心 | STML | BasicVM |
 | --- | --- | --- | --- |
-| C++ | 命名空间 `Stope::`（header-only） | `Stope::STML::` | `Stope::BasicVM::` |
+| C++ | 命名空间 `Stope::`（声明在 `include/stope/`、实现编译为静态库；仅 `basic_vm.hpp` / `debug.hpp` 带内联函数体） | `Stope::STML::` | `Stope::BasicVM::` |
 | GDScript | `StopeLexer` / `StopeParser` / `StopeCompiler` / `StopeProgram`…（全局类，插件 `addons/stope/`） | `STMLLexer` / `STMLParser` / `STML` | `StopeBasicVM` |
 | Node.js | `src/*.js` ESM 具名导出 | `stml_lexer.js` / `stml_parser.js` / `stml.js` | `basic_vm.js`（`BasicVM.State` / `Api` / `Arguments`） |
 | C# | `namespace Stope` | `namespace Stope.Stml`（`Stml.Lexer` / `Stml.Parser` / `Stml.Element`） | `namespace Stope`（`State` / `Api` / `Arguments`） |
