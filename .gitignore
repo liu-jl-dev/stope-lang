@@ -3,6 +3,7 @@
 
 cpp/build
 gdscript/.godot
+rust/target
 
 # .NET：构建产物与用户级设置都不入库
 csharp/**/bin

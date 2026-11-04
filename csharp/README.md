@@ -7,7 +7,7 @@ Stope 语言的 C# 实现：**词法 / 语法 / 编译器 / STML / 参考执行�
 - **目标框架 `net10.0`**（实测 SDK 10.0.401）。`csharp/Stope.slnx` 是解决方案。
 - **命名跟 C++ 走**：`NextToken` / `ParseProgram` / `Compile` / `Disasm` / `Run` / `Step`，
   与 `cpp/include/stope/*.hpp` 逐名对应，方便对照着读。不做成 C# 惯用的 `NextTokenAsync`
-  之类 —— 这一层的价值就在于「五份实现能对着看」。
+  之类 —— 这一层的价值就在于「八份实现能对着看」。
 
 ## 快速上手
 
@@ -128,5 +128,5 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 | 产物格式（指令编号 / 操作数 / 跳转） | [`cpp/docs/development.md`](../cpp/docs/development.md) |
 | 虚拟机怎么写（指南，不是规范） | [`docs/zh-cn/vm-guide.md`](../docs/zh-cn/vm-guide.md) |
 
-> 文档语言：本目录的中文文档面向「要改这份实现的人」；`docs/zh-cn/` 是五份实现共用的
+> 文档语言：本目录的中文文档面向「要改这份实现的人」；`docs/zh-cn/` 是八份实现共用的
 > 跨实现契约。文件名一律 ASCII kebab-case。

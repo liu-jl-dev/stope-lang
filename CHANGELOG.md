@@ -1,6 +1,6 @@
 # 变更历史
 
-本文件记录 **Stope 语言**（含标准范围内的语言、STML、编译器产物 `Program`）与仓库内五份实现的变更。
+本文件记录 **Stope 语言**（含标准范围内的语言、STML、编译器产物 `Program`）与仓库内八份实现的变更。
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
 [语义化版本](https://semver.org/lang/zh-CN/)。
@@ -22,7 +22,7 @@
 
 `0.x` 期间语法与公开 API 仍可能调整：不兼容变更**升次版本号**（`0.1.0` → `0.2.0`）并在对应
 版本的「变更」小节里标注。`1.0.0` 起承诺 `1.x` 内保持兼容，不兼容变更只能升主版本 —— 覆盖
-三件标准（语言 / STML / `Program`）、五份实现的公开 API，以及**内置 BasicVM 的公开接口**。
+三件标准（语言 / STML / `Program`）、八份实现的公开 API，以及**内置 BasicVM 的公开接口**。
 
 BasicVM 不属于标准（见 [`cpp/docs/basic-vm.md`](cpp/docs/basic-vm.md) §1.1）—— 换一台执行器
 可以完全不用它；但本仓库自带的这一台会一直维护，`1.x` 内 `Api` / `State` / `Value` 这些
@@ -30,7 +30,7 @@ BasicVM 不属于标准（见 [`cpp/docs/basic-vm.md`](cpp/docs/basic-vm.md) §1
 
 ### 为什么全仓只用一个版本号
 
-五份实现由同一批 golden 用例（`gdscript/test/data/`）与跨实现差分测试绑成一个行为整体，
+八份实现由同一批 golden 用例（`gdscript/test/data/`）与跨实现差分测试绑成一个行为整体，
 `Program` 的字节序列本身就是跨实现的契约 —— 按实现各自定版本没有意义。
 
 正式版本用 annotated tag 锚定，tag 名带 `v` 前缀（`v0.1.0`）；五个实现内的版本字段**不带**
@@ -55,6 +55,21 @@ python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 ```
 
 ## [Unreleased]
+
+### 新增
+
+- **三份新实现**：Lua（`lua/`，Lua 5.4+）、Go（`go/`，1.27+）、Rust（`rust/`，edition 2021）。
+  与既有五份读同一批 golden 用例（`gdscript/test/data/`，词法 147 / 语法编译器 201 /
+  BinArr 86 / STML 126 / 反汇编 12 条），demo01–04 输出与既有实现逐字节一致；均为零第三方依赖。
+- **移植指南**：[docs/zh-cn/porting-guide.md](docs/zh-cn/porting-guide.md) —— 实施顺序、golden 验收、
+  跨语言语义坑与八份实现各自的专有坑、交付前检查单。
+
+### 变更
+
+- `Element` 新增 `textLine`（内容首行的物理行号，无内容 -1）：STML 词法器切内容前会跳过
+  前导空白（含换行），宿主把它设给 `Lexer` 的起始行号，报错行号即与原文档对齐。
+  配套：C# 的 `Lexer.Line` 由只读属性改为可读写；测试形状串的文本段写成 `T(L<n>)="…"`；
+  STML 用例清单加 `PARSE-PL-05`（126 条）。
 
 ## [0.1.0] - 2026-11-03
 
@@ -83,7 +98,7 @@ python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
   `params` 之类的外部参数表使用。见 [docs/zh-cn/pre-export.md](docs/zh-cn/pre-export.md)。
 - 嵌套深度上限：Parser 与 STML 解析默认 256 层（`0` = 不限），超限只报一条并中止。
 
-**五份实现**（C++ 为权威，其余四份逐项对齐；期望值全部由 C++ 探针 dump，不手写）
+**八份实现**（C++ 为权威，其余四份逐项对齐；期望值全部由 C++ 探针 dump，不手写）
 
 - C++（`cpp/`）：C++20、零第三方依赖、CMake 静态库。
 - GDScript（`gdscript/`）：Godot 4 插件，纯库、无编辑器 UI。
@@ -113,7 +128,7 @@ python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 
 ### 说明
 
-- 版本号首次同步到五份实现（此前只有 npm 包与 Godot 插件写了 `0.1.0`）。
+- 版本号首次同步到八份实现（此前只有 npm 包与 Godot 插件写了 `0.1.0`）。
 - Stope 不规定虚拟机标准：`Program` 之后的执行方式、值表示、栈布局由实现者决定，
   内置虚拟机只是一种可行解。
 

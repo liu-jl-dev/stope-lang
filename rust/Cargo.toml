@@ -1,0 +1,25 @@
+[package]
+name = "stope"
+version = "0.1.0"
+edition = "2021"
+description = "Stope language: Rust implementation (lexer/parser/compiler/Program/STML/BasicVM)"
+
+[lib]
+name = "stope"
+path = "src/lib.rs"
+
+[[bin]]
+name = "demo01"
+path = "src/bin/demo01.rs"
+
+[[bin]]
+name = "demo02"
+path = "src/bin/demo02.rs"
+
+[[bin]]
+name = "demo03"
+path = "src/bin/demo03.rs"
+
+[[bin]]
+name = "demo04"
+path = "src/bin/demo04.rs"

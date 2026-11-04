@@ -9,7 +9,7 @@
 > 配置文件、数据库里的函数签名 —— 宿主希望在编译函数体**之前**就把这些名字变成可写的
 > 变量，而不是让编译器从函数体的使用情况里「猜」出参数是谁。
 >
-> 五份实现都有这个参数（签名见 [§7](#7-五份实现的-api-对照)）。**必须一致的行为、错误文案、
+> 八份实现都有这个参数（签名见 [§7](#7-八份实现的-api-对照)）。**必须一致的行为、错误文案、
 > 用例编号**在 [compiler-test-plan.md](compiler-test-plan.md) 的 B-12 与 §4.9（`CM-73…CM-78`），
 > 本文不复述那张表，只讲怎么用、什么时候别用、坑在哪。
 
@@ -21,7 +21,7 @@
 - [4. 编译产物里长什么样](#4-编译产物里长什么样)
 - [5. 和「未声明标识符自动导出」的取舍](#5-和未声明标识符自动导出的取舍)
 - [6. 五个坑](#6-五个坑)
-- [7. 五份实现的 API 对照](#7-五份实现的-api-对照)
+- [7. 八份实现的 API 对照](#7-八份实现的-api-对照)
 - [8. 排错表](#8-排错表)
 - [9. 相关文件](#9-相关文件)
 
@@ -53,7 +53,7 @@
 
 ## 2. 跑起来
 
-五份实现各有一个 `04` demo，做的是同一件事：
+八份实现各有一个 `04` demo，做的是同一件事：
 
 ```bash
 # C++（在 cpp/ 下，先 cmake --build build）
@@ -72,7 +72,7 @@ dotnet run --project csharp/demo/04-pre-export
 python python/demo/04-pre-export.py
 ```
 
-五份输出逐字节一致（下面是 C++ 侧，中间几段空的 `int consts` / `float consts` / `string consts` /
+八份输出逐字节一致（下面是 C++ 侧，中间几段空的 `int consts` / `float consts` / `string consts` /
 `binary array consts` 已省略）：
 
 ```text
@@ -146,7 +146,7 @@ lexer.line = fn->textLine;   // <func> 在 3 行、代码 4–6 行 → 报错�
 ```
 
 `textLine` 是**内容**首行而不是标签行：词法器切内容时跳过了前导空白（含换行），
-所以 `<sto>\nlet a = 1;</sto>` 的 `line` 是 1、`textLine` 是 2。五份实现的写法见 §7.1。
+所以 `<sto>\nlet a = 1;</sto>` 的 `line` 是 1、`textLine` 是 2。八份实现的写法见 §7.1。
 
 ### 3.3 运行前按 `exports` 写槽位
 
@@ -274,7 +274,7 @@ returns: 0 (0=Null 1=Integer)
 
 要还原顺序，就用**你自己那份参数表列表**；`exports` 只用来按名字查槽位。
 
-## 7. 五份实现的 API 对照
+## 7. 八份实现的 API 对照
 
 | 实现 | 调用 | 名单类型 | `exports` 类型 |
 | --- | --- | --- | --- |
@@ -283,13 +283,16 @@ returns: 0 (0=Null 1=Integer)
 | Node.js | `compiler.Compile(tree, out, ['a', 'b'])` | `string[]`（默认 `[]`） | `Map<string, number>` |
 | C# | `compiler.Compile(tree, out, new[] { "a", "b" })` | `IReadOnlyList<string>?`（默认 `null`） | `Dictionary<string, int>` |
 | Python | `compiler.compile(tree, out, ("a", "b"))` | 序列（默认 `()`） | `dict[str, int]` |
+| Lua | `compiler:compile(tree, out, {"a", "b"})` | 表（默认 `{}`） | `table`（名字 → 槽位） |
+| Go | `compiler.Compile(ast, out, []string{"a", "b"})` | `[]string`（默认 `nil`） | `[]ExportEntry`（登记序） |
+| Rust | `compiler.compile(&tree, &mut out, &["a", "b"])` | `&[&str]`（默认 `&[]`） | `BTreeMap<String, i32>`（名字序） |
 
 三点注意：
 
 - 名单是**第三参**，前两参永远是 AST 与输出 `Program`；空名单（不传）等于「不预导出」。
 - 名单只在**本次调用内**被读，不存指针也不拷贝成成员 —— 传临时对象（`{u"a", u"b"}`）也安全。
 - C++ 的 `Program` 不能拷贝（`ProgramConstants` 持有常量的引用，拷贝会二次释放）；
-  其余四份没有这条限制。
+  其余七份没有这条限制。
 
 ### 7.1 设 `Lexer` 的起始行号
 
@@ -302,10 +305,13 @@ returns: 0 (0=Null 1=Integer)
 | Node.js | `lexer.line = fn.textLine` |
 | C# | `lexer.Line = fn.TextLine;` |
 | Python | `lexer.line = fn.text_line` |
+| Lua | `lexer.line = fn.text_line` |
+| Go | `lexer.Line = fn.TextLine` |
+| Rust | `lexer.set_line(fn.text_line)` |
 
-C++ / GDScript / Node.js / Python 的 `line` 本来就是可写字段，构造后直接赋；C# 的
-`Lexer.Line` 有 setter。注意赋值要放在构造（或 `Reset`）**之后** —— `Reset` 会把它
-重置为 1。
+C++ / GDScript / Node.js / Python / Lua 的 `line` 本来就是可写字段，构造后直接赋；C# 的
+`Lexer.Line` 有 setter；Rust 用 `set_line()` 方法。注意赋值要放在构造（或 `Reset`）**之后**
+—— `Reset` 会把它重置为 1。
 
 ## 8. 排错表
 
@@ -321,9 +327,10 @@ C++ / GDScript / Node.js / Python 的 `line` 本来就是可写字段，构造�
 
 ## 9. 相关文件
 
-- 五份 demo：`cpp/demo/04-pre-export.cpp`、`gdscript/demo/demo_04.gd`、
+- 八份 demo：`cpp/demo/04-pre-export.cpp`、`gdscript/demo/demo_04.gd`、
   `nodejs/demo/04-pre-export.js`、`csharp/demo/04-pre-export/Program.cs`、
-  `python/demo/04-pre-export.py`
+  `python/demo/04-pre-export.py`、`lua/demo/04-pre-export.lua`、
+  `go/cmd/demo04/`、`rust/src/bin/demo04.rs`
 - 契约：同目录 [compiler-test-plan.md](compiler-test-plan.md) 的 B-6（槽位不回收、`variableNum`
   只记「曾经最大值」）、B-9（未声明就使用 → 自动进 `exports`）、B-12（预导出三条必须一致的
   行为）、§4.9（`CM-73…CM-78` 用例）

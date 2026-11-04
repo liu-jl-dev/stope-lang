@@ -141,7 +141,7 @@ STML 两组合计 **602**。余下两组（深度 21、执行器 88）不读数�
 code[PushInt(0) Assign(2) ...] vars=3 stack=2 maxRet=1 ints=[1,2] floats=[1.5] strs=[a] binarrs=[[01,02]] exports=[f:0]
 ```
 
-五份实现各写一份、都不进库：C++ 是 `cpp/tools/golden.cpp` 的私有 `dumpLine`，
+八份实现各写一份、都不进库：C++ 是 `cpp/tools/golden.cpp` 的私有 `dumpLine`，
 GD 是 `test/test_util.gd` 的 `dump_program`，nodejs 是 `test/golden.js` 的 `dumpProgram`，
 C# 是 `Data.DumpProgram`。三处细节要一致，否则比对毫无意义：
 

@@ -49,7 +49,7 @@ python/
 └── docs/                       # quick-start / usage / stml / custom-opcode / testing
 ```
 
-**没做成 pip 包**（没有 `pyproject.toml`）：这套实现的价值是「五份实现对着看」，
+**没做成 pip 包**（没有 `pyproject.toml`）：这套实现的价值是「八份实现对着看」，
 不是发布。`tests/run_tests.py` 与四个 demo 都在开头把 `python/` 插进 `sys.path`，
 所以仓库里直接跑就行；真要装，`pip install -e python/` 之前得先补打包配置。
 
@@ -152,5 +152,5 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 | 产物格式（指令编号 / 操作数 / 跳转） | [`cpp/docs/development.md`](../cpp/docs/development.md) |
 | 虚拟机怎么写（指南，不是规范） | [`docs/zh-cn/vm-guide.md`](../docs/zh-cn/vm-guide.md) |
 
-> 文档语言：本目录的中文文档面向「要改这份实现的人」；`docs/zh-cn/` 是五份实现共用的
+> 文档语言：本目录的中文文档面向「要改这份实现的人」；`docs/zh-cn/` 是八份实现共用的
 > 跨实现契约。文件名一律 ASCII kebab-case。

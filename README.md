@@ -35,11 +35,14 @@ Stope 只规定三件事：
 直接遍历 AST、转译成 C / 宿主语言的闭包，都合规。宿主程序完全可以用自己的执行器替代，
 只要它能消费编译器产出的 `Program`。
 
-本项目**会维护**内置虚拟机 —— 下面这五份实现语义彼此对齐，改一处要同步其余四处：`cpp/include/stope/basic_vm.hpp`（反汇编在同目录的
+本项目**会维护**内置虚拟机 —— 下面这八份实现语义彼此对齐，改一处要同步其余七处：`cpp/include/stope/basic_vm.hpp`（反汇编在同目录的
 `debug.hpp`）、GDScript 侧 `gdscript/addons/stope/basic_vm.gd` 的 `StopeBasicVM.State` / `Api`、
 Node.js 侧 `nodejs/src/basic_vm.js` 的 `BasicVM.State` / `Api`、
 C# 侧 `csharp/Stope/BasicVm.cs` 的 `State` / `Api`、
-Python 侧 `python/stope/basic_vm.py` 的 `State` / `Api`。它是**基础虚拟机** ——
+Python 侧 `python/stope/basic_vm.py` 的 `State` / `Api`、
+Lua 侧 `lua/stope/basic_vm.lua` 的 `BasicVM.State` / `Api`、
+Go 侧 `go/basicvm/` 的 `State` / `Api`、
+Rust 侧 `rust/src/basic_vm.rs` 的 `State` / `Api`。它是**基础虚拟机** ——
 定位是「能跑通编译器产物的最小实现 + 宿主接入的样板」，能力边界是明确的：
 
 | 内置虚拟机**支持** | 内置虚拟机**不支持** |
@@ -47,7 +50,7 @@ Python 侧 `python/stope/basic_vm.py` 的 `State` / `Api`。它是**基础虚拟
 | 33 条内置指令、变量槽与栈、`exports`、宿主函数、`argc` / `args[i]`、单步 `Step()` | **自定义指令**：分派表只有内置的那 33 项，产物里 ≥ 33 的编号没有实现，直接跑会越界（C++ 是未定义行为） |
 | 空、整数、浮点、字符串、二进制数组、宿主函数 —— 布尔以整数 1 / 0 表示 | **自定义数据类型**：不能注册新的值类型，也没有对象、结构体、类 |
 
-「会维护」指的是：bug 会修、编译器产物演进时同步、五份实现的语义彼此对齐；接口**不会
+「会维护」指的是：bug 会修、编译器产物演进时同步、八份实现的语义彼此对齐；接口**不会
 随意调整** —— 改名、增删参数这类改动只为修 bug 或跟进 `Program`，不会为了换个风格而做，
 所以边界内的用法可以放心依赖。它只是**不属于标准**：`BasicVM::*` / `StopeBasicVM.*` /
 `BasicVM.*` 这些名字只属于这几份实现，宿主换一台执行器时本来就不存在它们。
@@ -135,26 +138,27 @@ STML 可以用来管理相互调用的 Stope 程序，或实现面向对象等�
 
 ## 实现状态
 
-|         | C++                      | GDScript                        | Node.js                     | C#                          | Python                      |
-| ------- | ------------------------ | ------------------------------- | --------------------------- | --------------------------- | --------------------------- |
-| 定位      | **权威实现**                 | 参考实现（逐项按 C++ 对齐）                | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            |
-| 布局      | Pitchfork Layout（编译型静态库） | Godot 工程，以 `addons/stope/` 插件分发 | npm 包，纯 ESM、`src/` 下按模块分文件   | `dotnet` 类库 + 控制台测试跑器，`slnx` 解决方案 | 纯 Python 包，`stope/` 下按模块分文件   |
-| 标准 / 依赖 | C++20，零第三方依赖             | Godot 4（实测 4.7.2），零第三方插件         | Node >= 20，零第三方依赖           | .NET 10（实测 SDK 10.0.401），零第三方包 | Python 3.9+（实测 3.14.9），零第三方包 |
-| 测试      | ctest 15 组，1517 条断言全绿    | 3237 条断言全绿                      | `npm test` 797 条断言全绿        | `dotnet run` 3238 条断言全绿      | `python tests/run_tests.py` 3299 条断言全绿 |
+|         | C++                      | GDScript                        | Node.js                     | C#                          | Python                      | Lua                         | Go                          | Rust                        |
+| ------- | ------------------------ | ------------------------------- | --------------------------- | --------------------------- | --------------------------- | --------------------------- | --------------------------- | --------------------------- |
+| 定位      | **权威实现**                 | 参考实现（逐项按 C++ 对齐）                | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            | 参考实现（逐项按 C++ 对齐）            |
+| 布局      | Pitchfork Layout（编译型静态库） | Godot 工程，以 `addons/stope/` 插件分发 | npm 包，纯 ESM、`src/` 下按模块分文件   | `dotnet` 类库 + 控制台测试跑器，`slnx` 解决方案 | 纯 Python 包，`stope/` 下按模块分文件   | 纯 Lua 模块，`stope/` 下按模块分文件   | Go module，包在 module 根 + `cmd/`   | crate，`src/` 下按模块分文件       |
+| 标准 / 依赖 | C++20，零第三方依赖             | Godot 4（实测 4.7.2），零第三方插件         | Node >= 20，零第三方依赖           | .NET 10（实测 SDK 10.0.401），零第三方包 | Python 3.9+（实测 3.14.9），零第三方包 | Lua 5.4+（实测 5.4.6），零第三方依赖 | Go 1.27（实测 1.27.3），零第三方依赖 | Rust 2021（实测 1.91.0），零 crates.io 依赖 |
+| 测试      | ctest 15 组，1517 条断言全绿    | 3237 条断言全绿                      | `npm test` 797 条断言全绿        | `dotnet run` 3238 条断言全绿      | `python tests/run_tests.py` 3299 条断言全绿 | `lua tests/run_tests.lua` 3299 条断言全绿 | `go test ./...` 3300 条断言全绿   | `cargo test` 17 组全绿           |
 
 五者出现分歧时**以 C++ 的实测行为为准**，差异登记在对应测试计划的 §7。
 
-> **`gdscript/`、`nodejs/`、`csharp/`、`python/` 都是参考实现，不是第二套标准。** 词法 / 语法 / 编译器 / STML
+> **`gdscript/`、`nodejs/`、`csharp/`、`python/`、`lua/`、`go/`、`rust/` 都是参考实现，不是第二套标准。** 词法 / 语法 / 编译器 / STML
 > 四块已与 C++ 逐项对齐 —— 期望值全部由 C++ 探针 dump，各侧都不手写（STML 那 126 条用例
 > 跑的是**同一份清单** `gdscript/test/data/stml_cases.txt`）。残留的两条差异见
 > [stml-test-plan.md](docs/zh-cn/stml-test-plan.md) §7 的 GD-S-17/18；`nodejs/` 的整数用
 > `BigInt`（对应 int64）、字符串是 UTF-16（与 C++ 的 `u16string` 一致），`python/` 的整数
 > 经 `wrap64` 折回 int64、字符串在取下标时转 UTF-16 码元，所以它们都没有那两条
 > 差异。参考执行器（`basic_vm.hpp` / `basic_vm.gd` / `basic_vm.js` / `BasicVm.cs` /
-> `basic_vm.py`）**都不属于规范**。安装与用法见
+> `basic_vm.py` / `basic_vm.lua` / `go/basicvm/` / `basic_vm.rs`）**都不属于规范**。安装与用法见
 > [gdscript/docs/README.md](gdscript/docs/README.md)、
 > [nodejs/README.md](nodejs/README.md)、[csharp/README.md](csharp/README.md)、
-> [python/README.md](python/README.md)。
+> [python/README.md](python/README.md)、[lua/README.md](lua/README.md)、
+> [go/README.md](go/README.md)、[rust/README.md](rust/README.md)。
 
 ---
 
@@ -345,6 +349,13 @@ Python 侧另有几处宿主语言语义要兜（`1.0 / 0` 抛异常、`-7 // 2`
 | 嵌入 Python 项目（四步）      | [python/docs/quick-start.md](python/docs/quick-start.md)           |
 | Python API 用法与错误总表     | [python/docs/usage.md](python/docs/usage.md)                       |
 | Python 测试与数据重生成       | [python/docs/testing.md](python/docs/testing.md)                   |
+| Lua 实现（模块、约定、测试）    | [lua/README.md](lua/README.md)                                     |
+| 嵌入 Lua 项目              | [lua/docs/quick-start.md](lua/docs/quick-start.md)                  |
+| Go 实现（模块、约定、测试）     | [go/README.md](go/README.md)                                       |
+| 嵌入 Go 项目               | [go/docs/quick-start.md](go/docs/quick-start.md)                    |
+| Rust 实现（模块、约定、测试）    | [rust/README.md](rust/README.md)                                   |
+| 嵌入 Rust 项目             | [rust/docs/quick-start.md](rust/docs/quick-start.md)                |
+| 新增一份语言实现（移植指南）   | [docs/zh-cn/porting-guide.md](docs/zh-cn/porting-guide.md)         |
 | C++ 侧实现笔记（改 `cpp/` 前看） | [cpp/docs/development.md](cpp/docs/development.md)             |
 | C++ 侧各模块实现笔记    | [cpp/docs/](cpp/docs/) 下的 `*-test-plan.md`、`expr-optim.md`       |
 | 版本与变更历史         | [CHANGELOG.md](CHANGELOG.md)                                       |

@@ -76,7 +76,7 @@ nodejs/test/
 ```
 
 数据**不在本目录**，在 `../../gdscript/test/data/`（`test/golden.js` 的 `dataDir`），
-仓库里只有这一份，五份实现都读它。
+仓库里只有这一份，八份实现都读它。
 
 | 文件 | 条数 | 谁用 |
 | --- | --- | --- |
@@ -120,7 +120,7 @@ C++）。nodejs 只负责产出同格式文本再逐字段比对。手推期望�
 | `golden_lex.txt` | — | 本实现不读 |
 
 **`dumpProgram` 不在库里**：「单行产物格式」（`docs/zh-cn/compiler-test-plan.md` §2.3）
-只为比对存在，五份实现各写一份、都不进库（C++ 是 `tools/golden.cpp` 的私有 `dumpLine`，
+只为比对存在，八份实现各写一份、都不进库（C++ 是 `tools/golden.cpp` 的私有 `dumpLine`，
 GD 是 `test_util.gd` 的 `dump_program`，C# 是 `Data.DumpProgram`，本实现是
 `test/golden.js` 的 `dumpProgram`）。三处细节要一致：
 

@@ -44,7 +44,7 @@ ctest --test-dir build
 cmake --build build --target gen-golden   # 改了行为或加用例时才要
 ```
 
-`gen-golden` 重生成 `gdscript/test/data/` 下五份期望值（探针在
+`gen-golden` 重生成 `gdscript/test/data/` 下八份期望值（探针在
 `cpp/tools/`，链接 `stope` 库运行）。它**不在默认构建里**
 （`EXCLUDE_FROM_ALL`），也不进 ctest —— 日常构建和测试都不会碰它。原因见 §2.1 第 5 条。
 探针源码留在这边、产出数据落在 GDScript 工程里，是刻意的：期望值只能由权威实现
@@ -67,7 +67,7 @@ cmake --build build --target gen-golden   # 改了行为或加用例时才要
 5. **行号相关**：Windows 上 C++ 重定向输出是 CRLF、Godot 写出是 LF。
    跨实现比对的数据文件行尾**不要手工处理** —— `.gitattributes` 的 `* text=auto`
    已经保证入库统一 LF、检出按平台转换，读侧（`test_util.gd` 的 `read_golden`）也兜底
-   剥 `\r`。GDScript 侧那五份 golden 由 `gen-golden` target 生成，不要手敲 `g++`。
+   剥 `\r`。GDScript 侧那八份 golden 由 `gen-golden` target 生成，不要手敲 `g++`。
 
 ### 2.2 深度阈值（实测，勿回退）
 
