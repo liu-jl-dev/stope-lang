@@ -38,7 +38,7 @@ BasicVM 不属于标准（见 [`cpp/docs/basic-vm.md`](cpp/docs/basic-vm.md) §1
 
 ### 落点与校验
 
-版本号共六处，一致性由零依赖脚本守护：
+版本号共八处，一致性由零依赖脚本守护（Go 用 git tag，无版本字段）：
 
 | 落点 | 位置 |
 | --- | --- |
@@ -47,6 +47,8 @@ BasicVM 不属于标准（见 [`cpp/docs/basic-vm.md`](cpp/docs/basic-vm.md) §1
 | Node.js | `nodejs/package.json` 的 `version` |
 | C# | `csharp/Stope/Stope.csproj` 的 `<Version>` |
 | Python | `python/stope/__init__.py` 的 `__version__` |
+| Rust | `rust/Cargo.toml` 的 `version`（0.2.0 起纳入） |
+| Lua | `lua/stope/init.lua` 的 `stope.version`（0.2.0 起纳入） |
 | 本文件 | 第一个纯版本号标题 `## [x.y.z]`（`[Unreleased]` 不计） |
 
 ```bash
@@ -54,7 +56,7 @@ python tools/check_version.py          # 全部一致才返回 0
 python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 ```
 
-## [Unreleased]
+## [0.2.0] - 2026-11-04
 
 ### 新增
 

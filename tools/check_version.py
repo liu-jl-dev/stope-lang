@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # check_version.py —— 校验版本号在全部落点的一致性。
 #
-# Stope 全仓共用一个版本号，落在六处（见 VERSION_SPOTS）。手工改版本号时容易
+# Stope 全仓共用一个版本号，落在八处（见 VERSION_SPOTS；Go 用 git tag，无版本字段）。手工改版本号时容易
 # 漏改某一处，本脚本把它们全部取出来断言相等：
 #
 #   python tools/check_version.py            # 全部一致则退出码 0，否则 1
@@ -25,6 +25,8 @@ VERSION_SPOTS = [
     ("nodejs/package.json", r'"version": "([^"]+)"'),
     ("csharp/Stope/Stope.csproj", r"<Version>([^<]+)</Version>"),
     ("python/stope/__init__.py", r'^__version__ = "([^"]+)"'),
+    ("rust/Cargo.toml", r'^version = "([^"]+)"'),
+    ("lua/stope/init.lua", r'^stope\.version = "([^"]+)"'),
     # CHANGELOG 取第一个「纯版本号」标题 —— [Unreleased] 里没有数字，天然被跳过。
     ("CHANGELOG.md", r"^## \[(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\]"),
 ]
