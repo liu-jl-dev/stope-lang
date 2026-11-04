@@ -219,13 +219,19 @@ impl State {
 
     /// 三样都要给；同时清 `returns` / `stack` / `errors`，并按 `variable_num`
     /// 开好槽位。
-    pub fn reset(&mut self, api: Rc<Api>, program: Rc<Program>, args: Option<Rc<dyn Arguments>>) {
+    /// 绑定指令表。
+    pub fn set_api(&mut self, api: Rc<Api>) {
         self.api = Some(api);
+    }
+
+    /// 绑定程序：按 variable_num 开好槽位、i 归零、清运行态。
+    ///（C++ 侧那句必写的 state.variables.resize(...) 在这里由 set_program 代做。）
+    pub fn set_program(&mut self, program: Rc<Program>) {
         self.program = Some(program);
-        self.args = args;
         self.returns = Vec::new();
         self.i = 0;
-        self.variables = vec![Value::Null; self.program.as_ref().unwrap().variable_num.max(0) as usize];
+        self.variables =
+            vec![Value::Null; self.program.as_ref().unwrap().variable_num.max(0) as usize];
         self.stack = Vec::new();
         self.errors = Vec::new();
     }

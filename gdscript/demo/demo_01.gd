@@ -76,13 +76,15 @@ func demo() -> void:
 	var host := HostFns.new()
 	var args := MyArgs.new([1.0, 2.0, 3.0, 4.0, 5.0])
 	var state := StopeBasicVM.State.new()
-	state.reset(api, program, args)
+	state.set_api(api)
+	state.set_program(program)
+	state.set_arguments(args)
 	# 宿主函数就是「某个变量槽里的值」：编译器把 fmt:println 当成未声明的标识符，
 	# 于是它进了 exports，按索引把槽位填上一个 Callable，调用时 _call 直接调它。
 	state.variables[program.exports['fmt:println']] = Callable(host, 'println')
 
 	# ---------------- step 4: 跑 ----------------
-	if not state.run():
+	if state.run() != StopeResult.Success:
 		for e in state.errors: print('[vm] ', e)
 		return
 	print('result: ', HostFns._fmt(state.returns[0]))

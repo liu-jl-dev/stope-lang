@@ -183,11 +183,13 @@ type State struct {
 	Errors    []string
 }
 
-// Reset 三样都要给；同时清 Returns / Stack / Errors，并按 VariableNum 开好槽位。
-func (s *State) Reset(api *Api, program *stope.Program, args Arguments) {
-	s.Api = api
+// SetApi 绑定指令表。
+func (s *State) SetApi(api *Api) { s.Api = api }
+
+// SetProgram 绑定程序：按 VariableNum 开好槽位、I 归零、清运行态。
+//（C++ 侧那句必写的 state.variables.resize(...) 在这里由 SetProgram 代做。）
+func (s *State) SetProgram(program *stope.Program) {
 	s.Program = program
-	s.Args = args
 	s.Returns = nil
 	s.I = 0
 	s.Variables = make([]Value, program.VariableNum)

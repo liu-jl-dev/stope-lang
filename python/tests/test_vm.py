@@ -79,7 +79,9 @@ def _compile(src: str, custom=None):
 def _state(prog, args=None) -> State:
     """装配 State 但**不执行** —— 宿主函数要先往 ``variables`` 里塞值。"""
     s = State()
-    s.reset(Api(), prog, args)
+    s.set_api(Api())
+    s.set_program(prog)
+    s.set_arguments(args)
     return s
 
 
@@ -350,7 +352,9 @@ def _custom_opcode(rep) -> None:
     api = Api()
     api.set_opcode(kFirstCustomOpcode, boom)
     s = State()
-    s.reset(api, prog, _NoArgs())
+    s.set_api(api)
+    s.set_program(prog)
+    s.set_arguments(_NoArgs())
     rc = s.run()
     rep.check("V-05", "run 返回", "Error", rc.name)
     rep.check_int("V-05", "错误条数", 1, len(s.errors))

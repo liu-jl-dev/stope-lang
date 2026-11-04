@@ -94,19 +94,17 @@ fn main() {
     // 从这里开始是内置的基础虚拟机，不属于标准；换一个执行器，这段可以整个换掉。
     let program = Rc::new(program);
     let mut state = State::new();
-    state.reset(
-        Rc::new(Api::new()),
-        program.clone(),
-        Some(Rc::new(MyArgs {
-            data: vec![
-                Value::Float(1.0),
-                Value::Float(2.0),
-                Value::Float(3.0),
-                Value::Float(4.0),
-                Value::Float(5.0),
-            ],
-        })),
-    );
+    state.set_api(Rc::new(Api::new()));
+    state.set_program(program.clone());
+    state.set_arguments(Rc::new(MyArgs {
+        data: vec![
+            Value::Float(1.0),
+            Value::Float(2.0),
+            Value::Float(3.0),
+            Value::Float(4.0),
+            Value::Float(5.0),
+        ],
+    }));
 
     // 未声明的 fmt:println 被编译器当作外部变量登记进 exports；
     // 按名字取到槽位，填上宿主函数即可。

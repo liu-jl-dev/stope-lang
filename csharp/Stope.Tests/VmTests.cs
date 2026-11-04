@@ -101,7 +101,9 @@ public static class VmTests
         if (c.Compile(tree, prog) != Result.Success || ps.Errors.Count > 0) return null;
 
         var st = new State();
-        st.Reset(new Api(), prog, args);
+        st.SetApi(new Api());
+        st.SetProgram(prog);
+        st.SetArguments(args);
         return st;
     }
 
@@ -340,7 +342,8 @@ public static class VmTests
             var prog2 = new Program();
             new Compiler().Compile(tree, prog2);
             var st2 = new State();
-            st2.Reset(new Api(), prog2, null);
+            st2.SetApi(new Api());
+            st2.SetProgram(prog2);
             int steps = 0;
             for (;;)
             {

@@ -185,11 +185,14 @@ function basic_vm.State.new()
     }, State)
 end
 
---- 三样都要给；同时清 returns / stack / errors，并按 variable_num 开好槽位。
-function State:reset(api, program, args)
+function State:set_api(api)
     self.api = api
+end
+
+--- 绑定程序：按 variable_num 开好槽位、i 归零、清运行态。
+---（C++ 侧那句必写的 state.variables.resize(...) 在这里由 set_program 代做。）
+function State:set_program(program)
     self.program = program
-    self.args = args
     self.returns = {}
     self.i = 0
     self.variables = {}

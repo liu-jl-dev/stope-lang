@@ -195,12 +195,19 @@ class State:
         self.stack: list = []
         self.errors: list[str] = []
 
-    def reset(self, api: "Api", program, args=None) -> None:
-        """三样都要给；同时清 ``returns`` / ``stack`` / ``errors``，并按 ``variable_num``
-        开好槽位（C++ 要宿主自己 ``resize``，这里替你做掉，免得漏一步就是空槽位）。"""
+    def set_api(self, api: "Api") -> None:
         self.api = api
+
+    def set_program(self, program) -> None:
+        """绑定程序：按 ``variable_num`` 开好槽位、``i`` 归零、清运行态
+        （``returns`` / ``stack`` / ``errors``）。C++ 要宿主自己 ``resize``，
+        这里替你做掉，免得漏一步就是空槽位。"""
         self.program = program
-        self.args = args
+        self.returns = []
+        self.i = 0
+        self.variables = [None] * program.variable_num
+        self.stack = []
+        self.errors = []
         self.returns = []
         self.i = 0
         self.variables = [None] * program.variable_num

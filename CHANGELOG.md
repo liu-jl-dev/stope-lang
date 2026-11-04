@@ -63,9 +63,21 @@ python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
   BinArr 86 / STML 126 / 反汇编 12 条），demo01–04 输出与既有实现逐字节一致；均为零第三方依赖。
 - **移植指南**：[docs/zh-cn/porting-guide.md](docs/zh-cn/porting-guide.md) —— 实施顺序、golden 验收、
   跨语言语义坑与八份实现各自的专有坑、交付前检查单。
+- **API Reference**：[docs/zh-cn/api-reference.md](docs/zh-cn/api-reference.md) —— Lexer / Parser /
+  Compiler / Program / BasicVM / STML 的接口形状在八份实现中的对照与差异登记。
 
 ### 变更
 
+- **GDScript 的 `State.Step()` / `Run()` 返回类型从 `bool` 改为 `StopeResult`**，
+  消除八份间唯一的无故差异（其余七份本就返回 `Result`）。顺带对齐一处语义：
+  指令流走完（`i` 越过末尾）后 `step()` 现在返回 `Success`，与 C++ 一致 ——
+  原 GDScript 实现返回 `false`（= Error）；出错停机后再 `step()` 仍返回
+  `Error`（`errors` 非空），两种情形靠 `errors` 区分。
+- **删除 `BasicVM.State.Reset`**：装配改为分立注入器 `SetAPI` / `SetProgram` /
+  `SetArguments`（snake_case 实现为 `set_api` / `set_program` / `set_arguments`），
+  与 C++ 的五个分立 `SetXXX` 同构 —— `Stope` 不规定如何装配程序，`args` 是可选依赖，
+  不再占构造签名。`SetProgram` 负责按 `variable_num` 开槽位、`i` 归零、清运行态
+  （C++ 仍由宿主 `resize`，不变）。GDScript 的 `set_args` 更名 `set_arguments`。
 - `Element` 新增 `textLine`（内容首行的物理行号，无内容 -1）：STML 词法器切内容前会跳过
   前导空白（含换行），宿主把它设给 `Lexer` 的起始行号，报错行号即与原文档对齐。
   配套：C# 的 `Lexer.Line` 由只读属性改为可读写；测试形状串的文本段写成 `T(L<n>)="…"`；

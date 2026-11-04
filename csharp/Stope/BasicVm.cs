@@ -72,15 +72,16 @@ public sealed class State
     /// <summary>运行期错误，格式 <c>"&lt;指令下标&gt;: msg"</c>。</summary>
     public readonly List<string> Errors = new();
 
+    /// <summary>绑定指令表。</summary>
+    public void SetApi(Api api) => Api = api;
+
     /// <summary>
-    /// 三样都要给；同时清 returns / stack / errors，并按 <see cref="Program.VariableNum"/>
-    /// 开好槽位（C++ 要宿主自己 resize，这里替你做掉，免得漏一步就是空槽位）。
+    /// 绑定程序：按 VariableNum 开好槽位、I 归零、清运行态。
+    ///（C++ 侧那句必写的 state.variables.resize(...) 在这里由 SetProgram 代做。）
     /// </summary>
-    public void Reset(Api api, Program program, Arguments? args = null)
+    public void SetProgram(Program program)
     {
-        Api = api;
         Program = program;
-        Args = args;
         Returns.Clear();
         I = 0;
         Variables = new object?[program.VariableNum];

@@ -107,7 +107,9 @@ compiler.compile(tree, program)
 
 # 2-4. 执行：Program -> 结果（内置基础 VM：会维护，但不属于标准）
 state = State()
-state.reset(Api(), program, args)          # args 是实现了 Arguments 的宿主对象
+state.set_api(Api())
+state.set_program(program)
+state.set_arguments(args)                  # args 是实现了 Arguments 的宿主对象
 state.variables[program.exports["fmt:println"]] = println
 state.run()
 print(state.returns[0])
@@ -174,7 +176,9 @@ from stope import Api, State
 api = Api()                                        # 33 条内置指令的分派表
 args = MyArgs([1.0, 2.0, 3.0, 4.0, 5.0])
 state = State()
-state.reset(api, program, args)                    # 一次做完：清 returns/stack/errors + 开槽位
+state.set_api(api)
+state.set_program(program)
+state.set_arguments(args)                          # 需要实参表时后补
 ```
 
 `reset` 会按 `program.variable_num` 把 `state.variables` 开好（C++ 侧那行必写的
@@ -298,7 +302,8 @@ if compiler.compile(tree, program) != Result.Success:
     raise SystemExit(1)
 
 state = State()
-state.reset(Api(), program)          # 不传实参表就够用
+state.set_api(Api())
+state.set_program(program)
 if state.run() != Result.Success:
     for e in state.errors:
         print(e, file=sys.stderr)

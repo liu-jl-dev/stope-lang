@@ -151,8 +151,10 @@ func _ready() -> void:
 
 	# 3. 装配参考执行器并运行（这一段不是标准，可以整个换掉）
 	var state := StopeBasicVM.State.new()
-	state.reset(StopeBasicVM.Api.new(), program, MyArgs.new())
-	if not state.run():
+	state.set_api(StopeBasicVM.Api.new())
+	state.set_program(program)
+	state.set_arguments(MyArgs.new())
+	if state.run() != StopeResult.Success:
 		push_error(str(state.errors))
 		return
 	print(state.returns)	# [3]

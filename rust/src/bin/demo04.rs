@@ -113,7 +113,8 @@ fn main() {
     // 编译期就知道槽位，所以 run() 之前就能把值写进去 —— 这才是预导出的用处。
     let program = Rc::new(program);
     let mut state = State::new();
-    state.reset(Rc::new(Api::new()), program.clone(), None);
+    state.set_api(Rc::new(Api::new()));
+    state.set_program(program.clone());
     let a_slot = *program.exports.get("a").unwrap() as usize;
     let b_slot = *program.exports.get("b").unwrap() as usize;
     state.variables[a_slot] = Value::Int(3);

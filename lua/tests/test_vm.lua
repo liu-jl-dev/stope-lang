@@ -65,7 +65,9 @@ end
 local function state_new(prog, args)
     -- 装配 State 但不执行 —— 宿主函数要先往 variables 里塞值
     local s = stope.State.new()
-    s:reset(stope.Api.new(), prog, args)
+    s:set_api(stope.Api.new())
+    s:set_program(prog)
+    s:set_arguments(args)
     return s
 end
 
@@ -280,7 +282,9 @@ local function custom_opcode(rep)
     local api = stope.Api.new()
     api:set_opcode(stope.opcode.kFirstCustomOpcode, boom)
     local s = stope.State.new()
-    s:reset(api, prog, NoArgs.new())
+    s:set_api(api)
+    s:set_program(prog)
+    s:set_arguments(NoArgs.new())
     local rc = s:run()
     rep:check("V-05", "run 返回", "Error", (rc == Result.Success) and "Success" or "Error")
     rep:check_int("V-05", "错误条数", 1, #s.errors)

@@ -242,7 +242,7 @@ int/float 常量同列连排、字符串一行一个、二进制数组只印字�
 | 成员 | 说明 |
 | --- | --- |
 | `Api.OpMap` | `List<Action<State>>`，默认 33 格；下标 = 指令编号 |
-| `State.Reset(Api api, Program program, Arguments? args = null)` | 清 `Returns`/`Stack`/`Errors`，并按 `VariableNum` 开好槽位 |
+| `State.SetApi / SetProgram / SetArguments` | 绑定并清 `Returns`/`Stack`/`Errors`，按 `VariableNum` 开好槽位；args 用 `SetArguments` 后补 |
 | `Result Step()` | 走**一条**指令。`Errors` 非空 = 出错停住；`Errors` 空 = 指令流走完 |
 | `Result Run()` | 走到底；出错立即停。与 `Step` 是两份独立实现 |
 | `List<object?> Returns` | `return` 带回来的值 |

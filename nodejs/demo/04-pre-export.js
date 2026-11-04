@@ -95,7 +95,8 @@ console.log('  exports: ' + exported)
 // 宿主的「调用」就是写变量 + 跑一遍，不需要额外的参数传递机制。
 const api = new BasicVM.Api()
 const state = new BasicVM.State()
-state.Reset(api, program) // 没有实参表，args 省略
+state.SetApi(api)
+state.SetProgram(program) // 没有实参表，args 省略
 state.variables[program.exports.get('a')] = 3n // 整数在 JS 侧是 BigInt
 state.variables[program.exports.get('b')] = 4n
 

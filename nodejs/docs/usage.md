@@ -318,7 +318,9 @@ api.opMap[33] = (s) => {                                // my:add：弹 2 个、
 }
 
 const state = new BasicVM.State()
-state.Reset(api, program, new NoArgs())
+state.SetApi(api)
+state.SetProgram(program)
+state.SetArguments(new NoArgs())
 state.Run()                                             // 源码：let x = my:add(1, 2); return x;
 console.log(state.returns)                              // [3n]
 ```
@@ -393,14 +395,16 @@ class MyArgs extends BasicVM.Arguments {
 }
 
 const state = new BasicVM.State()
-state.Reset(new BasicVM.Api(), program, new MyArgs([1, 2, 3]))
+state.SetApi(new BasicVM.Api())
+state.SetProgram(program)
+state.SetArguments(new MyArgs([1, 2, 3]))
 if (state.Run() !== Result.Success) console.log(state.errors)
 console.log(state.returns)
 ```
 
 | 成员 | 说明 |
 | --- | --- |
-| `State.Reset(api, program, args = null)` | 三样都要给；同时清 `returns` / `stack` / `errors`，并按 `variableNum` 开好 `variables` |
+| `State.SetApi / SetProgram / SetArguments` | 绑定并清 `returns` / `stack` / `errors`，按 `variableNum` 开好 `variables`；args 用 `SetArguments` 后补 |
 | `State.Run() -> Result` | 跑到 `opcodes` 末尾；`errors` 非空立刻返回 `Error` |
 | `State.Step() -> Result` | 单步执行一条指令：`Success` = 这条跑完了、可以接着 step；`Error` 要配合 `errors` 区分（非空 = 出错，空 = 指令流走完） |
 | `State.returns: any[]` | `return` 的返回值，按出现顺序 |

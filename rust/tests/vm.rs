@@ -67,7 +67,11 @@ fn compile(src: &str, custom: Option<Rc<CustomOpcodeConfig>>) -> (Option<Program
 
 fn state_with(prog: &Program, args: Option<Rc<dyn Arguments>>) -> State {
     let mut s = State::new();
-    s.reset(Rc::new(Api::new()), Rc::new(prog.clone()), args);
+    s.set_api(Rc::new(Api::new()));
+    s.set_program(Rc::new(prog.clone()));
+    if let Some(a) = args {
+        s.set_arguments(a);
+    }
     s
 }
 
@@ -317,7 +321,9 @@ fn vm_custom_opcode() {
     let mut api = Api::new();
     api.set_opcode(K_FIRST_CUSTOM_OPCODE, boom);
     let mut s = State::new();
-    s.reset(Rc::new(api), Rc::new(prog), Some(Rc::new(NoArgs)));
+    s.set_api(Rc::new(api));
+    s.set_program(Rc::new(prog));
+    s.set_arguments(Rc::new(NoArgs));
     let rc = s.run();
     assert!(rc == StopeResult::Error, "V-05: run 返回");
     assert_eq!(1, s.errors.len(), "V-05: 错误条数");

@@ -245,7 +245,8 @@ api.set_opcode(kFirstCustomOpcode + 0, my_add)
 api.set_opcode(kFirstCustomOpcode + 1, my_sum)
 
 state = State()
-state.reset(api, program)
+state.set_api(api)
+state.set_program(program)
 assert state.run() == Result.Success, state.errors
 print(state.returns)      # [3, 6]
 ```

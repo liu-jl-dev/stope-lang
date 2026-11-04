@@ -83,12 +83,14 @@ class State {
     this.errors = []
   }
 
-  // 三样都要给；同时清 returns / stack / errors，并按 variableNum 开好槽位
-  // （C++ 要宿主自己 variables.resize，这里替你做掉，免得漏一步就是空槽位）。
-  Reset(api, program, args = null) {
+  SetApi(api) {
     this.api = api
+  }
+
+  // 绑定程序：按 variableNum 开好槽位、i 归零、清运行态。
+  //（C++ 侧那句必写的 state.variables.resize(...) 在这里由 SetProgram 代做。）
+  SetProgram(program) {
     this.program = program
-    this.args = args
     this.returns = []
     this.i = 0
     this.variables = new Array(program.variableNum).fill(null)

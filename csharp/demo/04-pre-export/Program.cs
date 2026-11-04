@@ -116,7 +116,8 @@ internal static class Demo04
         // 编译期就知道槽位，所以 Run 之前就能把值写进去 —— 这才是预导出的用处：
         // 宿主的「调用」就是写变量 + 跑一遍，不需要额外的参数传递机制。
         var state = new State();
-        state.Reset(new Api(), program); // 没有实参表，args 省略
+        state.SetApi(new Api());
+        state.SetProgram(program); // 没有实参表，args 省略
         state.Variables[program.Exports["a"]] = 3L; // 整数在 C# 侧是 long
         state.Variables[program.Exports["b"]] = 4L;
 

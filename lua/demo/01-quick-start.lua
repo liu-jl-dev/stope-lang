@@ -35,6 +35,7 @@ fmt:println("结果为: ", result);
 return result;
 ]]
 
+--- 继承 stope.Arguments
 local MyArgs = setmetatable({}, { __index = stope.Arguments })
 MyArgs.__index = MyArgs
 function MyArgs.new(values)
@@ -94,7 +95,9 @@ local function main()
     -- ---------------- 2. 执行：Program -> 结果 ----------------
     -- 从这里开始是内置的基础虚拟机，不属于标准；换一个执行器，这段可以整个换掉。
     local state = stope.State.new()
-    state:reset(stope.Api.new(), program, MyArgs.new({ 1.0, 2.0, 3.0, 4.0, 5.0 }))
+    state:set_api(stope.Api.new())
+    state:set_program(program)
+    state:set_arguments(MyArgs.new({ 1.0, 2.0, 3.0, 4.0, 5.0 }))
 
     -- 未声明的 fmt:println 被编译器当作外部变量登记进 exports；
     -- 按名字取到槽位，填上宿主函数即可。

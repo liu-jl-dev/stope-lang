@@ -64,11 +64,13 @@ func demo() -> void:
 	# 编译期就知道槽位，所以 run() 之前就能把值写进去 —— 这才是预导出的用处：
 	# 宿主的「调用」就是写变量 + 跑一遍，不需要额外的参数传递机制。
 	var state := StopeBasicVM.State.new()
-	state.reset(StopeBasicVM.Api.new(), program, NoArgs.new())
+	state.set_api(StopeBasicVM.Api.new())
+	state.set_program(program)
+	state.set_arguments(NoArgs.new())
 	state.variables[program.exports['a']] = 3
 	state.variables[program.exports['b']] = 4
 
-	if not state.run():
+	if state.run() != StopeResult.Success:
 		for e in state.errors: print('[vm] ', e)
 		return
 	print('\n[3] add(3, 4) = ', state.returns[0])

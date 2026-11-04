@@ -33,7 +33,8 @@ assert!(compiler.compile(&tree, &mut program, &[]) == StopeResult::Success);
 
 // 3) 执行（内置基础虚拟机，不属于标准）
 let mut state = State::new();
-state.reset(Rc::new(Api::new()), Rc::new(program), None);
+state.set_api(Rc::new(Api::new()))
+state.set_program(Rc::new(program))
 state.run();
 assert!(matches!(state.returns[0], Value::Int(42))); // Int(42)
 ```

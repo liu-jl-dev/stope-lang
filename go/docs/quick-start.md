@@ -42,7 +42,8 @@ func main() {
 
 	// 3. 用内置参考执行器跑（不是标准的一部分）
 	state := &basicvm.State{}
-	state.Reset(basicvm.NewApi(), program, nil)
+	state.SetApi(basicvm.NewApi())
+	state.SetProgram(program)
 	state.Run()
 	fmt.Println(state.Returns[0]) // 42
 }
@@ -87,7 +88,9 @@ func (a *myArgs) At(s *basicvm.State, key basicvm.Value) basicvm.Value {
 }
 func (a *myArgs) Num() int { return len(a.data) }
 
-state.Reset(basicvm.NewApi(), program, &myArgs{data: []basicvm.Value{int64(1), int64(2)}})
+state.SetApi(basicvm.NewApi())
+state.SetProgram(program)
+state.SetArguments(&myArgs{data: []basicvm.Value{int64(1), int64(2)}})
 ```
 
 ## 宿主函数

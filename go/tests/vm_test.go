@@ -58,7 +58,9 @@ func compile(t *testing.T, src string, custom *stope.CustomOpcodeConfig) (*stope
 // state 装配 State 但不执行 —— 宿主函数要先往 Variables 里塞值。
 func newState(prog *stope.Program, args basicvm.Arguments) *basicvm.State {
 	s := &basicvm.State{}
-	s.Reset(basicvm.NewApi(), prog, args)
+	s.SetApi(basicvm.NewApi())
+	s.SetProgram(prog)
+	s.SetArguments(args)
 	return s
 }
 
@@ -373,7 +375,9 @@ func customOpcode(t *testing.T, rep *Report) {
 	api := basicvm.NewApi()
 	api.SetOpcode(stope.KFirstCustomOpcode, boom)
 	s := &basicvm.State{}
-	s.Reset(api, prog, noArgs{})
+	s.SetApi(api)
+	s.SetProgram(prog)
+	s.SetArguments(noArgs{})
 	rc := s.Run()
 	rep.Check("V-05", "run 返回", "Error", resultName(rc))
 	rep.CheckInt("V-05", "错误条数", 1, len(s.Errors))

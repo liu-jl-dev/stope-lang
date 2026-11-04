@@ -94,8 +94,9 @@ func main() {
 	// ---------------- 2. 执行：Program -> 结果 ----------------
 	// 从这里开始是内置的基础虚拟机，不属于标准；换一个执行器，这段可以整个换掉。
 	state := &basicvm.State{}
-	state.Reset(basicvm.NewApi(), program,
-		&myArgs{data: []basicvm.Value{1.0, 2.0, 3.0, 4.0, 5.0}})
+	state.SetApi(basicvm.NewApi())
+	state.SetProgram(program)
+	state.SetArguments(&myArgs{data: []basicvm.Value{1.0, 2.0, 3.0, 4.0, 5.0}})
 
 	// 未声明的 fmt:println 被编译器当作外部变量登记进 exports；
 	// 按名字取到槽位，填上宿主函数即可。

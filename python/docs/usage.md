@@ -293,7 +293,9 @@ rc = ps.parse(root, state_func)           # state_func(tag, attrs) -> StmlState
 from stope import Api, Arguments, State
 
 state = State()
-state.reset(Api(), program, args)          # 三样都给；同时清 returns/stack/errors
+state.set_api(Api())
+state.set_program(program)
+state.set_arguments(args)                  # 实参表是可选依赖，后补
 state.variables[program.exports["f"]] = fn # 宿主函数就是槽位里的一个值
 state.run()
 state.returns                              # list，return 带回来的值
@@ -305,7 +307,7 @@ state.returns                              # list，return 带回来的值
 | `Api.set_opcode(n, fn)` | —（C++ 定长数组，扩不了） | 装自定义指令；**会把中间补齐**，跳号注册不留空洞 |
 | `Arguments` | `BasicVM::Arguments` | 抽象基类，宿主实现 `at(state, key)` 与 `num()` |
 | `Identifier(index)` | `Value{Identifier}` | 槽位引用。`PushId` 压它，只有 `Assign` 认它 |
-| `State.reset(api, program, args=None)` | `SetAPI` + `SetProgram` + … | 一次做完：清 `returns` / `stack` / `errors`，按 `variable_num` 开槽位 |
+| `State.set_api / set_program / set_arguments` | `SetAPI` + `SetProgram` | 绑定并清 `returns` / `stack` / `errors`，按 `variable_num` 开槽位；args 用 `set_arguments` 后补 |
 | `State.run()` | `Run` | 跑到结束；出错立即停 |
 | `State.step()` | `Step` | 走一条。与 `run()` 是两份独立实现，语义必须一致（`V-21` 锁着） |
 | `State.error(msg)` | `Error` | 记一条 `"<指令下标>: msg"` |

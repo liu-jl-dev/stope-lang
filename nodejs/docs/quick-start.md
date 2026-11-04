@@ -143,7 +143,7 @@ Program ──┐
 | --- | --- | --- | --- |
 | 1 | 编译源码 | `Lexer` `Parser` `Compiler` → `Program` | 相对稳定（编译器接口） |
 | 2 | 建指令表 | `BasicVM.Api` | 内置基础 VM（会维护，非标准） |
-| 3 | `State` 装配 | `State.Reset(api, program, args)` | 内置基础 VM（会维护，非标准） |
+| 3 | `State` 装配 | `State.SetApi / SetProgram / SetArguments` | 内置基础 VM（会维护，非标准） |
 | 4 | 传参并执行 | `Arguments` `Run()` / `Step()` / `returns` | 内置基础 VM（会维护，非标准） |
 
 **step 1 和后面三步是分开的**：只想看字节码、只想做静态检查的话，编译完就可以收工，
@@ -229,7 +229,9 @@ const api = new BasicVM.Api() // 33 个函数，下标 = 指令编号
 
 ```js
 const state = new BasicVM.State()
-state.Reset(api, program, args) // args 见 §6
+state.SetApi(api)
+state.SetProgram(program)
+state.SetArguments(args) // args 见 §6
 ```
 
 `Reset` 一次做完四件事：清 `returns` / `stack` / `errors`，并
@@ -287,7 +289,9 @@ class MyArgs extends BasicVM.Arguments {
 }
 
 const state = new BasicVM.State()
-state.Reset(api, program, new MyArgs([1.0, 2.0, 3.0, 4.0, 5.0]))
+state.SetApi(api)
+state.SetProgram(program)
+state.SetArguments(new MyArgs([1.0, 2.0, 3.0, 4.0, 5.0]))
 
 if (state.Run() !== Result.Success) {
   // true/成功是 Result.Success === 0，不是「返回 true」
@@ -340,7 +344,9 @@ if (compiler.Compile(tree, program) !== Result.Success) throw new Error(compiler
 
 // 2-4. 装配并执行（非标准）
 const state = new BasicVM.State()
-state.Reset(new BasicVM.Api(), program, new NoArgs())
+state.SetApi(new BasicVM.Api())
+state.SetProgram(program)
+state.SetArguments(new NoArgs())
 if (state.Run() !== Result.Success) throw new Error(state.errors.join(''))
 console.log('return = ' + state.returns[0])
 ```

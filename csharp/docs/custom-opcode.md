@@ -218,7 +218,8 @@ var api = new Api();
 api.OpMap.Add(MyAdd);
 
 var state = new State();
-state.Reset(api, program);            // 不传实参表就够用
+state.SetApi(api)
+state.SetProgram(program)
 if (state.Run() != Result.Success) return;
 Console.WriteLine(state.Returns[0]);  // 3
 ```

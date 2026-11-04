@@ -107,7 +107,9 @@ compiler.Compile(tree, program);
 
 // 2-4. 执行：Program -> 结果（内置基础 VM：会维护，但不属于标准）
 var state = new State();
-state.Reset(new Api(), program, args);      // args 是实现 Arguments 的宿主对象
+state.SetApi(new Api())
+state.SetProgram(program)
+state.SetArguments(args);                   // args 是实现 Arguments 的宿主对象
 state.Variables[program.Exports["fmt:println"]] = (Func<object?[], object?>)Println;
 state.Run();
 Console.WriteLine(state.Returns[0]);
@@ -163,7 +165,9 @@ if (rc != Result.Success) return 1;
 var api = new Api();                                 // 33 条内置指令的分派表
 var args = new MyArgs(new object?[] { 1.0, 2.0, 3.0, 4.0, 5.0 });
 var state = new State();
-state.Reset(api, program, args);                     // 一次做完：清 returns/stack/errors + 开槽位
+state.SetApi(api)
+state.SetProgram(program)
+state.SetArguments(args);                           // 需要实参表时后补
 ```
 
 `Reset` 会按 `program.VariableNum` 把 `state.Variables` 开好（C++ 侧那行必写的
@@ -264,7 +268,8 @@ if (compiler.Compile(tree, program) != Result.Success)
 }
 
 var state = new State();
-state.Reset(new Api(), program);   // 不传实参表就够用
+state.SetApi(new Api())
+state.SetProgram(program)
 if (state.Run() != Result.Success)
 {
     foreach (var e in state.Errors) Console.Error.WriteLine(e);

@@ -396,8 +396,10 @@ api.op_map.resize(34)					# 33 号要能下标取到 ⇒ 至少 34 项
 api.op_map[33] = host.my_add				# 33 = my:add 的编号
 
 var state := StopeBasicVM.State.new()
-state.reset(api, program, args)				# args 是你自己的 Arguments 实现
-print(state.run(), state.returns)			# true [3]
+state.set_api(api)
+state.set_program(program)
+state.set_arguments(args)					# args 是你自己的 Arguments 实现
+print(state.run(), state.returns)			# 0[3]（Success）
 ```
 
 上面这段是照可运行代码抄的：`my:add` 注册在 33、源码 `let x = my:add(1, 2); return x;`。
@@ -464,17 +466,19 @@ class MyArgs extends StopeBasicVM.Arguments:
 	func num() -> int: return data.size()
 
 var state := StopeBasicVM.State.new()
-state.reset(StopeBasicVM.Api.new(), program, MyArgs.new([1, 2, 3]))
-if not state.run():
+state.set_api(StopeBasicVM.Api.new())
+state.set_program(program)
+state.set_arguments(MyArgs.new([1, 2, 3]))
+if state.run() != StopeResult.Success:
 	print(state.errors)
 print(state.returns)
 ```
 
 | 成员 | 说明 |
 | --- | --- |
-| `State.reset(api, program, args)` | 三样都要给；同时清 `returns` / `stack` / `errors` |
-| `State.run() -> bool` | 跑到 `opcodes` 末尾；`errors` 非空立刻返回 false |
-| `State.step() -> bool` | 单步执行一条指令：`true` = 这条跑完了、可以接着 step；`false` = 停了（`errors` 非空 = 出错，否则 = 指令流走完）。`while s.step(): pass` 与 `s.run()` 走同样的指令、得到同样的结果 |
+| `State.set_api / set_program / set_arguments` | 绑定并清 `returns` / `stack` / `errors`；args 用 `set_arguments` 后补 |
+| `State.run() -> StopeResult` | 跑到 `opcodes` 末尾；`errors` 非空立刻返回 `Error` |
+| `State.step() -> StopeResult` | 单步执行一条指令：`Success` = 这条跑完了、可以接着 step；`Error` = 停了（`errors` 非空 = 出错，否则 = 指令流走完，仍返回 `Success`）。`while s.i < ops.size() and s.step() == StopeResult.Success: pass` 与 `s.run()` 走同样的指令、得到同样的结果 |
 | `State.returns: Array` | `return` 的返回值，按出现顺序 |
 | `State.errors: Array[String]` | `"i OpName: msg"`（`i` 是指令下标） |
 | `State.error(msg)` | 宿主的报错入口（对应 C++ `State::Error`）；写进 `errors` 后 `run`/`step` 立即停 |

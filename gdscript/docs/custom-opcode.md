@@ -366,8 +366,10 @@ api.op_map.resize(34)          # 33 号要能下标取到 ⇒ 至少 34 项
 api.op_map[33] = Callable(host, 'my_add')
 
 var state := StopeBasicVM.State.new()
-state.reset(api, program, NoArgs.new())
-print(state.run(), state.returns)   # true [3]
+state.set_api(api)
+state.set_program(program)
+state.set_arguments(NoArgs.new())
+print(state.run(), state.returns)   # 0[3]（Success）
 ```
 
 上面这段是**照可运行代码抄的**：`my:add` 注册在 33、源码 `let x = my:add(1, 2); return x;`，
@@ -430,8 +432,10 @@ func _ready() -> void:
 	api.op_map.resize(34)
 	api.op_map[33] = Callable(host, 'my_add')
 	var state := StopeBasicVM.State.new()
-	state.reset(api, program, NoArgs.new())
-	if not state.run():
+	state.set_api(api)
+	state.set_program(program)
+	state.set_arguments(NoArgs.new())
+	if state.run() != StopeResult.Success:
 		push_error(str(state.errors))
 		get_tree().quit(1)
 		return

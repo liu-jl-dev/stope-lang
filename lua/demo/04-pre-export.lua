@@ -120,7 +120,8 @@ local function main()
     -- 编译期就知道槽位，所以 run() 之前就能把值写进去 —— 这才是预导出的用处：
     -- 宿主的「调用」就是写变量 + 跑一遍，不需要额外的参数传递机制。
     local state = stope.State.new()
-    state:reset(stope.Api.new(), program)
+    state:set_api(stope.Api.new())
+    state:set_program(program)
     state.variables[program.exports["a"]] = 3
     state.variables[program.exports["b"]] = 4
 

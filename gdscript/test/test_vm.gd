@@ -48,7 +48,7 @@ static func _get_arg_error(rep:StopeTestUtil.Report) -> void:
 		rep.add_fail('  FAIL V-04  编译失败')
 		return
 	var s := _new_state(prog)
-	rep.check('V-04', 'run 返回', 'false', str(s.run()))
+	rep.check('V-04', 'run 返回 Error', 'true', str(s.run() == StopeResult.Error))
 	rep.check('V-04', '错误条数', '1', str(s.errors.size()))
 	rep.check('V-04', '错误全文',
 		str(s.i, ' GetArg: args not provided in this test. '), _join(s.errors))
@@ -56,7 +56,7 @@ static func _get_arg_error(rep:StopeTestUtil.Report) -> void:
 # 自定义指令（编号 >= 33）里报错：`_error` 拼指令名时**不能越界**。
 # `Opcode.keys()` 只有 33 项，早期直接 `Opcode.keys()[opcode]` 下标取 —— 自定义指令
 # 一报错就变成引擎级 `Out of bounds get index`，错误一句都没记下来，而 errors 既然
-# 为空，run() 还会返回 true（假装成功）。修复后按 debug.gd 的惯例印成 `Custom<N>`。
+# 为空，run() 还会返回 Success（假装成功）。修复后按 debug.gd 的惯例印成 `Custom<N>`。
 static func _custom_opcode_error(rep:StopeTestUtil.Report) -> void:
 	var first := StopeOpcode.FIRST_CUSTOM_OPCODE
 	var cfg := StopeOpcode.CustomOpcodeConfig.new()
@@ -73,8 +73,10 @@ static func _custom_opcode_error(rep:StopeTestUtil.Report) -> void:
 	api.op_map[first] = host.boom
 
 	var s := StopeBasicVM.State.new()
-	s.reset(api, prog, NoArgs.new())
-	rep.check('V-05', 'run 返回', 'false', str(s.run()))
+	s.set_api(api)
+	s.set_program(prog)
+	s.set_arguments(NoArgs.new())
+	rep.check('V-05', 'run 返回 Error', 'true', str(s.run() == StopeResult.Error))
 	rep.check('V-05', '错误条数', '1', str(s.errors.size()))
 	rep.check('V-05', '错误全文', str('0 Custom', first, ': boom. '), _join(s.errors))
 
@@ -89,10 +91,10 @@ static func _paths(rep:StopeTestUtil.Report, id:String, src:String, check_steps:
 
 	var b := _new_state(prog)
 	var steps := 0
-	while b.step(): steps += 1
+	while b.i < prog.opcodes.size() and b.step() == StopeResult.Success: steps += 1
 
 	# run 的返回值就是「errors 为空」，两路都得守住这条
-	rep.check(id, 'run 返回值↔errors', 'true', str(ok_a == a.errors.is_empty()))
+	rep.check(id, 'run 返回值↔errors', 'true', str((ok_a == StopeResult.Success) == a.errors.is_empty()))
 	if check_steps:
 		rep.check(id, 'step 步数', str(_inst_count(prog)), str(steps))
 	rep.check(id, 'returns', _fmt(a.returns), _fmt(b.returns))
@@ -100,10 +102,12 @@ static func _paths(rep:StopeTestUtil.Report, id:String, src:String, check_steps:
 	rep.check(id, 'errors 条数', str(a.errors.size()), str(b.errors.size()))
 	rep.check(id, 'errors 文本', _join(a.errors), _join(b.errors))
 
-	# 停机后再驱动一次：不执行指令、不追加错误（结束态与错误态都应如此）
+	# 停机后再驱动一次：不执行指令、不追加错误（结束态与错误态都应如此）。
+	# 出错停机 → errors 仍非空，step 返回 Error；走到末尾 → 返回 Success。
 	var err_before := b.errors.size()
 	var i_before := b.i
-	rep.check(id, '停机后 step', 'false', str(b.step()))
+	var step_expect := StopeResult.Error if err_before > 0 else StopeResult.Success
+	rep.check(id, '停机后 step', str(step_expect), str(b.step()))
 	rep.check(id, '停机后 i 不变', str(i_before), str(b.i))
 	rep.check(id, '停机后 errors 不变', str(err_before), str(b.errors.size()))
 
@@ -137,7 +141,9 @@ static func _build_with(src:String, cfg:StopeOpcode.CustomOpcodeConfig) -> Stope
 
 static func _new_state(prog:StopeProgram.Program) -> StopeBasicVM.State:
 	var s := StopeBasicVM.State.new()
-	s.reset(StopeBasicVM.Api.new(), prog, NoArgs.new())
+	s.set_api(StopeBasicVM.Api.new())
+	s.set_program(prog)
+	s.set_arguments(NoArgs.new())
 	return s
 
 static func _fmt(values:Array) -> String:
@@ -224,7 +230,7 @@ static func _host_bool(rep:StopeTestUtil.Report) -> void:
 	# 未声明就被调用 → 编译器隐式登记进 exports；槽位号由编译器分配，不能写死
 	s.variables[prog.exports['f']] = func(_argv): return true
 	var ok := s.run()
-	rep.check('V-14', 'run 返回', 'true', str(ok))
+	rep.check('V-14', 'run 返回 Success', 'true', str(ok == StopeResult.Success))
 	rep.check('V-14', 'returns[0] 类型', str(TYPE_INT), str(typeof(s.returns[0])))
 	rep.check('V-14', 'returns', '[1]', _fmt(s.returns))
 

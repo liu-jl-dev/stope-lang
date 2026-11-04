@@ -71,7 +71,9 @@ print(stope.disasm(program)) -- 看一眼编出来的字节码
 
 ```lua
 local state = stope.State.new()
-state:reset(stope.Api.new(), program) -- 第三参是实参表（实现 Arguments 接口），可省
+state:set_api(stope.Api.new())
+state:set_program(program)
+state:set_arguments(args) -- 实参表（实现 Arguments 接口）是可选依赖，后补
 
 -- 未声明的 fmt:println 被编译器当作外部变量登记进 exports；
 -- 按名字取到槽位，填上宿主函数即可。

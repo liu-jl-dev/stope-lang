@@ -119,7 +119,9 @@ const args = new MyArgs([1.0, 2.0, 3.0, 4.0, 5.0])
 // Reset 一次做完：清 returns / stack / errors，并按 variableNum 开好槽位。
 // （C++ 侧那句必写的 state.variables.resize(...) 在这里由 Reset 代做。）
 const state = new BasicVM.State()
-state.Reset(api, program, args)
+state.SetApi(api)
+state.SetProgram(program)
+state.SetArguments(args)
 
 // 宿主函数就是「某个变量槽里的值」：编译器把未声明的 fmt:println 当外部变量，
 // 登记进了 exports；按名字取槽位，填上函数即可。

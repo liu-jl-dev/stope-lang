@@ -356,6 +356,7 @@ Python 侧另有几处宿主语言语义要兜（`1.0 / 0` 抛异常、`-7 // 2`
 | Rust 实现（模块、约定、测试）    | [rust/README.md](rust/README.md)                                   |
 | 嵌入 Rust 项目             | [rust/docs/quick-start.md](rust/docs/quick-start.md)                |
 | 新增一份语言实现（移植指南）   | [docs/zh-cn/porting-guide.md](docs/zh-cn/porting-guide.md)         |
+| 八份实现的接口形状对照       | [docs/zh-cn/api-reference.md](docs/zh-cn/api-reference.md)         |
 | C++ 侧实现笔记（改 `cpp/` 前看） | [cpp/docs/development.md](cpp/docs/development.md)             |
 | C++ 侧各模块实现笔记    | [cpp/docs/](cpp/docs/) 下的 `*-test-plan.md`、`expr-optim.md`       |
 | 版本与变更历史         | [CHANGELOG.md](CHANGELOG.md)                                       |

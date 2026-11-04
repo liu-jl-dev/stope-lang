@@ -109,7 +109,8 @@ func main() {
 	// 编译期就知道槽位，所以 Run() 之前就能把值写进去 —— 这才是预导出的用处：
 	// 宿主的「调用」就是写变量 + 跑一遍，不需要额外的参数传递机制。
 	state := &basicvm.State{}
-	state.Reset(basicvm.NewApi(), program, nil)
+	state.SetApi(basicvm.NewApi())
+	state.SetProgram(program)
 	aIdx, _ := program.ExportOf("a")
 	bIdx, _ := program.ExportOf("b")
 	state.Variables[aIdx] = int64(3)

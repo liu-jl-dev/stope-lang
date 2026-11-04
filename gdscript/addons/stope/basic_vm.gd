@@ -32,16 +32,19 @@ class State:
 
 	var errors:Array[String]
 
-	func reset(api_:Api, prog:StopeProgram.Program, args_:Arguments):
+	func set_api(api_:Api):
 		api = api_
+
+	# 绑定程序：按 variable_num 开好槽位、i 归零、清运行态。
+	#（C++ 侧那句必写的 state.variables.resize(...) 在这里由 set_program 代做。）
+	func set_program(prog:StopeProgram.Program):
 		program = prog
-		args = args_
 		returns = []
 		i = 0
 		variables = []; variables.resize(program.variable_num)
 		stack = []
 		errors = []
-	func set_args(args_:Arguments): args = args_
+	func set_arguments(args_:Arguments): args = args_
 
 	# 宿主的报错入口（对应 C++ 的 State::Error）。i 已经指着出错的那条指令，
 	# 所以错误串带上指令名：`"3 Add: msg"`（C++ 是 `"3: msg"`，格式不同但位置同）。
@@ -59,24 +62,35 @@ class State:
 	# 调用 + 返回值判断，在 GDScript 里是实打实的开销，而 run 是执行路径上唯一
 	# 的性能敏感处。代价是两处循环体要保持同步 —— 改步进规则（错误检查、i 推进）
 	# 必须同时改这两个函数。
-	func step() -> bool:
-		if not errors.is_empty(): return false
+	# 执行一条指令。返回 StopeResult（匿名 enum，类型注 int）：Success = 这条
+	# 跑完了且没出错，可以接着 step。返回 Error 有两种情况，靠 errors 区分：
+	#   · errors 非空 —— 出错了，i 停在出错的那条指令上；
+	#   · errors 为空 —— 指令流已经走完（i 越过末尾，返回 Success）。
+	# 所以 `while s.i < ops.size() and s.step() == StopeResult.Success: ...`
+	# 与 run() 等价，连走的条数都一样。
+	#
+	# 与 run 是**两份独立实现**，不互相调用：热循环里每条指令多一次 step()
+	# 调用 + 返回值判断，在 GDScript 里是实打实的开销，而 run 是执行路径上唯一
+	# 的性能敏感处。代价是两处循环体要保持同步 —— 改步进规则（错误检查、i 推进）
+	# 必须同时改这两个函数。
+	func step() -> int:
+		if not errors.is_empty(): return StopeResult.Error
 		var ops := program.opcodes
-		if i >= ops.size(): return false
+		if i >= ops.size(): return StopeResult.Success
 		api.op_map[ops[i]].call(self)
-		if not errors.is_empty(): return false
+		if not errors.is_empty(): return StopeResult.Error
 		i += 1
-		return true
+		return StopeResult.Success
 
-	func run() -> bool: # 没错误时返回 true，否则 false
+	func run() -> int: # 出错返回 Error，否则 Success
 		# ops / n 提到循环外：opcodes 在执行中不会变长（Return 只是把 i 拨到末尾）。
 		var ops := program.opcodes
 		var n := ops.size()
 		while i < n:
 			api.op_map[ops[i]].call(self)
-			if not errors.is_empty(): return false
+			if not errors.is_empty(): return StopeResult.Error
 			i += 1
-		return true
+		return StopeResult.Success
 
 	# 真值判定，逐行照 C++ 的 API::truely：
 	#   null / 整数 0 / 浮点 0.0 / 空字符串 / 空二进制数组 → 假；其余 → 真。

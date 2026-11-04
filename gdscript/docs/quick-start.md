@@ -146,7 +146,7 @@ Program ──┐
 | --- | --- | --- | --- |
 | 1 | 编译源码 | `StopeLexer` `StopeParser` `StopeCompiler` → `Program` | 相对稳定（编译器接口） |
 | 2 | 建指令表 | `StopeBasicVM.Api` | 内置基础 VM（会维护，非标准） |
-| 3 | `State` 装配 | `State.reset(api, program, args)` | 内置基础 VM（会维护，非标准） |
+| 3 | `State` 装配 | `State.set_api / set_program / set_arguments` | 内置基础 VM（会维护，非标准） |
 | 4 | 传参并执行 | `Arguments` `run()` / `step()` / `returns` | 内置基础 VM（会维护，非标准） |
 
 **step 1 和后面三步是分开的**：只想看字节码、只想做静态检查的话，编译完就可以收工，
@@ -233,7 +233,9 @@ var api := StopeBasicVM.Api.new()   # 33 个 Callable，下标 = 指令编号
 
 ```gdscript
 var state := StopeBasicVM.State.new()
-state.reset(api, program, args)   # args 见 §6
+state.set_api(api)
+state.set_program(program)
+state.set_arguments(args)              # args 见 §6
 ```
 
 `reset` 一次做完四件事：清 `returns` / `stack` / `errors`，并
@@ -286,9 +288,11 @@ class MyArgs extends StopeBasicVM.Arguments:
 		return data.size()
 
 var state := StopeBasicVM.State.new()
-state.reset(api, program, MyArgs.new([1.0, 2.0, 3.0, 4.0, 5.0]))
+state.set_api(api)
+state.set_program(program)
+state.set_arguments(MyArgs.new([1.0, 2.0, 3.0, 4.0, 5.0]))
 
-if not state.run():                 # true = 跑完且没出错
+if state.run() != StopeResult.Success:  # Success = 跑完且没出错
 	for e in state.errors: print('[vm] ', e)
 	return
 print('result: ', state.returns[0])
@@ -334,8 +338,10 @@ func _ready() -> void:
 
 	# 2-4. 装配并执行（非标准）
 	var state := StopeBasicVM.State.new()
-	state.reset(StopeBasicVM.Api.new(), program, NoArgs.new())
-	if not state.run():
+	state.set_api(StopeBasicVM.Api.new())
+	state.set_program(program)
+	state.set_arguments(NoArgs.new())
+	if state.run() != StopeResult.Success:
 		push_error(str(state.errors))
 		return
 	print("return = ", state.returns[0])
@@ -353,7 +359,7 @@ func _ready() -> void:
 | --- | --- |
 | `Cannot infer the type of "x" variable` | 类型写成了外层类。静态函数的参数类型也要写内层名：`func f(p: StopeParser.Parser)`，写 `StopeParser` 会让 `:=` 推不出来 |
 | `Could not find type "StopeLexer"` | 插件没启用，或增删过带 `class_name` 的脚本却没重新导入。跑一次 `godot --headless --path <项目> --import` |
-| 用 `if state.run():` 判失败，逻辑反了 | `run()` 返回 `true` 才是成功；而 `compile()` 返回的是 `StopeResult`，**`Success == 0`**，要写 `== StopeResult.Success` |
+| 用 `if state.run():` / `if not state.run():` 判成功失败 | `run()` 和 `compile()` 都返回 `StopeResult`，**`Success == 0`**，按真假判断必反 —— 写 `== StopeResult.Success` / `!= StopeResult.Success` |
 | 取 `state.returns[0]` 报越界 | 源码没有 `return`，`returns` 是空数组。先判 `is_empty()` |
 | `Out of bounds get index '33'`（控制台，`errors` 却是空的） | `op_map` 没扩到 N+1，或扩了但中间留空 `null`。见 [`usage.md`](usage.md) §7.1 |
 | 自定义指令的处理函数永远不被调用 | 编号占进了 0…32，内置实现赢；反汇编也只会印内置指令名 |

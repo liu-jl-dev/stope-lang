@@ -69,7 +69,9 @@ function msgs(errors) {
 function run(src, args = new NoArgs(), custom = null) {
   const p = compile(src, custom)
   const s = new State()
-  s.Reset(new Api(), p, args)
+  s.SetApi(new Api())
+  s.SetProgram(p)
+  s.SetArguments(args)
   const rc = s.Run()
   return { s, rc, p, ret: s.returns, errors: s.errors }
 }
@@ -78,11 +80,15 @@ function run(src, args = new NoArgs(), custom = null) {
 function runBoth(src, args = new NoArgs()) {
   const p = compile(src)
   const a = new State()
-  a.Reset(new Api(), p, args)
+  a.SetApi(new Api())
+  a.SetProgram(p)
+  a.SetArguments(args)
   const rcRun = a.Run()
 
   const b = new State()
-  b.Reset(new Api(), p, new NoArgs())
+  b.SetApi(new Api())
+  b.SetProgram(p)
+  b.SetArguments(new NoArgs())
   let steps = 0
   for (;;) {
     const rc = b.Step()
@@ -166,7 +172,9 @@ describe('VM：宿主接口（argc / args / 宿主函数）', () => {
     const src = 'fmt:println("hi", 7); return 1;'
     const p = compile(src)
     const s = new State()
-    s.Reset(new Api(), p, new NoArgs())
+    s.SetApi(new Api())
+    s.SetProgram(p)
+    s.SetArguments(new NoArgs())
     const called = []
     s.variables[p.exports.get('fmt:println')] = (args) => {
       called.push(args)
@@ -181,7 +189,9 @@ describe('VM：宿主接口（argc / args / 宿主函数）', () => {
     const src = 'f(1);'
     const p = compile(src)
     const s = new State()
-    s.Reset(new Api(), p, new NoArgs())
+    s.SetApi(new Api())
+    s.SetProgram(p)
+    s.SetArguments(new NoArgs())
     assert.equal(s.Run(), Result.Error)
     assert.deepEqual(msgs(s.errors), ['"Call" can only call a function. '])
   })
@@ -189,7 +199,8 @@ describe('VM：宿主接口（argc / args / 宿主函数）', () => {
   test('没有 args 却用 argc -> no args. ', () => {
     const p = compile('return argc;')
     const s = new State()
-    s.Reset(new Api(), p, null)
+    s.SetApi(new Api())
+    s.SetProgram(p)
     assert.equal(s.Run(), Result.Error)
     assert.deepEqual(msgs(s.errors), ['no args. '])
   })
@@ -197,7 +208,9 @@ describe('VM：宿主接口（argc / args / 宿主函数）', () => {
   test('宿主实参表自己报错 -> 立刻停在那条指令', () => {
     const p = compile('return args[9];')
     const s = new State()
-    s.Reset(new Api(), p, new FloatArgs([1.0]))
+    s.SetApi(new Api())
+    s.SetProgram(p)
+    s.SetArguments(new FloatArgs([1.0]))
     assert.equal(s.Run(), Result.Error)
     assert.deepEqual(msgs(s.errors), ['index out of range. '])
   })
@@ -243,7 +256,9 @@ describe('VM：运行期错误', () => {
   test('出错后 Step 不再重复执行同一条指令', () => {
     const p = compile('return 1 / 0;')
     const s = new State()
-    s.Reset(new Api(), p, new NoArgs())
+    s.SetApi(new Api())
+    s.SetProgram(p)
+    s.SetArguments(new NoArgs())
     assert.equal(s.Run(), Result.Error)
     const n = s.errors.length
     assert.equal(s.Step(), Result.Error)
@@ -255,7 +270,9 @@ describe('VM：State 的装配与自检', () => {
   test('Reset 开好变量槽位（不用自己 resize）', () => {
     const p = compile('let a = 1; let b = 2; return a;')
     const s = new State()
-    s.Reset(new Api(), p, new NoArgs())
+    s.SetApi(new Api())
+    s.SetProgram(p)
+    s.SetArguments(new NoArgs())
     assert.equal(s.variables.length, p.variableNum)
     assert.equal(s.variables.length, 2)
   })

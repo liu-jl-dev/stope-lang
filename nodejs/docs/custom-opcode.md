@@ -367,7 +367,9 @@ api.opMap[33] = (s) => {                                // my:add：弹 2 个、
 }
 
 const state = new BasicVM.State()
-state.Reset(api, program, new NoArgs())
+state.SetApi(api)
+state.SetProgram(program)
+state.SetArguments(new NoArgs())
 console.log(state.Run(), state.returns)   // 0 [3n]
 ```
 
@@ -448,7 +450,9 @@ api.opMap[33] = (s) => {
 }
 
 const state = new BasicVM.State()
-state.Reset(api, program, new NoArgs())
+state.SetApi(api)
+state.SetProgram(program)
+state.SetArguments(new NoArgs())
 if (state.Run() !== Result.Success) throw new Error(state.errors.join(''))
 console.log('return = ' + state.returns[0])
 ```
