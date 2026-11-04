@@ -146,5 +146,6 @@ python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 - Stope 不规定虚拟机标准：`Program` 之后的执行方式、值表示、栈布局由实现者决定，
   内置虚拟机只是一种可行解。
 
-[Unreleased]: https://github.com/liu-jl-dev/stope-lang/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/liu-jl-dev/stope-lang/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/liu-jl-dev/stope-lang/releases/tag/v0.2.0
 [0.1.0]: https://github.com/liu-jl-dev/stope-lang/releases/tag/v0.1.0
