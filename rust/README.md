@@ -46,6 +46,7 @@ cargo run --bin demo01   # quick-start：编译 + 执行（与 Python 版输出�
 cargo run --bin demo02   # STML：解析标记文档，切出代码段
 cargo run --bin demo03   # 自定义指令：登记 / 编译 / 反汇编
 cargo run --bin demo04   # 预导出（preExports）+ STML 的 text_line 起始行
+cargo run --bin demo05   # 宿主侧面向对象：Handle 缝 + 手动生命周期
 ```
 
 ## 模块清单
@@ -66,7 +67,12 @@ cargo run --bin demo04   # 预导出（preExports）+ STML 的 text_line 起始�
 | `src/basic_vm.rs`       | 参考执行器（33 条指令 + `set_opcode`，**不是标准**）      |
 | `src/common.rs`         | int64 回绕 / 向零除 / `int_pow`；浮点统一入口            |
 | `src/utf.rs`            | `fmt_g`（printf %g）/ `esc` / `fmt_bytes`                |
-| `src/bin/demo01..04.rs` | 四个 demo                                                |
+| `src/bin/demo01..04.rs`、`src/bin/demo05/` | 五个 demo                                                |
 | `tests/`                | golden 驱动测试 + VM 自写断言                            |
 
-更多上手示例见 [`docs/quick-start.md`](docs/quick-start.md)。
+更多上手示例见 [`docs/quick-start.md`](docs/quick-start.md)；解析 STML（demo02）见
+[`docs/stml.md`](docs/stml.md)；自定义指令（demo03，含怎么真的执行）见
+[`docs/custom-opcode.md`](docs/custom-opcode.md)；预导出（demo04）见
+[`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md)；宿主侧面向对象（demo05，
+含 Rust 内存管理与手动生命周期的关系）见
+[`docs/object-oriented.md`](docs/object-oriented.md)。

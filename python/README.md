@@ -18,6 +18,7 @@ python python/demo/01-quick-start.py        # 编译 + 运行一段 Stope 代码
 python python/demo/02-stml.py               # 只解析一份 STML 文档
 python python/demo/03-custom-opcode.py      # 只编译 + 反汇编（自定义指令）
 python python/demo/04-pre-export.py         # 预导出：宿主先塞形参，再编译函数体
+python python/demo/05-object.py             # 宿主侧面向对象：Handle 缝 + 手动生命周期
 ```
 
 测试与 demo 都**不需要 C++ 工具链**：期望值读的是入库的 `gdscript/test/data/*.txt`
@@ -45,12 +46,12 @@ python/
 │   ├── stml_lexer.py           # STML 四态词法器
 │   └── stml_parser.py          # STML 语法器
 ├── tests/                      # 八组断言 + golden 读取 + 极简 Report（不用 pytest）
-├── demo/                       # 四个可运行示例（教用法，输出不追求跨实现逐字节相同）
+├── demo/                       # 五个可运行示例（教用法，输出不追求跨实现逐字节相同）
 └── docs/                       # quick-start / usage / stml / custom-opcode / testing
 ```
 
 **没做成 pip 包**（没有 `pyproject.toml`）：这套实现的价值是「八份实现对着看」，
-不是发布。`tests/run_tests.py` 与四个 demo 都在开头把 `python/` 插进 `sys.path`，
+不是发布。`tests/run_tests.py` 与五个 demo 都在开头把 `python/` 插进 `sys.path`，
 所以仓库里直接跑就行；真要装，`pip install -e python/` 之前得先补打包配置。
 
 ## 与另外四套实现的关系
@@ -146,6 +147,7 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 | STML 怎么用（逐段讲 `demo/02-stml.py`） | [`docs/stml.md`](docs/stml.md) |
 | 自定义指令（逐段讲 `demo/03-custom-opcode.py`） | [`docs/custom-opcode.md`](docs/custom-opcode.md) |
 | 预导出：编译前先占好槽位（`demo/04-pre-export.py`） | [`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md) |
+| **宿主侧面向对象**（`demo/05-object/`，入口 `demo/05-object.py`）：Handle 缝 + Python 内存管理与手动生命周期 | [`docs/object-oriented.md`](docs/object-oriented.md) |
 | **改实现**：测试怎么跑、数据怎么来、Python 特有的坑 | [`docs/testing.md`](docs/testing.md) |
 | STML / 自定义指令的**语义权威** | [`cpp/docs/stml.md`](../cpp/docs/stml.md)、[`cpp/docs/custom-opcode.md`](../cpp/docs/custom-opcode.md) |
 | 语言本身 | [`docs/zh-cn/syntax-intro.md`](../docs/zh-cn/syntax-intro.md)、[`syntax-reference.md`](../docs/zh-cn/syntax-reference.md) |

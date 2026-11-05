@@ -21,7 +21,7 @@
 | 编译单元 | `src/` 9 个 `*.cpp`：`ast` `ast_visitor` `compiler` `expr_optim` `lexer` `parse_binarr` `parser` `stml_lexer` `stml_parser` |
 | 产物 | `add_library(stope STATIC ...)` → `build/libstope.a` |
 | 测试 | ctest **15/15**：`lexer` `parser` `compiler` `ast_visitor` `stml` `vm` 六个目标 + 9 组 `parser-depth-*` |
-| 示例 | `demo/01-quick-start.cpp` → `demo01`；`demo/02-stml.cpp` → `demo02`；`demo/03-custom-opcode.cpp` → `demo03`；`demo/04-pre-export.cpp` → `demo04`（都未接 ctest） |
+| 示例 | `demo/01-quick-start.cpp` → `demo01`；`demo/02-stml.cpp` → `demo02`；`demo/03-custom-opcode.cpp` → `demo03`；`demo/04-pre-export.cpp` → `demo04`（都未接 ctest）；`demo/05-object.cpp` + `demo/05-object/`（入口在外、模块在目录内）→ `demo05`，宿主侧面向对象，配 [`object-oriented.md`](object-oriented.md) |
 | 依赖 | **零第三方**。C++20 |
 
 19 个头文件里，只有 **`basic_vm.hpp` 与 `debug.hpp` 是 header-only**（内部全是 `inline`）；

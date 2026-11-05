@@ -20,12 +20,13 @@ lua lua/demo/01-quick-start.lua           # 编译 + 运行一段 Stope 代码
 lua lua/demo/02-stml.lua                  # 只解析一份 STML 文档
 lua lua/demo/03-custom-opcode.lua         # 只编译 + 反汇编（自定义指令）
 lua lua/demo/04-pre-export.lua            # 预导出：宿主先塞形参，再编译函数体
+lua lua/demo/05-object.lua                # 宿主侧面向对象：Handle 缝 + 手动生命周期
 ```
 
 测试与 demo 都**不需要 C++ 工具链**：期望值读的是入库的 `gdscript/test/data/*.txt`
 （C++ 探针 dump 出来的唯一真源），本实现不复制第二份。
 
-四个 demo 的输出与 `python/demo/` **逐字节一致**（除行尾）。
+五个 demo 的输出与 `python/demo/` **逐字节一致**（除行尾）。
 
 ## 目录
 
@@ -50,8 +51,8 @@ lua/
 │   ├── stml_parser.lua         # STML 语法器
 │   └── init.lua                # 聚合导出
 ├── tests/                      # 八组断言 + golden 读取 + 极简 Report（不用测试框架）
-├── demo/                       # 四个可运行示例（与 python/demo/ 输出逐字节一致）
-└── docs/                       # quick-start
+├── demo/                       # 五个可运行示例（与 python/demo/ 输出逐字节一致）
+└── docs/                       # quick-start、object-oriented（宿主侧面向对象）
 ```
 
 ## 类型映射（Lua 特有的坑，这份对照最值得记住）
@@ -129,6 +130,10 @@ C++ 是**权威实现**，出现分歧时以 C++ 的实测行为为准。本实�
 | 想看 | 去哪 |
 | --- | --- |
 | 四步上手 + 可复制骨架 + 常见错误 | [`docs/quick-start.md`](docs/quick-start.md) |
+| 解析 STML 文档（demo 02 上手） | [`docs/stml.md`](docs/stml.md) |
+| 加自定义指令（demo 03 上手，含怎么真的执行） | [`docs/custom-opcode.md`](docs/custom-opcode.md) |
+| 预导出：编译前先占好槽位（`demo/04-pre-export.lua`） | [`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md) |
+| **宿主侧面向对象**（demo 05）：Handle 缝 + Lua GC 与手动生命周期 | [`docs/object-oriented.md`](docs/object-oriented.md) |
 | 每个类 / 方法 / 字段 / 返回码（Python 口径，命名一致） | [`../python/docs/usage.md`](../python/docs/usage.md) |
 | STML / 自定义指令的**语义权威** | [`cpp/docs/stml.md`](../cpp/docs/stml.md)、[`cpp/docs/custom-opcode.md`](../cpp/docs/custom-opcode.md) |
 | 语言本身 | [`docs/zh-cn/syntax-intro.md`](../docs/zh-cn/syntax-intro.md)、[`syntax-reference.md`](../docs/zh-cn/syntax-reference.md) |

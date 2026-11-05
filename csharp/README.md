@@ -13,10 +13,11 @@ Stope 语言的 C# 实现：**词法 / 语法 / 编译器 / STML / 参考执行�
 
 ```bash
 # 在仓库根目录下：
-dotnet build csharp/Stope.slnx                    # 库 + 测试 + 四个 demo 一起构建
+dotnet build csharp/Stope.slnx                    # 库 + 测试 + 五个 demo 一起构建
 dotnet run --project csharp/Stope.Tests           # 跑测试（3238 条断言）
 dotnet run --project csharp/demo/01-quick-start   # 编译 + 运行一段 Stope 代码
 dotnet run --project csharp/demo/04-pre-export    # 预导出：宿主先塞形参，再编译函数体
+dotnet run --project csharp/demo/05-object        # 宿主侧面向对象：Handle 缝 + 手动生命周期
 ```
 
 测试不需要 C++ 工具链：期望值读的是入库的 `gdscript/test/data/*.txt`
@@ -26,7 +27,7 @@ dotnet run --project csharp/demo/04-pre-export    # 预导出：宿主先塞形�
 
 ```
 csharp/
-├── Stope.slnx                  # 解决方案（库 / 测试 / 四个 demo）
+├── Stope.slnx                  # 解决方案（库 / 测试 / 五个 demo）
 ├── Stope/                      # 库：一个 .csproj，零依赖
 │   ├── Common.cs               # Result 返回码（Success == 0）
 │   ├── Token.cs / Lexer.cs     # 词法：数字 / 标识符（含 my:add 命名空间）/ 字符串 / 二进制数组
@@ -43,7 +44,7 @@ csharp/
 │   ├── Format.cs               # esc / %g / 字节十六进制，跨实现逐字节一致
 │   └── Stml/                   # STML：Element + 四态词法 + 语法器
 ├── Stope.Tests/                # 控制台测试跑器（自己实现断言，不引测试框架）
-├── demo/                       # 四个可运行示例（教用法，输出不必跨实现逐字节相同）
+├── demo/                       # 五个可运行示例（教用法，输出不必跨实现逐字节相同）
 └── docs/                       # quick-start / usage / stml / custom-opcode / testing
 ```
 
@@ -122,6 +123,7 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 | STML 怎么用（逐段讲 `demo/02`） | [`docs/stml.md`](docs/stml.md) |
 | 自定义指令（逐段讲 `demo/03`） | [`docs/custom-opcode.md`](docs/custom-opcode.md) |
 | 预导出：编译前先占好槽位（`demo/04`） | [`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md) |
+| **宿主侧面向对象**（`demo/05-object/`）：Handle 缝 + .NET GC 与手动生命周期 | [`docs/object-oriented.md`](docs/object-oriented.md) |
 | **改实现**：测试怎么跑、数据怎么来 | [`docs/testing.md`](docs/testing.md) |
 | STML / 自定义指令的**语义权威** | [`cpp/docs/stml.md`](../cpp/docs/stml.md)、[`cpp/docs/custom-opcode.md`](../cpp/docs/custom-opcode.md) |
 | 语言本身 | [`docs/zh-cn/syntax-intro.md`](../docs/zh-cn/syntax-intro.md)、[`syntax-reference.md`](../docs/zh-cn/syntax-reference.md) |

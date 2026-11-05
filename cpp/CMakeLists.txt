@@ -39,6 +39,18 @@ add_executable(demo04 demo/04-pre-export.cpp)
 target_include_directories(demo04 PUBLIC include)
 target_link_libraries(demo04 PRIVATE stope)
 
+add_executable(demo05
+    demo/05-object.cpp
+    demo/05-object/Object.cpp
+    demo/05-object/Class.cpp
+    demo/05-object/Function.cpp
+    demo/05-object/Runtime.cpp
+    demo/05-object/ObjectManager.cpp
+    demo/05-object/API.cpp
+    demo/05-object/DocVisitor.cpp)
+target_include_directories(demo05 PUBLIC include)
+target_link_libraries(demo05 PRIVATE stope)
+
 if(MSVC)
     add_compile_options(/utf-8)
 endif()

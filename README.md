@@ -223,7 +223,7 @@ cd cpp
 cmake -B build -G "MinGW Makefiles"
 cmake --build build
 ctest --test-dir build
-./build/demo01.exe                        # 编译 + 运行；还有 demo02 STML / demo03 自定义指令 / demo04 预导出
+./build/demo01.exe                        # 编译 + 运行；还有 demo02 STML / demo03 自定义指令 / demo04 预导出 / demo05 宿主对象
 cmake --build build --target gen-golden   # 重生成 GDScript 侧的期望值，不属于 ctest
 ```
 
@@ -323,9 +323,11 @@ Python 侧另有几处宿主语言语义要兜（`1.0 / 0` 抛异常、`-7 // 2`
 | 四份跨实现行为契约      | [docs/zh-cn/](docs/zh-cn/) 下的 `*-test-plan.md`                   |
 | C++ 实现总览（入口）    | [cpp/docs/README.md](cpp/docs/README.md)                         |
 | 嵌入 C++ 程序（四步）  | [cpp/docs/quick-start.md](cpp/docs/quick-start.md)               |
-| 解析 STML 文档（上手） | [C++](cpp/docs/stml.md) · [GDScript](gdscript/docs/stml.md) · [Node.js](nodejs/docs/stml.md) · [C#](csharp/docs/stml.md) · [Python](python/docs/stml.md) |
-| 加自定义指令（上手） | [C++](cpp/docs/custom-opcode.md) · [GDScript](gdscript/docs/custom-opcode.md) · [Node.js](nodejs/docs/custom-opcode.md) · [C#](csharp/docs/custom-opcode.md) · [Python](python/docs/custom-opcode.md) |
+| 解析 STML 文档（上手） | [C++](cpp/docs/stml.md) · [GDScript](gdscript/docs/stml.md) · [Node.js](nodejs/docs/stml.md) · [C#](csharp/docs/stml.md) · [Python](python/docs/stml.md) · [Lua](lua/docs/stml.md) · [Go](go/docs/stml.md) · [Rust](rust/docs/stml.md) |
+| 加自定义指令（上手） | [C++](cpp/docs/custom-opcode.md) · [GDScript](gdscript/docs/custom-opcode.md) · [Node.js](nodejs/docs/custom-opcode.md) · [C#](csharp/docs/custom-opcode.md) · [Python](python/docs/custom-opcode.md) · [Lua](lua/docs/custom-opcode.md) · [Go](go/docs/custom-opcode.md) · [Rust](rust/docs/custom-opcode.md) |
 | 编译前先导出宿主变量（预导出） | [docs/zh-cn/pre-export.md](docs/zh-cn/pre-export.md) |
+| 宿主侧面向对象（demo5，教程正典） | [C++](cpp/docs/object-oriented.md) · [GDScript](gdscript/docs/object-oriented.md) · [Node.js](nodejs/docs/object-oriented.md) · [C#](csharp/docs/object-oriented.md) · [Python](python/docs/object-oriented.md) · [Lua](lua/docs/object-oriented.md) · [Go](go/docs/object-oriented.md) · [Rust](rust/docs/object-oriented.md) |
+| 各宿主语言的内存管理对照（demo5/6） | [docs/zh-cn/host-memory.md](docs/zh-cn/host-memory.md) |
 | 构建 / 测试 / 行尾约定 | [cpp/docs/development.md](cpp/docs/development.md)               |
 | 提交信息规范         | [docs/zh-cn/commit-convention.md](docs/zh-cn/commit-convention.md) |
 | 内置虚拟机（基础 VM）   | [cpp/docs/basic-vm.md](cpp/docs/basic-vm.md)                     |

@@ -27,6 +27,7 @@ node demo/01-quick-start.js     # 编译 + 运行：反汇编 + 求和结果
 node demo/02-stml.js            # 只解析 STML，不编译不执行
 node demo/03-custom-opcode.js   # 自定义指令：只编译 + 反汇编
 node demo/04-pre-export.js      # 预导出：宿主先塞形参，再编译函数体
+node demo/05-object.js          # 宿主侧面向对象：Handle 缝 + 手动生命周期
 ```
 
 demo 的输出以可读为准，不追求跨实现逐字节相同 —— 八份 demo 现在大致一致，但那是
@@ -36,7 +37,10 @@ demo 的输出以可读为准，不追求跨实现逐字节相同 —— 八份 
 文档：[`docs/quick-start.md`](docs/quick-start.md)（四步上手，逐段讲 `demo/01`）、
 [`docs/usage.md`](docs/usage.md)（每个模块的签名、字段、返回码、错误总表）、
 [`docs/stml.md`](docs/stml.md)（解析 STML 文档）、
-[`docs/custom-opcode.md`](docs/custom-opcode.md)（加自定义指令并执行）。
+[`docs/custom-opcode.md`](docs/custom-opcode.md)（加自定义指令并执行）、
+[`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md)（预导出，`demo/04`）、
+[`docs/object-oriented.md`](docs/object-oriented.md)（宿主侧面向对象 + JS GC 与
+手动生命周期的关系）。
 改实现的话再看 [`docs/testing.md`](docs/testing.md)（测试怎么跑、三种驱动方式、
 哪些没覆盖）与 [`docs/lexer-test-plan.md`](docs/lexer-test-plan.md)（词法用例清单）。
 
@@ -96,7 +100,10 @@ nodejs/
 │   ├── 01-quick-start.js      # 编译 + 运行（对应 cpp/demo/01、gdscript/demo_01）
 │   ├── 02-stml.js             # 只解析 STML
 │   ├── 03-custom-opcode.js    # 自定义指令：只编译 + 反汇编
-│   └── 04-pre-export.js       # 预导出（Compile 的第三参）
+│   ├── 04-pre-export.js       # 预导出（Compile 的第三参）
+│   ├── 05-object.js           # 宿主侧面向对象（入口；实现拆在 05-object/）
+│   └── 05-object/             # 同上多文件拆分：object / classes / object_manager /
+│                              #   runtime / doc_visitor / api（对应 cpp/demo/05-object/）
 ├── test/
 │   ├── smoke.test.js     # 工程自检：ESM / 零依赖 / exports 不悬空
 │   ├── helpers.js        # lexer 的断言族（对应 C++ 的 EXPECT_* 宏）
@@ -114,6 +121,7 @@ nodejs/
     ├── usage.md            # API 手册：逐模块签名 / 字段 / 返回码 + 错误总表
     ├── stml.md             # STML 教程：回调 → 解析 → 读树 + 可跑骨架
     ├── custom-opcode.md    # 自定义指令教程：登记 → 编译 → 反汇编 → 执行
+    ├── object-oriented.md  # demo/05：宿主侧面向对象 + JS 内存管理的差异
     ├── testing.md          # 测试说明：怎么跑、三种驱动方式、加用例流程、没覆盖的
     └── lexer-test-plan.md  # lexer 测试计划：覆盖矩阵、与 C++ 的差异、交叉验证做法
 ```
