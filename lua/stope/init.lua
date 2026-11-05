@@ -58,6 +58,7 @@ stope.stml_type_name = stope.stml.type_name
 
 -- 示例层（不是标准）
 stope.Api = stope.basic_vm.Api
+stope.Handle = { new = stope.basic_vm.handle_new, is = stope.basic_vm.is_handle }
 stope.State = stope.basic_vm.State
 stope.Arguments = stope.basic_vm.Arguments
 stope.Identifier = stope.basic_vm.Identifier

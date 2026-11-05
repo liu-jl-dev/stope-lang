@@ -7,7 +7,7 @@
 
 use std::rc::Rc;
 use stope::{
-    disasm, fmt_g, Api, Arguments, Compiler, Parser, Prog, Program, Result as StopeResult, State,
+    disasm, fmt_g, Arguments, BaseApi, Compiler, Parser, Prog, Program, Result as StopeResult, State,
     Value,
 };
 
@@ -94,7 +94,7 @@ fn main() {
     // 从这里开始是内置的基础虚拟机，不属于标准；换一个执行器，这段可以整个换掉。
     let program = Rc::new(program);
     let mut state = State::new();
-    state.set_api(Rc::new(Api::new()));
+    state.set_api(Rc::new(BaseApi::new()));
     state.set_program(program.clone());
     state.set_arguments(Rc::new(MyArgs {
         data: vec![

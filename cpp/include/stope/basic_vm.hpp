@@ -128,9 +128,13 @@ struct Value {
     String,
     Identifier,
     HostFunction,
+    Handle,  // 宿主对象的不透明引用：VM 只存转、不解释。无引用计数 —— Clear2 /
+             // Copy 对它天然无操作，值在栈与变量间复制都不会通知宿主；生命周期
+             // 由宿主在安全点扫描 stack / variables 自行清点。所有算术与 At 都
+             // 被既有守卫拒绝，等值比较是同一性（见 equals）。
   };
   union Data {
-    int64_t data;
+    uint64_t data;
     int64_t integer;
     double floating;
     unsigned index;
@@ -208,6 +212,12 @@ struct ProgramConstants {
   std::vector<Value> strings;
   ProgramConstants(const ProgramConstants&) = delete;  // 禁止拷贝
   ProgramConstants& operator=(const ProgramConstants&) = delete;
+  // 移动 = 转移句柄所有权：句柄本身不失效（Allocator 才是拥有者），
+  // 原对象两个向量清空，析构时 Clear() 自然无操作。
+  ProgramConstants(ProgramConstants&& other) noexcept
+      : alloc(other.alloc),
+        binArrs(std::move(other.binArrs)),
+        strings(std::move(other.strings)) {}
   ProgramConstants(Allocator& alloc, const Program& program) {
     this->alloc = &alloc;
     for (auto& data : program.binArrConsts) {
@@ -337,9 +347,38 @@ struct State {
 
 struct API {
   using OpFunc = void (*)(API&, State&);
+
+  // ---- Handle（宿主引用）的三个开口，子类可改写；默认一律报错 ----
+  // 与 PushId（VM 槽位引用）对称：Handle 是宿主引用，可 At 读、Assign 写、
+  // Call 调。VM 不解释它的含义，遇到 Handle 只把值转发给这三个虚函数 ——
+  // 生命周期归宿主（Allocator 不参与）。
+  virtual void HandleAt(State& s,
+                        const Value& handle,
+                        const Value& key,
+                        Value& out) {
+    s.Error("no implement for container type. ");
+  }
+  virtual void HandleAssign(State& s, const Value& handle, const Value& value) {
+    s.Error("no implement for value type. ");
+  }
+  virtual void HandleCall(State& s,
+                          const Value& handle,
+                          std::span<Value> args,
+                          Value& out) {
+    s.Error("\"Call\" can only call a function. ");
+  }
+  virtual ~API() = default;
+
   static void opAssign(API& a, State& s) {
     if (s.stack.size() < 2) {
       s.Error("stack underflow. ");
+      return;
+    }
+    if (s.AtTop(2).type == Value::Type::Handle) {  // 宿主引用：写回宿主
+      a.HandleAssign(s, s.AtTop(2), s.stack.back());
+      if (s.HasError())
+        return;  // 错误时栈保持原样，与其它错误路径一致
+      s.PopN(2);
       return;
     }
     if (s.AtTop(2).type != Value::Type::Identifier) {
@@ -411,6 +450,17 @@ struct API {
     // 不检查 Stack Underflow，因为在编译期检查。
     ++s.i;
     unsigned argNum = s.program->opcodes[s.i];
+    if (s.AtTop(argNum + 1).type ==
+        Value::Type::Handle) {  // 宿主引用：调经宿主
+      Value out;
+      std::span<Value> args(s.stack.data() + s.stack.size() - argNum, argNum);
+      a.HandleCall(s, s.AtTop(argNum + 1), args, out);
+      if (s.HasError())
+        return;
+      s.PopN(argNum);
+      Value::Move(*s.alloc, out, s.stack.back());
+      return;
+    }
     if (s.AtTop(argNum + 1).type != Value::Type::HostFunction) {
       s.Error("\"Call\" can only call a function. ");
     }
@@ -429,6 +479,16 @@ struct API {
     }
     Value& container = s.AtTop(2);
     Value& key = s.AtTop(1);
+    if (container.type == Value::Type::Handle) {  // 宿主引用：读经宿主
+      Value out;
+      a.HandleAt(s, container, key, out);
+      if (s.HasError())
+        return;
+      s.PopN(keyNum + 1);
+      s.stack.emplace_back();
+      Value::Move(*s.alloc, out, s.stack.back());
+      return;
+    }
     if (key.type != Value::Type::Integer) {
       s.Error("index must be integer. ");
       return;
@@ -809,7 +869,8 @@ struct API {
       if (left.type == Value::Type::Null) {
         return true;
       } else if (left.type == Value::Type::Integer ||
-                 left.type == Value::Type::HostFunction) {
+                 left.type == Value::Type::HostFunction ||
+                 left.type == Value::Type::Handle) {  // 引用是同一性比较
         return left.data.data == right.data.data;
       } else if (left.type == Value::Type::Float) {
         // 两个浮点数，值相同时，所有比特不一定相同
@@ -991,7 +1052,7 @@ struct API {
 //      错指令跑第二遍、错误刷两条。**Run 没有这个预检**（它一出错就返回，调用方本就
 //      不该续跑），这是 Step 与 Run 唯一的语义差别。
 //   3. 返回值只管「这条有没有出错」，不管「还有没有下一条」。
-Result State::Step() {
+inline Result State::Step() {
   if (HasError())
     return Result::Error;
   if (i >= static_cast<int>(program->opcodes.size()))
@@ -1003,10 +1064,10 @@ Result State::Step() {
   return Result::Success;
 }
 
-// 一路跑到 Return 或指令流结束。复用 Step：header-only + 隐式 inline，编译期就展开，
+// 一路跑到 Return 或指令流结束。复用 Step：header-only + inline，编译期就展开，
 // 不会比手写循环慢 —— 这与 GDScript 侧「run 和 step 各写一遍」的取舍相反，那边是
 // 真的每次调用都要付出解释器开销。
-Result State::Run() {
+inline Result State::Run() {
   while (i < program->opcodes.size()) {
     if (Step() != Result::Success)
       return Result::Error;

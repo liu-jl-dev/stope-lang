@@ -13,6 +13,7 @@
 
 use crate::common::{int_div, int_mod, int_pow};
 use crate::program::Program;
+use std::any::Any;
 use std::rc::Rc;
 
 /// 宿主函数：参数整包进来，返回一个值（Stope 没有布尔类型，宿主想返回真就给
@@ -31,6 +32,14 @@ pub enum Value {
     HostFunction(HostFn),
     /// 槽位引用。`PushId` 压它（左值），`Assign` 靠它取槽位；其余指令当普通值。
     Identifier(usize),
+    /// 宿主引用（对应 C++ 的 `Value::Type::Handle`）—— 第 7 种可观测值。含义 VM
+    /// 一概不解释：At 读 / Assign 写 / Call 调三个动作经 [`Api`] trait 的
+    /// `handle_at` / `handle_assign` / `handle_call` 方法转交宿主（默认实现一律
+    /// 报错，宿主实现 trait 覆写后才可用）。与 `Identifier`（VM 槽位引用）对称。
+    /// `Rc<dyn Any>` 装什么由宿主定义；两个 Handle 相等当且仅当同一个包装实例
+    /// （equals 的同一性分支）。Rust 没有枚举变体携带「任意宿主对象」的原生写法，
+    /// `Rc<dyn Any>` 是 trait object 的标准答案（宿主侧 `downcast_ref` 取回）。
+    Handle(Rc<dyn Any>),
 }
 
 impl Value {
@@ -56,6 +65,7 @@ impl std::fmt::Debug for Value {
             Value::BinArr(b) => write!(f, "BinArr(len={})", b.len()),
             Value::HostFunction(_) => write!(f, "HostFunction"),
             Value::Identifier(i) => write!(f, "Identifier({})", i),
+            Value::Handle(_) => write!(f, "Handle"),
         }
     }
 }
@@ -114,6 +124,7 @@ pub fn truely(val: &Value) -> bool {
         Value::BinArr(b) => !b.is_empty(),
         Value::HostFunction(_) => true,
         Value::Identifier(_) => true,
+        Value::Handle(_) => true,
     }
 }
 
@@ -128,6 +139,7 @@ pub fn equals(left: &Value, right: &Value) -> bool {
         (Value::Str(a), Value::Str(b)) => a == b,
         (Value::BinArr(a), Value::BinArr(b)) => a == b,
         (Value::HostFunction(a), Value::HostFunction(b)) => Rc::ptr_eq(a, b),
+        (Value::Handle(a), Value::Handle(b)) => Rc::ptr_eq(a, b), // 同一性
         _ => false,
     }
 }
@@ -185,7 +197,7 @@ pub type OpFunc = fn(&mut State);
 
 /// 指令指针 + 变量槽 + 求值栈 + 错误列表。
 pub struct State {
-    pub api: Option<Rc<Api>>,
+    pub api: Option<Rc<dyn Api>>,
     pub program: Option<Rc<Program>>,
     pub args: Option<Rc<dyn Arguments>>,
     pub returns: Vec<Value>,
@@ -220,7 +232,7 @@ impl State {
     /// 三样都要给；同时清 `returns` / `stack` / `errors`，并按 `variable_num`
     /// 开好槽位。
     /// 绑定指令表。
-    pub fn set_api(&mut self, api: Rc<Api>) {
+    pub fn set_api(&mut self, api: Rc<dyn Api>) {
         self.api = Some(api);
     }
 
@@ -265,7 +277,7 @@ impl State {
             return crate::common::Result::Success;
         }
         let op = self.ops()[self.i as usize];
-        let f = self.api.as_ref().unwrap().op_map[op.max(0) as usize];
+        let f = self.api.as_ref().unwrap().op_map()[op.max(0) as usize];
         f(self);
         if !self.errors.is_empty() {
             return crate::common::Result::Error;
@@ -279,7 +291,7 @@ impl State {
         let n = self.ops().len() as isize;
         while self.i < n {
             let op = self.ops()[self.i as usize];
-            let f = self.api.as_ref().unwrap().op_map[op.max(0) as usize];
+            let f = self.api.as_ref().unwrap().op_map()[op.max(0) as usize];
             f(self);
             if !self.errors.is_empty() {
                 return crate::common::Result::Error;
@@ -316,21 +328,52 @@ impl State {
     }
 }
 
-/// 指令分派表。`op_map` 的下标就是指令编号，稠密。要跑自定义指令必须自己扩表 ——
-/// 用 [`Api::set_opcode`]，它会先把中间补齐。
-pub struct Api {
-    pub op_map: Vec<OpFunc>,
-}
+// ============================== Api ==============================
+//
+// Handle（宿主引用）的三个开口 + 指令表。与 C++ API 的同名虚函数语义一致：
+// Rust 的虚分发等价物是 **trait object**——State.api 持 `Rc<dyn Api>`，指令的
+// Handle 分支经 s.api 转发，宿主实现 trait 即可覆写（与 GD/C# 的「继承 Api
+// 覆写」、Go 的「接口 + 内嵌」同构）。注意 op_map 里装的是函数指针，Handle
+// 分支要先 clone Rc 再调用，否则与 State 的 &mut 借用冲突。
 
-impl Default for Api {
-    fn default() -> Self {
-        Api::new()
+/// Api 执行器对宿主的接口：指令分派表 + Handle 的三个开口。
+pub trait Api {
+    /// 指令分派表：下标 = 指令编号，稠密。
+    fn op_map(&self) -> &[OpFunc];
+
+    /// Handle 的 At：读经宿主。默认报错。
+    fn handle_at(&self, _s: &mut State, _handle: &Value, _key: &Value) -> Value {
+        _s.error("no implement for container type. ");
+        Value::Null
+    }
+
+    /// Handle 的 Assign：写回宿主。默认报错。
+    fn handle_assign(&self, _s: &mut State, _handle: &Value, _value: &Value) {
+        _s.error("no implement for value type. ");
+    }
+
+    /// Handle 的 Call：调用经宿主。默认报错。
+    fn handle_call(&self, _s: &mut State, _handle: &Value, _args: &[Value]) -> Value {
+        _s.error("\"Call\" can only call a function. ");
+        Value::Null
     }
 }
 
-impl Api {
+/// 内置实现：33 条内置指令 + 默认报错的 Handle 开口。`op_map` 保持 pub 字段
+/// （`set_opcode` 扩表、测试按长度断言都直接摸它）。
+pub struct BaseApi {
+    pub op_map: Vec<OpFunc>,
+}
+
+impl Default for BaseApi {
+    fn default() -> Self {
+        BaseApi::new()
+    }
+}
+
+impl BaseApi {
     pub fn new() -> Self {
-        Api {
+        BaseApi {
             op_map: vec![
                 op_assign, op_push_null, op_push_false, op_push_true, op_push_int,
                 op_push_float, op_push_string, op_push_binarr, op_push_value, op_push_id,
@@ -343,7 +386,7 @@ impl Api {
         }
     }
 
-    /// 装一条自定义指令的处理函数：`fn(state)`。
+    /// 装一条自定义指令的处理函数。会把中间补齐。
     pub fn set_opcode(&mut self, opcode: i32, f: OpFunc) {
         while self.op_map.len() <= opcode as usize {
             self.op_map.push(op_unimplemented);
@@ -352,11 +395,28 @@ impl Api {
     }
 }
 
+impl Api for BaseApi {
+    fn op_map(&self) -> &[OpFunc] {
+        &self.op_map
+    }
+}
+
 // ============================== 指令 ==============================
 
 fn op_assign(s: &mut State) {
     if s.stack.len() < 2 {
         s.error("stack underflow. ");
+        return;
+    }
+    if let Value::Handle(_) = s.at_top(2) {
+        // 宿主引用：写回宿主（栈纪律在此，值计算在覆写里）
+        let handle = s.at_top(2).clone();
+        let v = s.at_top(1).clone();
+        let api = s.api.clone().unwrap();
+        api.handle_assign(s, &handle, &v);
+        if s.errors.is_empty() {
+            s.pop_n(2);
+        }
         return;
     }
     let is_ident = matches!(s.at_top(2), Value::Identifier(_));
@@ -431,6 +491,18 @@ fn op_call(s: &mut State) {
     s.i += 1;
     let arg_num = s.ops()[s.i as usize] as usize;
     let callee = s.at_top(arg_num + 1).clone();
+    if let Value::Handle(_) = &callee {
+        // 宿主引用：调用经宿主（方法 / 构造器描述符）
+        let argv_h: Vec<Value> = (1..=arg_num).rev().map(|k| s.at_top(k).clone()).collect();
+        let api = s.api.clone().unwrap();
+        let out = api.handle_call(s, &callee, &argv_h);
+        if !s.errors.is_empty() {
+            return;
+        }
+        s.pop_n(arg_num);
+        *s.stack.last_mut().unwrap() = out;
+        return;
+    }
     if !is_func(&callee) {
         s.error("\"Call\" can only call a function. ");
         return;
@@ -455,6 +527,17 @@ fn op_at(s: &mut State) {
     }
     let container = s.at_top(2).clone();
     let key = s.at_top(1).clone();
+    if let Value::Handle(_) = &container {
+        // 宿主引用：读经宿主，key 不限于整数
+        let api = s.api.clone().unwrap();
+        let out = api.handle_at(s, &container, &key);
+        if !s.errors.is_empty() {
+            return;
+        }
+        s.pop_n(key_num as usize + 1);
+        s.stack.push(out);
+        return;
+    }
     if !is_int(&key) {
         s.error("index must be integer. ");
         return;

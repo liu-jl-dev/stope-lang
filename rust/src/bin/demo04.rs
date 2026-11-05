@@ -12,7 +12,7 @@ use stope::common::Result as StopeResult;
 use stope::stml::{Element, LexerState};
 use stope::stml_lexer::Lexer as StmlLexer;
 use stope::stml_parser::{Parser as StmlParser, StateFuncOpt};
-use stope::{Api, Compiler, Lexer, Parser, Prog, Program, State, Value};
+use stope::{BaseApi, Compiler, Lexer, Parser, Prog, Program, State, Value};
 
 const DOC: &str = "
 <stml>
@@ -113,7 +113,7 @@ fn main() {
     // 编译期就知道槽位，所以 run() 之前就能把值写进去 —— 这才是预导出的用处。
     let program = Rc::new(program);
     let mut state = State::new();
-    state.set_api(Rc::new(Api::new()));
+    state.set_api(Rc::new(BaseApi::new()));
     state.set_program(program.clone());
     let a_slot = *program.exports.get("a").unwrap() as usize;
     let b_slot = *program.exports.get("b").unwrap() as usize;

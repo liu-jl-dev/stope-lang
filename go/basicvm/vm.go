@@ -33,6 +33,13 @@ type HostFunction func(argv []Value) Value
 // Identifier 槽位引用。PushId 压它（左值），Assign 靠它取槽位；其余指令当普通值。
 type Identifier struct{ Index int }
 
+// Handle 宿主引用（对应 C++ 的 Value::Type::Handle）—— 第 7 种可观测值。
+// 含义 VM 一概不解释：At 读 / Assign 写 / Call 调三个动作经 Api 接口的
+// HandleAt / HandleAssign / HandleCall 方法转交宿主（默认实现一律报错，宿主
+// 内嵌 BaseApi 覆写后才可用）。与 Identifier（VM 槽位引用）对称。Data 装什么
+// 由宿主定义；两个 Handle 相等当且仅当同一个包装实例（Equals 的同一性分支）。
+type Handle struct{ Data any }
+
 // Arguments 宿主的实参表。取不到就自己报错：At 里先调 state.Error(...) 再返回 nil。
 type Arguments interface {
 	At(state *State, key Value) Value
@@ -132,6 +139,11 @@ func Equals(left, right Value) bool {
 		_ = rfn
 		return false
 	}
+	lh, lhok := left.(*Handle)
+	rh, rhok := right.(*Handle)
+	if lhok && rhok {
+		return lh == rh // 同一性
+	}
 	return false
 }
 
@@ -173,7 +185,7 @@ func checkIntZero(s *State, op string, left, right Value) bool {
 
 // State 指令指针 + 变量槽 + 求值栈 + 错误列表。
 type State struct {
-	Api       *Api
+	Api       Api
 	Program   *stope.Program
 	Args      Arguments
 	Returns   []Value
@@ -184,7 +196,7 @@ type State struct {
 }
 
 // SetApi 绑定指令表。
-func (s *State) SetApi(api *Api) { s.Api = api }
+func (s *State) SetApi(api Api) { s.Api = api }
 
 // SetProgram 绑定程序：按 VariableNum 开好槽位、I 归零、清运行态。
 //（C++ 侧那句必写的 state.variables.resize(...) 在这里由 SetProgram 代做。）
@@ -220,7 +232,7 @@ func (s *State) Step() stope.Result {
 	if s.I >= len(s.Program.Opcodes) {
 		return stope.RSuccess
 	}
-	s.Api.OpMap[s.Program.Opcodes[s.I]](s)
+	s.Api.OpTable()[s.Program.Opcodes[s.I]](s)
 	if len(s.Errors) > 0 {
 		return stope.RError
 	}
@@ -233,7 +245,7 @@ func (s *State) Step() stope.Result {
 func (s *State) Run() stope.Result {
 	ops := s.Program.Opcodes // 执行中不会变长（Return 只是把 I 拨到末尾）
 	n := len(ops)
-	opMap := s.Api.OpMap
+	opMap := s.Api.OpTable()
 	for s.I < n {
 		opMap[ops[s.I]](s)
 		if len(s.Errors) > 0 {
@@ -269,6 +281,14 @@ func (s *State) storeBinary(result Value) {
 func opAssign(s *State) {
 	if len(s.Stack) < 2 {
 		s.Error("stack underflow. ")
+		return
+	}
+	if h, ok := s.atTop(2).(*Handle); ok {
+		// 宿主引用：写回宿主（栈纪律在此，值计算在覆写里）
+		s.Api.HandleAssign(s, h, s.Stack[len(s.Stack)-1])
+		if !s.HasError() {
+			s.popN(2)
+		}
 		return
 	}
 	target, ok := s.atTop(2).(Identifier)
@@ -319,6 +339,20 @@ func opCall(s *State) {
 	s.I++
 	argNum := s.Program.Opcodes[s.I]
 	callee := s.atTop(argNum + 1)
+	if h, ok := callee.(*Handle); ok {
+		// 宿主引用：调用经宿主（方法 / 构造器描述符）
+		argvH := make([]Value, argNum)
+		for k := 0; k < argNum; k++ {
+			argvH[k] = s.atTop(argNum - k)
+		}
+		outH := s.Api.HandleCall(s, h, argvH)
+		if s.HasError() {
+			return
+		}
+		s.popN(argNum)
+		s.Stack[len(s.Stack)-1] = outH
+		return
+	}
 	fn, ok := callee.(HostFunction)
 	if !ok {
 		s.Error("\"Call\" can only call a function. ")
@@ -348,6 +382,16 @@ func opAt(s *State) {
 	}
 	container := s.atTop(2)
 	key := s.atTop(1)
+	if h, ok := container.(*Handle); ok {
+		// 宿主引用：读经宿主，key 不限于整数
+		out := s.Api.HandleAt(s, h, key)
+		if s.HasError() {
+			return
+		}
+		s.popN(keyNum + 1)
+		s.Stack = append(s.Stack, out)
+		return
+	}
 	if !isInt(key) {
 		s.Error("index must be integer. ")
 		return
@@ -704,16 +748,31 @@ func opUnimplemented(s *State) {
 
 // ============================== Api ==============================
 
-// Api 指令分派表。OpMap 的下标就是指令编号，稠密（与 C++ 的
-// std::array<OpFunc, kOpCount> 同形）。要跑自定义指令必须自己扩表 —— 用 SetOpcode，
-// 它会先把中间补齐，否则中间的空格会在 Run 时静默走到占位函数上。
-type Api struct {
+// Api 执行器对宿主的接口：指令分派表 + Handle 的三个开口。Handle（宿主引用）
+// 的三个开口是接口方法，内置实现（BaseApi）一律报错——与 C++ API 的同名虚
+// 函数语义一致。宿主内嵌 BaseApi 覆写三个方法即可：State.Api 持接口，指令的
+// Handle 分支经 s.Api 转发，覆写自然生效。栈纪律（弹参、压返回值）由指令负责，
+// 覆写者只管算值、出错时 s.Error(...)。
+//
+// ⚠ Go 没有 class 继承：虚分发等价物就是接口 —— 与 GD/C# 的「继承 Api 覆写」
+// 同构（Go 的覆写 = 内嵌 + 同名方法遮蔽）。
+type Api interface {
+	// OpTable 指令分派表：下标 = 指令编号，稠密。
+	OpTable() []func(*State)
+
+	HandleAt(s *State, handle *Handle, key Value) Value
+	HandleAssign(s *State, handle *Handle, value Value)
+	HandleCall(s *State, handle *Handle, args []Value) Value
+}
+
+// BaseApi 内置实现：33 条内置指令 + 默认报错的 Handle 开口。
+type BaseApi struct {
 	OpMap []func(*State)
 }
 
 // NewApi 构造内置 33 条指令的分派表。
-func NewApi() *Api {
-	return &Api{OpMap: []func(*State){
+func NewApi() *BaseApi {
+	return &BaseApi{OpMap: []func(*State){
 		opAssign, opPushNull, opPushFalse, opPushTrue, opPushInt,
 		opPushFloat, opPushString, opPushBinarr, opPushValue, opPushId,
 		opCall, opAt, opPop, opMinus, opNot,
@@ -724,8 +783,28 @@ func NewApi() *Api {
 	}}
 }
 
+// OpTable 实现 Api 接口。
+func (a *BaseApi) OpTable() []func(*State) { return a.OpMap }
+
+// HandleAt 默认报错（宿主内嵌 BaseApi 后覆写）。
+func (a *BaseApi) HandleAt(_s *State, _handle *Handle, _key Value) Value {
+	_s.Error("no implement for container type. ")
+	return nil
+}
+
+// HandleAssign 默认报错。
+func (a *BaseApi) HandleAssign(_s *State, _handle *Handle, _value Value) {
+	_s.Error("no implement for value type. ")
+}
+
+// HandleCall 默认报错。
+func (a *BaseApi) HandleCall(_s *State, _handle *Handle, _args []Value) Value {
+	_s.Error("\"Call\" can only call a function. ")
+	return nil
+}
+
 // SetOpcode 装一条自定义指令的处理函数：fn(state)。会先把中间补成占位函数。
-func (a *Api) SetOpcode(opcode int, fn func(*State)) {
+func (a *BaseApi) SetOpcode(opcode int, fn func(*State)) {
 	for len(a.OpMap) <= opcode {
 		a.OpMap = append(a.OpMap, opUnimplemented)
 	}

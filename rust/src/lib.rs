@@ -29,7 +29,7 @@ pub mod token;
 pub mod utf;
 
 pub use ast::{Prog, Stmt, Expr};
-pub use basic_vm::{Api, Arguments, State, Value};
+pub use basic_vm::{Api, Arguments, BaseApi, State, Value};
 pub use common::Result;
 pub use compiler::Compiler;
 pub use disasm::{custom_opcode_has_arg, disasm, disasm_no_custom, opcode_has_arg};

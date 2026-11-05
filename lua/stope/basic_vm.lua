@@ -53,6 +53,27 @@ function basic_vm.str_bytes(v)
     return nil
 end
 
+-- ============================== Handle 包装 ==============================
+--
+-- 宿主引用（对应 C++ 的 Value::Type::Handle）—— 第 7 种可观测值。含义 VM 一概
+-- 不解释：At 读 / Assign 写 / Call 调三个动作经 Api 的 handle_at / handle_assign /
+-- handle_call 方法转交宿主（默认实现一律报错，宿主覆写后才可用）。与 Identifier
+-- （VM 槽位引用）对称——Identifier 是 VM 自己的左值，Handle 是宿主世界的引用。
+-- data 装什么由宿主定义；两个 Handle 相等当且仅当同一个包装实例（equals 的
+-- 同一性分支；table 的 == 天然按同一性）。
+
+local HANDLE_MT = { __name = "StopeHandle" }
+
+--- 把宿主引用包成 Handle 值。
+function basic_vm.handle_new(data)
+    return setmetatable({ data = data }, HANDLE_MT) -- 宿主引用，语义由宿主定义
+end
+
+--- 是 Handle 值？
+function basic_vm.is_handle(v)
+    return type(v) == "table" and getmetatable(v) == HANDLE_MT
+end
+
 --- 是序列（String / BinArr）？——VM 层面的序列判断。
 local function is_seq(v)
     return basic_vm.is_str_value(v) or type(v) == "string"
@@ -134,6 +155,9 @@ function basic_vm.equals(left, right)
     end
     if type(left) == "function" and type(right) == "function" then
         return left == right
+    end
+    if basic_vm.is_handle(left) and basic_vm.is_handle(right) then
+        return left == right -- 同一性
     end
     return false
 end
@@ -288,6 +312,14 @@ local function op_assign(s)
         return
     end
     local target = s:at_top(2)
+    if basic_vm.is_handle(target) then
+        -- 宿主引用：写回宿主（栈纪律在此，值计算在覆写里）
+        s.api:handle_assign(s, target, s.stack[#s.stack])
+        if not s:has_error() then
+            s:pop_n(2)
+        end
+        return
+    end
     if not is_identifier(target) then
         s:error("no implement for value type. ")
         return
@@ -337,6 +369,20 @@ local function op_call(s)
     s.i = s.i + 1
     local arg_num = s.program.opcodes[s.i + 1]
     local callee = s:at_top(arg_num + 1)
+    if basic_vm.is_handle(callee) then
+        -- 宿主引用：调用经宿主（方法 / 构造器描述符）
+        local argv_h = {}
+        for k = arg_num, 1, -1 do
+            argv_h[#argv_h + 1] = s:at_top(k)
+        end
+        local out_h = s.api:handle_call(s, callee, argv_h)
+        if s:has_error() then
+            return
+        end
+        s:pop_n(arg_num)
+        s.stack[#s.stack] = out_h
+        return
+    end
     if not basic_vm.is_func(callee) then
         s:error('"Call" can only call a function. ')
         return
@@ -360,6 +406,16 @@ local function op_at(s)
     end
     local container = s:at_top(2)
     local key = s:at_top(1)
+    if basic_vm.is_handle(container) then
+        -- 宿主引用：读经宿主，key 不限于整数
+        local out = s.api:handle_at(s, container, key)
+        if s:has_error() then
+            return
+        end
+        s:pop_n(key_num + 1)
+        s.stack[#s.stack + 1] = out
+        return
+    end
     if not basic_vm.is_int(key) then
         s:error("index must be integer. ")
         return
@@ -665,6 +721,30 @@ function Api:set_opcode(opcode, fn)
         self.op_map[#self.op_map + 1] = op_unimplemented
     end
     self.op_map[opcode + 1] = fn
+end
+
+-- ---------------- Handle（宿主引用）的三个开口 ----------------
+-- 默认实现一律报错（与 C++ API 的同名虚函数语义一致）。宿主覆写后，At / Assign /
+-- Call 遇到 Handle 才会走进宿主的实现。注意 op_map 里的指令是模块级函数，Handle
+-- 分支经 **s.api**（State 挂着的 Api 实例）转发——Lua 没有 class 继承语法，惯用
+-- 法是在实例上覆写这三个字段（或用元表链做子类）。栈纪律（弹参、压返回值）由
+-- 上面的指令负责，覆写者只管算值、出错时 s:error(...)。
+
+--- Handle 的 At：读经宿主。默认报错。
+function Api:handle_at(_s, _handle, _key)
+    _s:error("no implement for container type. ")
+    return NULL
+end
+
+--- Handle 的 Assign：写回宿主。默认报错。
+function Api:handle_assign(_s, _handle, _value)
+    _s:error("no implement for value type. ")
+end
+
+--- Handle 的 Call：调用经宿主。默认报错。
+function Api:handle_call(_s, _handle, _args)
+    _s:error('"Call" can only call a function. ')
+    return NULL
 end
 
 return basic_vm

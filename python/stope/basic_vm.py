@@ -48,6 +48,22 @@ class Identifier:
         return f"Identifier({self.index})"
 
 
+class Handle:
+    """宿主引用（对应 C++ 的 ``Value::Type::Handle``）—— 第 7 种可观测值。
+
+    含义 VM 一概不解释：At 读 / Assign 写 / Call 调三个动作经 :class:`Api` 的
+    ``handle_at`` / ``handle_assign`` / ``handle_call`` 虚方法转交宿主（默认实现
+    一律报错，宿主继承 Api 覆写后才可用）。与 :class:`Identifier`（VM 槽位引用）
+    对称——Identifier 是 VM 自己的左值，Handle 是宿主世界的引用。``data`` 装什么
+    由宿主定义；两个 Handle 相等当且仅当同一个包装实例（equals 的同一性分支）。
+    """
+
+    __slots__ = ("data",)
+
+    def __init__(self, data):
+        self.data = data  # 宿主引用，语义由宿主定义
+
+
 class Arguments:
     """宿主的实参表。取不到就**自己报错**：``state.error(...)`` 之后返回 ``None`` ——
     与 C++ 的 ``At(State&, const Value&, Value&) -> Result`` 等价（错误进同一个
@@ -145,6 +161,8 @@ def equals(left, right) -> bool:
         return bytes(left) == bytes(right)
     if is_func(left) and is_func(right):
         return left is right
+    if isinstance(left, Handle) and isinstance(right, Handle):
+        return left is right  # 同一性
     return False
 
 
@@ -291,6 +309,12 @@ def _op_assign(s: State) -> None:
         s.error("stack underflow. ")
         return
     target = s.at_top(2)
+    if isinstance(target, Handle):
+        # 宿主引用：写回宿主（栈纪律在此，值计算在覆写里）
+        s.api.handle_assign(s, target, s.stack[-1])
+        if not s.errors:
+            s.pop_n(2)
+        return
     if not isinstance(target, Identifier):
         s.error("no implement for value type. ")
         return
@@ -345,6 +369,15 @@ def _op_call(s: State) -> None:
     s.i += 1
     arg_num = s.program.opcodes[s.i]
     callee = s.at_top(arg_num + 1)
+    if isinstance(callee, Handle):
+        # 宿主引用：调用经宿主（方法 / 构造器描述符）
+        argv_h = [s.at_top(k) for k in range(arg_num, 0, -1)]
+        out_h = s.api.handle_call(s, callee, argv_h)
+        if s.errors:
+            return
+        s.pop_n(arg_num)
+        s.stack[-1] = out_h
+        return
     if not is_func(callee):
         s.error('"Call" can only call a function. ')
         return
@@ -368,6 +401,14 @@ def _op_at(s: State) -> None:
         return
     container = s.at_top(2)
     key = s.at_top(1)
+    if isinstance(container, Handle):
+        # 宿主引用：读经宿主，key 不限于整数
+        out = s.api.handle_at(s, container, key)
+        if s.errors:
+            return
+        s.pop_n(key_num + 1)
+        s.stack.append(out)
+        return
     if not is_int(key):
         s.error("index must be integer. ")
         return
@@ -636,10 +677,29 @@ class Api:
             self.op_map.append(_op_unimplemented)
         self.op_map[opcode] = fn
 
+    # ---------------- Handle（宿主引用）的三个开口 ----------------
+    # 默认实现一律报错（与 C++ API 的同名虚函数语义一致）。宿主继承 Api 覆写后，
+    # At / Assign / Call 遇到 Handle 才会走进宿主的实现。注意 op_map 里的指令是
+    # 模块级函数，Handle 分支经 **s.api**（State 挂着的 Api 实例）转发——覆写
+    # 自然生效。栈纪律（弹参、压返回值）由上面的指令负责，覆写者只管算值、
+    # 出错时 s.error(...)。
+
+    def handle_at(self, s: "State", handle: "Handle", key):
+        s.error("no implement for container type. ")
+        return None
+
+    def handle_assign(self, s: "State", handle: "Handle", value) -> None:
+        s.error("no implement for value type. ")
+
+    def handle_call(self, s: "State", handle: "Handle", args: list):
+        s.error('"Call" can only call a function. ')
+        return None
+
 
 __all__ = [
     "Api",
     "Arguments",
+    "Handle",
     "Identifier",
     "Opcode",
     "State",

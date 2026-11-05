@@ -6,7 +6,7 @@
 
 use common::fmt_g;
 use std::rc::Rc;
-use stope::basic_vm::{equals, truely, Arguments, Api, State, Value};
+use stope::basic_vm::{equals, truely, Arguments, BaseApi, State, Value};
 use stope::common::Result as StopeResult;
 use stope::opcode::{Opcode, K_FIRST_CUSTOM_OPCODE};
 use stope::{Compiler, CustomOpcodeConfig, Parser, Prog, Program};
@@ -67,7 +67,7 @@ fn compile(src: &str, custom: Option<Rc<CustomOpcodeConfig>>) -> (Option<Program
 
 fn state_with(prog: &Program, args: Option<Rc<dyn Arguments>>) -> State {
     let mut s = State::new();
-    s.set_api(Rc::new(Api::new()));
+    s.set_api(Rc::new(BaseApi::new()));
     s.set_program(Rc::new(prog.clone()));
     if let Some(a) = args {
         s.set_arguments(a);
@@ -109,6 +109,7 @@ fn fmt(v: &Value) -> String {
         Value::BinArr(b) => format!("[{}]", b.iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")),
         Value::HostFunction(_) => "<other>".to_string(),
         Value::Identifier(_) => "<other>".to_string(),
+        Value::Handle(_) => "<handle>".to_string(),
     }
 }
 
@@ -318,7 +319,7 @@ fn vm_custom_opcode() {
         s.error("boom. ");
     }
 
-    let mut api = Api::new();
+    let mut api = BaseApi::new();
     api.set_opcode(K_FIRST_CUSTOM_OPCODE, boom);
     let mut s = State::new();
     s.set_api(Rc::new(api));
@@ -330,9 +331,9 @@ fn vm_custom_opcode() {
     assert_eq!("0: boom. ", s.errors.join("|"), "V-05: 错误全文");
 
     // 跳号注册：33 是刚注册的，34/35 必须补成占位函数而不是留空
-    let api2 = Api::new();
+    let api2 = BaseApi::new();
     assert_eq!(K_FIRST_CUSTOM_OPCODE as usize, api2.op_map.len(), "V-05b: 内置表长度");
-    let mut api3 = Api::new();
+    let mut api3 = BaseApi::new();
     api3.set_opcode(K_FIRST_CUSTOM_OPCODE + 2, boom);
     assert_eq!((K_FIRST_CUSTOM_OPCODE + 3) as usize, api3.op_map.len(), "V-05b: 补齐后长度");
 }

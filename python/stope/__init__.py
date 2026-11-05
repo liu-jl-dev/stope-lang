@@ -19,7 +19,7 @@ __version__ = "0.2.0"  # 版本落点之一，改这里要一并改其余各处�
 
 from . import ast as AST
 from .ast_visitor import ASTVisitor
-from .basic_vm import Api, Arguments, Identifier, State
+from .basic_vm import Api, Arguments, Handle, Identifier, State
 from .binarr_parser import BinaryArrayParser
 from .common import Result
 from .compiler import Compiler

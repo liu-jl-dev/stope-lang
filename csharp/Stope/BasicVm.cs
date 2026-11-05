@@ -13,6 +13,21 @@ public sealed class Identifier
 }
 
 /// <summary>
+/// 宿主引用（对应 C++ 的 <c>Value::Type::Handle</c>）—— 第 7 种可观测值。含义 VM 一概
+/// 不解释：At 读 / Assign 写 / Call 调三个动作经 <see cref="Api"/> 的
+/// <see cref="Api.HandleAt"/> / <see cref="Api.HandleAssign"/> / <see cref="Api.HandleCall"/>
+/// 虚方法转交宿主（默认实现一律报错，宿主继承 Api 覆写后才可用）。
+/// 与 <see cref="Identifier"/>（VM 槽位引用）对称。<see cref="Data"/> 装什么由宿主定义；
+/// 两个 Handle 相等当且仅当同一个包装实例（equals 的同一性分支）。
+/// </summary>
+public sealed class Handle
+{
+    public object? Data; // 宿主引用，语义由宿主定义
+
+    public Handle(object? data) => Data = data;
+}
+
+/// <summary>
 /// 宿主的实参表。取不到就<b>自己报错</b>：<c>state.Error(...)</c> 然后返回 null ——
 /// 与 C++ 的 <c>at(State&amp;, const Value&amp;, Value&amp; out) -&gt; Result</c> 等价
 /// （错误进同一个 <see cref="State.Errors"/>，执行器立刻停）。
@@ -159,8 +174,15 @@ public sealed class State
 /// <c>OpMap.Add(...)</c> 到 N 且 0..N 每格都是有效委托；否则 <c>State.Step</c> 会抛
 /// <see cref="ArgumentOutOfRangeException"/>。
 /// </para>
+/// <para>
+/// Handle（宿主引用）的三个开口是<b>虚方法</b>，默认实现一律报错（与 C++ API 的同名虚函数
+/// 语义一致）。宿主继承 Api 覆写后，At / Assign / Call 遇到 Handle 才会走进宿主的实现。
+/// 注意 <see cref="OpMap"/> 里的指令是 <see cref="Ops"/> 的静态方法，Handle 分支经
+/// <b><c>s.Api</c></b>（State 挂着的 Api 实例）转发——覆写自然生效。栈纪律（弹参、压返回值）
+/// 由指令负责，覆写者只管算值、出错时 <c>s.Error(...)</c>。
+/// </para>
 /// </summary>
-public sealed class Api
+public class Api
 {
     public readonly List<Action<State>> OpMap = new()
     {
@@ -172,6 +194,23 @@ public sealed class Api
         Ops.LE, Ops.GT, Ops.GE, Ops.If, Ops.GoTo,
         Ops.GetArg, Ops.ArgNum, Ops.Return,
     };
+
+    public virtual object? HandleAt(State s, Handle handle, object? key)
+    {
+        s.Error("no implement for container type. ");
+        return null;
+    }
+
+    public virtual void HandleAssign(State s, Handle handle, object? value)
+    {
+        s.Error("no implement for value type. ");
+    }
+
+    public virtual object? HandleCall(State s, Handle handle, object?[] args)
+    {
+        s.Error("\"Call\" can only call a function. ");
+        return null;
+    }
 }
 
 /// <summary>运行期值判定与整数运算的小工具。</summary>
@@ -230,6 +269,8 @@ public static class Runtime
         }
         if (left is Func<object?[], object?> lf2 && right is Func<object?[], object?> rf2)
             return ReferenceEquals(lf2, rf2);
+        if (left is Handle lh && right is Handle rh)
+            return ReferenceEquals(lh, rh); // 同一性
         return false;
     }
 
@@ -307,6 +348,13 @@ public static class Ops
             s.Error("stack underflow. ");
             return;
         }
+        if (s.AtTop(2) is Handle h)
+        {
+            // 宿主引用：写回宿主（栈纪律在此，值计算在覆写里）
+            s.Api.HandleAssign(s, h, s.Stack[^1]);
+            if (!s.HasError()) s.PopN(2);
+            return;
+        }
         if (s.AtTop(2) is not Identifier id)
         {
             s.Error("no implement for value type. ");
@@ -365,6 +413,17 @@ public static class Ops
         // 不检查栈下溢：参数个数在编译期就定了
         ++s.I;
         int argNum = s.Program.Opcodes[s.I];
+        if (s.AtTop(argNum + 1) is Handle hCall)
+        {
+            // 宿主引用：调用经宿主（方法 / 构造器描述符）
+            var argvH = new object?[argNum];
+            for (int k = argNum; k >= 1; --k) argvH[argNum - k] = s.AtTop(k);
+            var outH = s.Api.HandleCall(s, hCall, argvH);
+            if (s.HasError()) return;
+            s.PopN(argNum);
+            s.Stack[^1] = outH;
+            return;
+        }
         if (s.AtTop(argNum + 1) is not Func<object?[], object?> callee)
         {
             s.Error("\"Call\" can only call a function. ");
@@ -389,6 +448,15 @@ public static class Ops
         }
         var container = s.AtTop(2);
         var key = s.AtTop(1);
+        if (container is Handle hAt)
+        {
+            // 宿主引用：读经宿主，key 不限于整数
+            var outAt = s.Api.HandleAt(s, hAt, key);
+            if (s.HasError()) return;
+            s.PopN(keyNum + 1);
+            s.Stack.Add(outAt);
+            return;
+        }
         if (key is not long k)
         {
             s.Error("index must be integer. ");

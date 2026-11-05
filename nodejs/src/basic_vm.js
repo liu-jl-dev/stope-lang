@@ -27,6 +27,17 @@ class Identifier {
   }
 }
 
+// 宿主引用（对应 C++ 的 Value::Type::Handle）—— 第 7 种可观测值。含义 VM 一概
+// 不解释：At 读 / Assign 写 / Call 调三个动作经 Api 的 handleAt / handleAssign /
+// handleCall 虚方法转交宿主（默认实现一律报错，宿主继承 Api 覆写后才可用）。
+// 与 Identifier（VM 槽位引用）对称。data 装什么由宿主定义；两个 Handle 相等
+// 当且仅当同一个包装实例（equals 的同一性分支）。
+class Handle {
+  constructor(data) {
+    this.data = data // 宿主引用，语义由宿主定义
+  }
+}
+
 // 宿主的实参表。取不到就**自己报错**：state.error(...) + 返回 null ——
 // 与 C++ 的 at(State&, const Value&, Value& out) -> Result 等价
 // （错误进同一个 errors，执行器立刻停）。
@@ -181,6 +192,24 @@ class Api {
       opGetArg, opArgNum, opReturn,
     ]
   }
+
+  // ---------------- Handle（宿主引用）的三个开口 ----------------
+  // 默认实现一律报错（与 C++ API 的同名虚函数语义一致）。宿主继承 Api 覆写后，
+  // At / Assign / Call 遇到 Handle 才会走进宿主的实现。注意 opMap 里的指令是
+  // 模块级函数，Handle 分支经 **s.api**（State 挂着的 Api 实例）转发 —— 覆写
+  // 自然生效，栈纪律（弹参、压返回值）由指令负责，覆写者只管算值、出错时
+  // s.Error(...)。
+  handleAt(_s, _handle, _key) {
+    _s.Error('no implement for container type. ')
+    return null
+  }
+  handleAssign(_s, _handle, _value) {
+    _s.Error('no implement for value type. ')
+  }
+  handleCall(_s, _handle, _args) {
+    _s.Error('"Call" can only call a function. ')
+    return null
+  }
 }
 
 // ================================ 真值 ================================
@@ -231,6 +260,7 @@ function equals(left, right) {
     return true
   }
   if (isFunc(left) && isFunc(right)) return left === right
+  if (left instanceof Handle && right instanceof Handle) return left === right // 同一性
   return false
 }
 
@@ -248,6 +278,12 @@ function greaterThan(s, left, right) {
 function opAssign(s) {
   if (s.stack.length < 2) {
     s.Error('stack underflow. ')
+    return
+  }
+  if (s.AtTop(2) instanceof Handle) {
+    // 宿主引用：写回宿主（栈纪律在此，值计算在覆写里）
+    s.api.handleAssign(s, s.AtTop(2), s.stack[s.stack.length - 1])
+    if (!s.HasError()) s.PopN(2)
     return
   }
   if (!(s.AtTop(2) instanceof Identifier)) {
@@ -300,6 +336,16 @@ function opCall(s) {
   ++s.i
   const argNum = s.program.opcodes[s.i]
   const callee = s.AtTop(argNum + 1)
+  if (callee instanceof Handle) {
+    // 宿主引用：调用经宿主（方法 / 构造器描述符）
+    const argvH = []
+    for (let k = argNum; k >= 1; --k) argvH.push(s.AtTop(k))
+    const outH = s.api.handleCall(s, callee, argvH)
+    if (s.HasError()) return
+    s.PopN(argNum)
+    s.stack[s.stack.length - 1] = outH
+    return
+  }
   if (!isFunc(callee)) {
     s.Error('"Call" can only call a function. ')
     return
@@ -321,6 +367,14 @@ function opAt(s) {
   }
   const container = s.AtTop(2)
   const key = s.AtTop(1)
+  if (container instanceof Handle) {
+    // 宿主引用：读经宿主，key 不限于整数
+    const out = s.api.handleAt(s, container, key)
+    if (s.HasError()) return
+    s.PopN(keyNum + 1)
+    s.stack.push(out)
+    return
+  }
   if (!isInt(key)) {
     s.Error('index must be integer. ')
     return
@@ -580,4 +634,4 @@ function opReturn(s) {
   s.i = s.program.opcodes.length
 }
 
-export { Api, State, Arguments, Identifier, Opcode, truely, equals }
+export { Api, State, Arguments, Identifier, Handle, Opcode, truely, equals }

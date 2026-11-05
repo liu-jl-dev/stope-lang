@@ -12,6 +12,16 @@ class Identifier:
 	var index:int
 	func _init(index_:int): index = index_
 
+# 宿主引用（对应 C++ 的 Value::Type::Handle）。这是 VM 里第 7 种可观测值，
+# 含义 VM 一概不解释：At 读 / Assign 写 / Call 调三个动作经 Api 的
+# handle_at / handle_assign / handle_call 虚方法转交宿主（默认实现一律报错，
+# 宿主继承 Api 覆写后才可用）。与 Identifier（VM 槽位引用）对称——Identifier
+# 是 VM 自己的左值，Handle 是宿主世界的引用。data 装什么由宿主定义；两个
+# Handle 相等当且仅当同一个包装实例（equals 的同一性分支）。
+class Handle:
+	var data	# 宿主引用，语义由宿主定义
+	func _init(data_): data = data_
+
 @abstract class Arguments:
 	# 取第 index_or_key 个实参。取不到**自己报错**：state.error(...) + 返回 null ——
 	# 与 C++ 的 at(State&, const Value&, Value& out) -> Result 等价（错误进同一个
@@ -132,6 +142,20 @@ class Api:
 		self._get_arg, self._arg_num, self._return,
 	]
 
+	# ---------------- Handle（宿主引用）的三个开口 ----------------
+	# 虚方法，默认实现一律报错（与 C++ API 的同名虚函数语义一致）。宿主继承
+	# Api 覆写后，At / Assign / Call 遇到 Handle 才会走进宿主的实现。
+	# 栈纪律（弹参、压返回值）由上面的 _at / _assign / _call 负责——覆写者只
+	# 管算值、出错时 s.error(...)，不必动栈。
+	func handle_at(_s:State, _handle:Handle, _key) -> Variant:
+		_s._error('no implement for container type. ')
+		return null
+	func handle_assign(_s:State, _handle:Handle, _value) -> void:
+		_s._error('no implement for value type. ')
+	func handle_call(_s:State, _handle:Handle, _args:Array) -> Variant:
+		_s._error('"Call" can only call a function. ')
+		return null
+
 	# ---------------- 小工具（全部对应 C++ API 里的私有 static） ----------------
 
 	static func _is_num(v) -> bool: return v is int or v is float
@@ -188,6 +212,10 @@ class Api:
 	func _assign(s:State):
 		if s.stack.size() < 2: s._error('stack underflow. '); return
 		var id = s.stack[-2]
+		if id is Handle:	# 宿主引用：写回宿主（栈纪律在此，值计算在覆写里）
+			s.api.handle_assign(s, id, s.stack[-1])
+			if s.errors.is_empty(): s.stack.resize(s.stack.size() - 2)
+			return
 		if not (id is Identifier):
 			# 唯一合法的左值形态就是裸标识符（`a = 1`）。`a[0] = 1` 这类还没有语法。
 			s._error('no implement for value type. '); return
@@ -229,6 +257,15 @@ class Api:
 	func _call(s:State):
 		s.i += 1; var argc:int = s.program.opcodes[s.i]
 		var callee = s.stack[-argc-1]	# 宿主函数就是栈上的一个值
+		if callee is Handle:	# 宿主引用：调用经宿主（方法 / 构造器描述符）
+			var argv_h:Array = []
+			for k in range(argc): argv_h.append(s.stack[-argc+k])
+			var out_h = s.api.handle_call(s, callee, argv_h)
+			if not s.errors.is_empty(): return
+			s.stack.resize(s.stack.size() - argc - 1)
+			if out_h is bool: out_h = 1 if out_h else 0
+			s.stack.push_back(out_h)
+			return
 		if not (callee is Callable):
 			s._error('"Call" can only call a function. '); return
 		var argv:Array = []
@@ -244,6 +281,12 @@ class Api:
 		if key_num != 1: s._error('no implement for key num != 1. '); return
 		var container = s.stack[-2]
 		var key = s.stack[-1]
+		if container is Handle:	# 宿主引用：读经宿主，key 不限于整数
+			var out = s.api.handle_at(s, container, key)
+			if not s.errors.is_empty(): return
+			s.stack.resize(s.stack.size() - key_num - 1)
+			s.stack.push_back(out)
+			return
 		if not (key is int): s._error('index must be integer. '); return
 		var result
 		if container is PackedByteArray:	# '...' 二进制串
@@ -381,6 +424,7 @@ class Api:
 		if a is String and b is String: return a == b
 		if a is PackedByteArray and b is PackedByteArray: return a == b	# 按内容
 		if a is Callable and b is Callable: return a == b
+		if a is Handle and b is Handle: return a == b	# 同一性：同一包装实例
 		return false
 
 	func _eq(s:State): _store(s, 1 if _equals(s.stack[-2], s.stack[-1]) else 0)
