@@ -56,6 +56,35 @@ python tools/check_version.py          # 全部一致才返回 0
 python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 ```
 
+## [0.3.0] - 2026-11-06
+
+### 新增
+
+- **demo06 宿主侧垃圾回收（八份）**：宿主自建引用计数 + 标记清除，管理挂在
+  BasicVM `Value::Handle` 缝上的宿主对象。裸侵入式循环双向链表（gc 头内嵌
+  对象，无数组中转）；引用计数 = 字段引用（`SetField` 精确维护）+ 根引用
+  （安全点同步，**先加后删**）；安全点 = 每个 `obj:*` 开口入口 + Collect 入口；
+  循环引用等标记清除裁决；节点上限 `maxNodes`（顶到上限先 Collect 仍不够
+  则开口报 `too many gc nodes.`）。八份实现各配一篇 `docs/gc.md`，
+  语义权威在 [cpp/docs/gc.md](cpp/docs/gc.md)。
+- **demo05 存活对象上限 `maxObjects`（八份）**：0 = 不限（对齐 Parser / STML
+  `maxDepth` 约定），顶到上限构造器报 `too many objects.`，走 Stope 正常
+  错误通道。
+- **帧栈执行模型（八份，demo05/06）**：宿主显式 `State` 帧栈取代递归调用栈
+  ——方法调用压帧、返回弹帧；`RunSteps(maxSteps)` 每帧限步（弹栈不消耗
+  步数，预算跨嵌套调用共享）与 `RunAll()` 一口气跑完两种驱动随时可切；
+  析构 `<delete>` 保持同步旁路（级联释放中间不能让出执行权）。游戏嵌入的
+  「每帧限步」与单步调试由此成立。
+
+### 变更
+
+- **删 demo06 的 `gc:Collect` 宿主函数**：宿主本来就能直接调 `Collect()`，
+  注册成 VM 函数只是让脚本能「主动要求 gc」，却让每份移植版都背一条桥接
+  通道。gc 时机完全归宿主帧循环（demo6 每 25 帧一次 Collect）；顺带删
+  `gcTrigger` 死代码。八份 README 导览同步（demo06 + gc.md）。
+- **BasicVM 库公开 API 零改动**：`State` / `Value` / `Api` 签名、指令集、
+  `Program` 编码不变 —— 本版本全部变更都在宿主侧 demo 与文档。
+
 ## [0.2.0] - 2026-11-04
 
 ### 新增
