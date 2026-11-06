@@ -1,5 +1,11 @@
 -- runtime.lua：静态结构 + 调用 + 入口绑定（对应 cpp/demo/05-object/ 的
 -- Runtime.*）。
+--
+-- 执行模型是**显式帧栈**：frames 里每帧一个 State，run_steps(max) 只跑栈顶
+-- 帧的至多 max 条指令，run_all() 一口气跑到帧栈清空，随时可切。方法调用不
+-- 再递归——call 开口直接压新帧（Lua 没有借用限制，回调可以直接碰 frames）。
+-- 析构 <delete>（obj:delete）走**同步旁路** invoke_method：跑完调用方还要清
+-- 字段，不能让出执行权。
 
 local stope = require("stope")
 local ObjectManager = require("object_manager")
@@ -30,6 +36,10 @@ function Runtime.new()
     self.classes = {}
     self.obj_mgr = ObjectManager.new(self)
     self.api = new_demo_api(self.obj_mgr)
+    -- frames 显式帧栈：入口帧 + 压住的方法帧。run_steps 每次只跑栈顶帧；
+    -- 方法调用压帧、返回弹帧，调用方在栈里压住等返回值。
+    self.frames = {}
+    self.had_errors = false -- 任一帧出错置位（错误已打印，供入口返回码用）
     return self
 end
 
@@ -61,9 +71,21 @@ function Runtime:add_host_function(nm, fn)
     self.host_funcs[#self.host_funcs + 1] = fn
 end
 
--- 方法/函数调用：每层调用一个临时 State，随返回销毁 —— 嵌套调用就是 Lua 的
--- 递归栈。Runtime 不保存调用栈（demo 6 做根扫描时才需要）。
-function Runtime:invoke_method(m, obj, args)
+-- ==================== 显式帧栈：把 State 显式放在一个栈里，驱动循环只跑栈顶帧 ====================
+
+-- 装配入口函数并压帧：宿主函数、构造器描述符、obj:* 成员描述符绑进导出槽
+-- 位（bind_entry）。
+function Runtime:push_entry_frame(entry)
+    local state = stope.State.new()
+    state:set_api(self.api)
+    state:set_program(entry.program)
+    self:bind_entry(state, entry)
+    self.frames[#self.frames + 1] =
+        { state = state, self_props = {}, self_obj = nil, wants_return = false }
+end
+
+-- 装配方法 State（push_method_frame / invoke_method 共用）。
+function Runtime:setup_method_state(m, obj, args)
     local state = stope.State.new()
     state:set_api(self.api)
     state:set_program(m.program)
@@ -83,9 +105,73 @@ function Runtime:invoke_method(m, obj, args)
     for _, b in ipairs(m.self_method_binds) do
         state.variables[b[1]] = self.obj_mgr:bind(b[2], stope.Handle.new(obj))
     end
+    return state
+end
+
+-- 压入方法帧，不执行——run_steps 自然切到栈顶帧。调用方（call 开口的发起
+-- 方）停在 Call 的下一条；开口返回的占位 nil 会被 op_call 压到调用方栈顶，
+-- 弹帧收尾时用真正的返回值覆盖。
+function Runtime:push_method_frame(m, obj, args, wants_return)
+    local state = self:setup_method_state(m, obj, args)
+    self.frames[#self.frames + 1] = {
+        state = state, self_props = m.self_props, self_obj = obj, wants_return = wants_return,
+    }
+end
+
+-- 每帧限步驱动：只跑栈顶帧，至多 max_steps 条指令；帧弹栈（Return / 指令流
+-- 走完 / 出错中止当前函数）不消耗步数。返回 false = 帧栈已空。
+function Runtime:run_steps(max_steps)
+    local steps = max_steps
+    while steps > 0 do
+        local top = self.frames[#self.frames]
+        if top == nil then return false end
+        if top.state.i >= #top.state.program.opcodes then
+            self:finish_top_frame() -- Return 已把返回值备好；弹栈不消耗步数
+        elseif top.state:step() ~= stope.Result.Success then
+            self:finish_top_frame() -- 运行期错误：只中止当前函数，调用方继续
+        else
+            steps = steps - 1
+        end
+    end
+    return self.frames[#self.frames] ~= nil
+end
+
+-- 直接执行：一口气跑到帧栈清空。与 run_steps 随时可切。
+function Runtime:run_all()
+    while self:run_steps(math.huge) do end
+end
+
+-- 摘出栈顶帧并收尾：错误打印、self: 槽位写回字段、返回值回填调用方栈顶
+-- （op_call 已把占位 nil 压到那里，覆盖即可）。
+function Runtime:finish_top_frame()
+    local f = table.remove(self.frames)
+    for _, e in ipairs(f.state.errors) do
+        print("  vm: " .. e)
+        self.had_errors = true
+    end
+    if f.self_obj == nil then return end -- 入口帧：没有 selfProps / 返回值
+    -- 返回前把 self: 槽位写回字段——selfProps 只含方法体实际引用的属性。
+    for _, p in ipairs(f.self_props) do
+        f.self_obj.fields[p[2] + 1] = f.state.variables[p[1]]
+    end
+    -- 回填调用方栈顶（wants_return 帧）。
+    if f.wants_return then
+        local caller = self.frames[#self.frames]
+        if caller ~= nil and f.state.returns[1] ~= nil then
+            caller.state.stack[#caller.state.stack] = f.state.returns[1]
+        end
+    end
+end
+
+-- 同步执行整个方法（<delete> 析构路径）：装配 + Run + 收尾。析构走正常错误
+-- 通道、跑完调用方还要清字段——不能让出执行权。析构里再调方法也走这条路：
+-- 压帧没人跑（此刻正停在 Step 中间）。
+function Runtime:invoke_method(m, obj, args)
+    local state = self:setup_method_state(m, obj, args)
     state:run()
     for _, e in ipairs(state.errors) do
         print("  vm: " .. e)
+        self.had_errors = true
     end
     -- 返回前把 self: 槽位写回字段（只写实际引用的那几个）。
     for _, p in ipairs(m.self_props) do
@@ -95,7 +181,7 @@ function Runtime:invoke_method(m, obj, args)
 end
 
 -- 装配入口函数：宿主函数、构造器描述符、obj:* 成员描述符绑进导出槽位。
--- 按名只发生在这里（装配期），state:run() 期间零按名查找。
+-- 按名只发生在这里（装配期），run_steps 期间零按名查找。
 function Runtime:bind_entry(state, entry)
     for _, b in ipairs(entry.host_binds) do
         state.variables[b[1]] = self.host_funcs[b[2]]

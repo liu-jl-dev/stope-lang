@@ -11,6 +11,7 @@ internal sealed class ObjectManager
 {
     private readonly Runtime _runtime;
     private readonly HashSet<MyObject> _live = new(); // delete 后移除
+    public long MaxObjects; // 存活对象上限（live 表大小）；0 = 不限（对齐 maxDepth 约定）
     // 去重缓存：对象 -> (成员 id -> 绑定描述符)。绑定描述符只存这两样且创建后
     // 不可变，同一绑定永远等价；delete 时整组驱逐，不可达的描述符交给 GC。
     private readonly Dictionary<MyObject, Dictionary<int, MemberDesc>> _bindCache = new();
@@ -97,9 +98,15 @@ internal sealed class ObjectManager
         var d = handle.Data;
         if (d is CtorDesc cd)
         {
+            if (MaxObjects != 0 && _live.Count >= MaxObjects)
+            {
+                s.Error("too many objects. "); // 手动管理：上限内也不自动回收，必须 obj:delete
+                return null;
+            }
             var cls = _runtime.Classes[cd.ClsId];
             var objHandle = NewObject(cls.Id);
-            _runtime.InvokeMethod(cls.Methods[cd.CtorIdx], (MyObject)objHandle.Data!, args);
+            // 构造器压帧：返回值是新对象本身（不走「弹帧回填」通道）。
+            _runtime.PushMethodFrame(cls.Methods[cd.CtorIdx], (MyObject)objHandle.Data!, args, false);
             return objHandle;
         }
         if (d is MemberDesc md)
@@ -138,7 +145,10 @@ internal sealed class ObjectManager
                 s.Error("\"Call\" can only call a function. "); // 属性不可调
                 return null;
             }
-            return _runtime.InvokeMethod(cls.Methods[r.Index], obj, args);
+            // 方法调用压帧：返回占位 null——op_call 把它压到调用方栈顶，
+            // 方法帧弹栈时（FinishFrame）再回填真正的返回值。
+            _runtime.PushMethodFrame(cls.Methods[r.Index], obj, args, true);
+            return null;
         }
         s.Error("\"Call\" can only call a function. ");
         return null;

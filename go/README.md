@@ -11,13 +11,14 @@
 | `*.go`（module 根，`package stope`） | 语言核心：`token.go`（Token/TokenType）、`lexer.go`（词法）、`parser.go`（Pratt 语法 + 嵌套深度上限 256）、`ast.go`（AST + 形状串）、`binarr.go`（二进制数组字面量）、`expr_optim.go`（常量折叠，与 VM 共用算术 helper）、`compiler.go`（编译器 + DumpProgram）、`opcode.go`（33 条内置指令 + 自定义指令登记表）、`program.go`（Program）、`disasm.go`（反汇编 Disasm/DisasmNoCustom）、`common.go`（Result / int64 算术 / `%g` 格式化） |
 | `stml/` | STML 标记语言：四态词法器（Xml/Text/Nevext/Stope）+ 语法解析器（`Element` 带 `line` 与 `textLine`） |
 | `basicvm/` | 内置参考执行器（33 条指令；宿主函数是值；`Run` 与 `Step` 两份独立实现） |
-| `cmd/demo01..05` | 五个示例：quick-start / STML / 自定义指令 / 预导出 / 宿主侧面向对象 |
+| `cmd/demo01..05`、`cmd/demo06` | 六个示例：quick-start / STML / 自定义指令 / 预导出 / 宿主侧面向对象 / 宿主侧垃圾回收 |
 | `tests/` | golden 驱动的测试（直接读 `gdscript/test/data/` 的 golden 数据，不复制第二份） |
 | `docs/quick-start.md` | 安装 / 运行 / 最小示例 |
 | `docs/stml.md` | demo02：解析 STML 文档（回调 + 读树 + Go 侧差异） |
 | `docs/custom-opcode.md` | demo03：自定义指令（登记 / 编译 / 反汇编 / 真的执行） |
 | 预导出：编译前先占好槽位（`cmd/demo04`） | [`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md) |
 | `docs/object-oriented.md` | demo05：宿主侧面向对象 + Go GC 与手动生命周期 |
+| `docs/gc.md` | demo06：宿主侧垃圾回收（引用计数级联 + 标记清除破环，语义权威在 C++ 侧） |
 
 ## 跑测试
 
@@ -41,6 +42,7 @@ go run ./cmd/demo02   # STML 解析
 go run ./cmd/demo03   # 自定义指令：登记 + 编译 + 反汇编
 go run ./cmd/demo04   # preExports + STML
 go run ./cmd/demo05   # 宿主侧面向对象：Handle 缝 + 手动生命周期
+go run ./cmd/demo06   # 宿主侧垃圾回收：引用计数级联 + 标记清除
 ```
 
 ## 关键语义（与其它实现对齐的要点）

@@ -8,8 +8,9 @@ import (
 )
 
 type ObjectManager struct {
-	runtime *Runtime
-	live    map[*Object]struct{} // delete 后移除
+	runtime    *Runtime
+	live       map[*Object]struct{} // delete 后移除
+	MaxObjects int                  // 存活对象上限（live 表大小）；0 = 不限（对齐 maxDepth 约定）
 	// 去重缓存：对象 -> (成员 id -> 绑定描述符)。绑定描述符只存这两样且创建后
 	// 不可变，同一绑定永远等价；delete 时整组驱逐，不可达的描述符交给 GC。
 	bindCache map[*Object]map[int]*MemberDesc
@@ -98,9 +99,14 @@ func (m *ObjectManager) Assign(s *basicvm.State, handle *basicvm.Handle, value a
 func (m *ObjectManager) CallMember(s *basicvm.State, handle *basicvm.Handle, args []any) any {
 	switch d := handle.Data.(type) {
 	case *CtorDesc:
+		if m.MaxObjects != 0 && len(m.live) >= m.MaxObjects {
+			s.Error("too many objects. ") // 手动管理：上限内也不自动回收，必须 obj:delete
+			return nil
+		}
 		cls := m.runtime.classes[d.ClsID]
 		objHandle := m.newObject(d.ClsID)
-		m.runtime.invokeMethod(cls.Methods[d.CtorIdx], objHandle.Data.(*Object), args)
+		// 构造器压帧：返回值是新对象本身（不走「弹帧回填」通道）。
+		m.runtime.pushMethodFrame(cls.Methods[d.CtorIdx], objHandle.Data.(*Object), args, false)
 		return objHandle
 	case *MemberDesc:
 		// kind 由 MemberByID 查表揭晓；类来自绑定对象或实参对象。
@@ -139,7 +145,10 @@ func (m *ObjectManager) CallMember(s *basicvm.State, handle *basicvm.Handle, arg
 			s.Error("\"Call\" can only call a function. ") // 属性不可调
 			return nil
 		}
-		return m.runtime.invokeMethod(cls.Methods[ref.Index], obj, args)
+		// 方法调用压帧：返回占位 nil——op_call 把它压到调用方栈顶，
+		// 方法帧弹栈时（finishFrame）再回填真正的返回值。
+		m.runtime.pushMethodFrame(cls.Methods[ref.Index], obj, args, true)
+		return nil
 	}
 	s.Error("\"Call\" can only call a function. ")
 	return nil

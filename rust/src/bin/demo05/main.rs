@@ -168,29 +168,32 @@ fn main() {
 
     // ---------- 3. 冻结 Runtime，装配主 State：绑定归 bind_entry ----------
     let rt = Rc::new(runtime);
-    let obj_mgr = Rc::new(ObjectManager::new(rt.clone()));
+    let mut obj_mgr_raw = ObjectManager::new(rt.clone());
+    obj_mgr_raw.max_objects = 4096; // 存活对象上限：忘了 obj:delete 顶到上限时构造器直接报错
+    let obj_mgr = Rc::new(obj_mgr_raw);
     let api: Rc<dyn Api> = Rc::new(DemoApi {
         base: BaseApi::new(),
         obj_mgr: obj_mgr.clone(),
     });
     *rt.api.borrow_mut() = Some(api.clone());
 
-    let mut state = State::new();
-    state.set_api(api.clone());
-    {
-        let entry = rt.find_function("main").unwrap();
-        state.set_program(entry.program.clone());
-        rt.bind_entry(&obj_mgr, &mut state, entry);
-    }
+    // ---------- 3.5 装配入口帧：绑定归 push_entry_frame ----------
+    let entry = rt.find_function("main").unwrap();
+    rt.push_entry_frame(&obj_mgr, entry);
 
-    // ---------- 4. 运行 + 手动清理诊断 ----------
-    if state.run() != StopeResult::Success {
-        for e in &state.errors {
-            println!("  vm: {}", e);
-        }
+    // ---------- 4. 运行：两种驱动，随时可切 + 手动清理诊断 ----------
+    // 限步：run_steps(20) 每帧最多 20 条指令，帧间就是宿主的逻辑帧——方法
+    //   调用压帧、返回弹帧，预算跨调用共享。单步调试就把 20 改成 1。
+    // 直接：run_all() 一口气跑到帧栈清空。demo 先限步 1 帧（点出「每帧
+    //   限步」是驱动方式而非程序属性），再直接执行跑完剩下的。
+    let mut slices = 0;
+    while slices < 1 && rt.run_steps(20) {
+        slices += 1;
     }
+    rt.run_all();
+    println!("-- {} stepped slice(s), 20 steps each, then RunAll --", slices);
     obj_mgr.report_live(); // 忘了 obj:delete 的对象在这里现形
-    if !state.errors.is_empty() {
+    if rt.had_errors.get() {
         std::process::exit(1);
     }
 }

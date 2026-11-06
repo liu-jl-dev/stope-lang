@@ -135,7 +135,14 @@ Go 里性质有变（见 [`cpp/docs/object-oriented.md`](../../cpp/docs/object-o
 | `cmd/demo05/class.go` | `MethodInfo` / `FunctionInfo` / `ClassInfo` + 槽位装配 |
 | `cmd/demo05/object_manager.go` | `obj:*` 域全部行为：描述符创建、三个开口、`live` 表 |
 | `cmd/demo05/api.go` | Handle 三个开口的薄转发（内嵌 `BaseApi`） |
-| `cmd/demo05/runtime.go` | `Runtime`：静态结构 + `bindEntry` + `invokeMethod` |
+| `cmd/demo05/runtime.go` | `Runtime`：静态结构 + 显式帧栈（`pushEntryFrame` / `pushMethodFrame` / `runSteps` / `runAll`）+ 同步 `invokeMethod`（析构专用） |
 | `cmd/demo05/doc_visitor.go` | STML 文档 → 类与函数（含编译、索引预算、self 链接） |
 
 同一 package main 下的多文件拆分，跨文件引用零样板（小写标识符包内可见）。
+
+## 8. 存活对象上限
+
+与 C++ 一致，ObjectManager 有 `maxMaxObjects`（默认 0 = 不限，对齐 Parser / STML
+`maxDepth` 的约定）：顶到上限的构造器报 `too many objects.` 走 Stope 正常错误
+通道，而不是 throw。demo 入口设 4096 作配置演示。注意手动管理的语义：上限内
+也**不会自动回收**，必须 `obj:delete`。

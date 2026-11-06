@@ -146,8 +146,15 @@ Rust 里性质有变（见 [`cpp/docs/object-oriented.md`](../../cpp/docs/object
 | `src/bin/demo05/classes.rs` | `MethodInfo` / `FunctionInfo` / `ClassInfo` + 槽位装配 |
 | `src/bin/demo05/object_manager.rs` | `obj:*` 域全部行为：描述符创建、三个开口、`live` 表 |
 | `src/bin/demo05/api.rs` | Handle 三个开口的薄转发（`impl Api for DemoApi`） |
-| `src/bin/demo05/runtime.rs` | `Runtime`：静态结构 + `bind_entry` + `invoke_method` |
+| `src/bin/demo05/runtime.rs` | `Runtime`：静态结构 + 显式帧栈（`push_entry_frame` / `stage_method_frame` / `run_steps` / `run_all`）+ 同步 `invoke_method`（析构专用） |
 | `src/bin/demo05/doc_visitor.rs` | STML 文档 → 类与函数（含编译、索引预算、self 链接） |
 
 Cargo 的 `src/bin/demo05/main.rs` 布局（`Cargo.toml` 里 `path` 指向它），
 模块树就长在目录里。
+
+## 8. 存活对象上限
+
+与 C++ 一致，ObjectManager 有 `maxmax_objects`（默认 0 = 不限，对齐 Parser / STML
+`maxDepth` 的约定）：顶到上限的构造器报 `too many objects.` 走 Stope 正常错误
+通道，而不是 throw。demo 入口设 4096 作配置演示。注意手动管理的语义：上限内
+也**不会自动回收**，必须 `obj:delete`。

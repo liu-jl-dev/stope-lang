@@ -21,6 +21,8 @@ struct ObjectManager {
   Runtime* runtime = nullptr;
   std::deque<Object> descs;  // deque：push 不搬移元素，描述符指针稳定
   std::set<Object*> live;
+  size_t maxObjects = 0;  // 存活对象上限（live 表大小）；顶到上限构造器报错。
+                          // 0 = 不限（对齐 Parser / STML maxDepth 约定）
   // 去重缓存：外层按对象地址、内层按成员 id。绑定描述符只存这两样且创建后
   // 不可变，同一绑定永远等价。obj:delete 时按地址整组驱逐——O(log A) 定位
   // + O(k) 逐个入复用池（k ≤ 成员数，是驱逐的固有工作量）。

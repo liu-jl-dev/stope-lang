@@ -1,0 +1,183 @@
+extends Node
+
+# Demo 06: 宿主侧的垃圾回收 —— 对应 cpp/demo/06-gc/。
+#
+# 多文件拆分与 C++ 参考实现同构（demo/06-gc/ 目录）：
+#   objects.gd（gc 节点 + 描述符）、gc.gd（分配器：链表/计数/同步/标记清除）、
+#   object_manager.gd（obj:* 域行为 + 安全点）、runtime.gd（装配与调用 +
+#   live_states）、doc_visitor.gd（STML -> 类与函数）、demo_api.gd（三开口
+#   转发）；本文件只留文档、装配与入口。
+#   设计推导见 cpp/docs/gc.md，GDScript 侧差异见 docs/gc.md。
+#
+# 语法（与 cpp demo 逐字一致）：
+#   Person:New("Tom", 18)     构造（对象生命期归 gc，无 obj:delete）
+#   obj:friend[p] = null      字段覆盖：计数归零 -> 立即级联
+#   （没有 gc 函数：裁决时机在宿主的帧循环里，见 demo()）
+#
+# ★ GDScript 侧的内存管理（与 C++ demo 的差异，详见 docs/gc.md）：
+#   · 对象仍是 Object（gc 决定何时 free()）；gc 头字段（侵入式链表 + 计数
+#     + 标记）直接长在 MyObject 上，哨兵锚点是 GcAnchor；
+#   · 描述符仍是 RefCounted：引擎引用计数替代 C++ 的 Pin / trash 语义；
+#   · 「正在执行方法」的对象由 runtime.pinned 强引用保活（GD 描述符不参与
+#     gc，C++ 靠绑定描述符的字段引用，这里是等价物）；
+#   · max_nodes 只计业务对象（描述符由引擎管）。
+
+const RuntimeScript := preload("res://demo/06-gc/runtime.gd")
+const DocVisitorScript := preload("res://demo/06-gc/doc_visitor.gd")
+
+const DOC := """
+<stml>
+
+<class name="Person">
+  <property name="name" />
+  <property name="age" />
+  <property name="friend" />
+  <property name="partner" />
+  <method name="Greet">
+    println("i am ", self:name, ", ", self:age, " years old.");
+  </method>
+  <method name="Age">
+    return self:age;
+  </method>
+  <method name="Introduce">
+    println("-- introducing --");
+    self:Greet();
+    println("age via self:Age() = ", self:Age());
+  </method>
+  <method name="Pair">
+    // 循环引用：a、b 互指，且只存在于本方法的变量里。方法一返回，两个
+    // 变量槽位随栈帧销毁，引用计数停在 1 互相锁定——计数收不走，只能
+    // 等标记清除裁决。
+    let a = Person:New("cycle.a", 1);
+    let b = Person:New("cycle.b", 2);
+    obj:partner[a] = b;
+    obj:partner[b] = a;
+  </method>
+  <new name="New" params="name age">
+    self:name = name;
+    self:age = age;
+  </new>
+  <delete>
+    // 析构函数：gc 回收对象前自动跑，可以打遗言、清理宿主的非托管资源。
+    println("[Person] deleted: ", self:name);
+  </delete>
+</class>
+
+<func name="main">
+  let p = Person:New("James", 18);
+  obj:Introduce[p]();
+
+  // 1) 引用计数级联：朋友只挂在字段上，覆盖成 null 旧值计数归零，
+  //    立即析构（安全点刚同步过根，VM 侧再无 Handle，即时释放是可靠的）。
+  obj:friend[p] = Person:New("Jimmy", 1);
+  println("-- expect [Person] deleted: Jimmy right above --");
+  obj:friend[p] = null;
+
+  // 2) 循环引用：引用计数收不走，脚本侧也没有 gc 函数可调——裁决时机在
+  //    宿主手里：驱动循环的帧边界 Collect（见 demo()），游戏里就是
+  //    「每 N 帧收集一次」。
+  obj:Pair[p]();
+  println("-- expect nothing above: the pair is locked in a cycle --");
+  println("-- expect two [Person] deleted above at a frame-boundary collect --");
+
+  // 3) 垃圾 churn：丢弃结果的对象走引用计数路径，在下个安全点被逐个收走；
+  //    一路积累的一次性描述符（self 绑定等）由帧边界的标记清除成批收走。
+  let i = 0;
+  while i < 100 {
+    Person:New("garbage", i);
+    i = i + 1;
+  }
+  println("-- expect batches of deleted above: safe-point refcount + frame-boundary sweep --");
+</func>
+
+</stml>
+"""
+
+# ==================== 入口 ====================
+
+class NoArgs extends StopeBasicVM.Arguments:
+	func at(_s:StopeBasicVM.State, _k) -> Variant:
+		return null
+	func num() -> int:
+		return 0
+
+func _ready() -> void:
+	demo()
+	get_tree().quit()
+
+func demo() -> void:
+	var runtime = RuntimeScript.new()
+	runtime.obj_mgr.alloc.max_nodes = 4096	# gc 节点上限（GD 只计业务对象）；
+						# 0 = 不限。顶到上限先 Collect 仍不够
+						# 则开口报 too many gc nodes.
+	runtime.add_host_function('println', host_println)
+	# 注意没有 gc:Collect：宿主本来就能直接调 collect()，注册成 VM 宿主函数
+	# 只是让脚本能「主动要求 gc」——去掉之后桥接成员（_runtime）也跟着删，
+	# gc 时机完全归帧循环（下方的 slices % 25 == 0）。
+
+	# ---------- 1. STML 解析：代码段标签按 Stope 代码扫 ----------
+	var lexer := STMLLexer.Lexer.new(DOC)
+	var parser := STMLParser.Parser.new(lexer)
+	var root := STML.Element.new()
+	if parser.parse(root, _state_func) != StopeResult.Success:
+		for e in parser.errors: print(e)
+		return
+
+	# ---------- 2. 访问文档：构建类、编译函数 ----------
+	var visitor = DocVisitorScript.new()
+	if not visitor.visit_doc(root, runtime):
+		return
+	var main_func = runtime.find_function('main')
+	if main_func == null:
+		print('no main function')
+		return
+
+	# ---------- 3. 装配入口帧：绑定归 Runtime.push_entry_frame ----------
+	runtime.push_entry_frame(main_func, NoArgs.new())
+
+	# ---------- 4. 运行：两种驱动，随时可切 + 帧边界 collect ----------
+	# 限步：run_steps(20) 每帧最多 20 条指令，帧间就是宿主的逻辑帧；每 25
+	#   帧做一次标记清除——gc 时机完全由这个循环决定，脚本侧无感。单步
+	#   调试就把 20 改成 1。
+	# 直接：run_all() 一口气跑到帧栈清空——没有帧边界，gc 的裁决点只剩
+	#   max_nodes 顶满与收尾那次 collect。demo 先限步 25 帧（第一轮帧边界
+	#   Collect 在这里触发，循环引用被破环），再直接执行跑完剩下的。
+	var slices := 0
+	while slices < 25 and runtime.run_steps(20):
+		slices += 1
+		if slices % 25 == 0:
+			runtime.obj_mgr.alloc.collect()
+			print('[gc] frame slice ', slices, ': collect freed ',
+				runtime.obj_mgr.alloc.last_freed)
+	runtime.run_all()
+	print('-- ', slices, ' stepped slice(s), 20 steps each, then RunAll --')
+	runtime.obj_mgr.alloc.collect()	# 入口帧弹出后 p 不可达：最后一次收集
+	runtime.obj_mgr.report_live()	# 帧栈已空，根集合随最后一步同步清零
+	runtime.obj_mgr.alloc.dispose_all()	# 退出兜底：逐个跑 <delete>、free
+	# 断开 RefCounted 环再退出：alloc.on_free 是绑定 obj_mgr 方法的 Callable
+	# （强引用），而 obj_mgr 又持 alloc——不断开，这对（连带脚本类对象）会
+	# 在退出时报 ObjectDB leak。
+	runtime.obj_mgr.alloc.gather_roots = Callable()
+	runtime.obj_mgr.alloc.on_free = Callable()
+	runtime.free()	# Runtime 是 Object：显式释放，否则 ObjectDB 报泄漏
+
+# 宿主函数：与 C++ demo 一致——只格式化 int / float / String，其余忽略。
+func host_println(args:Array):
+	var parts:PackedStringArray = []
+	for a in args:
+		if a is String:
+			parts.append(a)
+		elif a is float and a == floor(a) and abs(a) < 1e15:
+			parts.append(str(int(a)))
+		elif a is int or a is float:
+			parts.append(str(a))
+	print(''.join(parts))
+	return null
+
+# gc:Collect 已删：宿主本来就能直接调 collect()，注册成 VM 宿主函数只是
+# 让脚本能「主动要求 gc」——裁决时机现在完全归 demo() 的帧循环。
+
+# 带 stope 属性的元素，内容按 Stope 代码扫；其余按子元素列表（Xml）解析。
+static func _state_func(tag:String, _attrs:Dictionary) -> int:
+	return STMLLexer.State.Stope if tag in ['method', 'new', 'delete', 'func'] \
+		else STMLLexer.State.Xml

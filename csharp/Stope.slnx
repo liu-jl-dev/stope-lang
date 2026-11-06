@@ -7,5 +7,6 @@
     <Project Path="demo/03-custom-opcode/03-custom-opcode.csproj" />
     <Project Path="demo/04-pre-export/04-pre-export.csproj" />
     <Project Path="demo/05-object/05-object.csproj" />
+    <Project Path="demo/06-gc/06-gc.csproj" />
   </Folder>
 </Solution>

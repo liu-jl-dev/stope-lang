@@ -13,6 +13,7 @@ use crate::runtime::Runtime;
 pub struct ObjectManager {
     pub runtime: Rc<Runtime>,   // 冻结后的只读运行时（类表/函数表/宿主函数表）
     pub live: RefCell<Vec<ObjRef>>, // delete 后移除
+    pub max_objects: usize,         // 存活对象上限（live 表大小）；0 = 不限（对齐 maxDepth 约定）
     // 去重缓存：对象裸指针 -> (成员 id -> 绑定描述符)。绑定描述符只存这两样且
     // 创建后不可变，同一绑定永远等价；delete 时整组驱逐，计数归零即回收。
     pub bind_cache: RefCell<HashMap<*const RefCell<Object>, HashMap<i32, Value>>>,
@@ -23,6 +24,7 @@ impl ObjectManager {
         ObjectManager {
             runtime,
             live: RefCell::new(Vec::new()),
+            max_objects: 0,
             bind_cache: RefCell::new(HashMap::new()),
         }
     }
@@ -140,10 +142,15 @@ impl ObjectManager {
         };
         match d {
             Desc::Ctor { cls_id, ctor_idx } => {
+                if self.max_objects != 0 && self.live.borrow().len() >= self.max_objects {
+                    s.error("too many objects. "); // 手动管理：上限内也不自动回收，必须 obj:delete
+                    return Value::Null;
+                }
                 let obj_handle = self.new_object(cls_id);
                 let obj = obj_of(&obj_handle).unwrap();
                 let m = &self.runtime.classes[cls_id].methods[ctor_idx];
-                self.runtime.invoke_method(self, m, &obj, args);
+                // 构造器压帧：返回值是新对象本身（不走「弹帧回填」通道）。
+                self.runtime.stage_method_frame(self, m, &obj, args, false);
                 obj_handle
             }
             Desc::Member { member_id, obj } => {
@@ -190,7 +197,10 @@ impl ObjectManager {
                     }
                     MemberKind::Method => {
                         let m = &cls.methods[r.index];
-                        self.runtime.invoke_method(self, m, &bound_obj, args)
+                        // 方法调用压帧：返回占位 Null——op_call 把它压到调用方
+                        // 栈顶，方法帧弹栈时（finish_top_frame）再回填。
+                        self.runtime.stage_method_frame(self, m, &bound_obj, args, true);
+                        Value::Null
                     }
                 }
             }

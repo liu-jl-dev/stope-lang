@@ -130,8 +130,14 @@ void ObjectManager::Call(BasicVM::State& s, const BasicVM::Value& handle,
   if (desc->classId == kCtorDescClass) {
     Class& cls = runtime->classes[(size_t)desc->fields[0].data.integer];
     Method& m = cls.methods[(size_t)desc->fields[1].data.integer];
+    if (maxObjects != 0 && live.size() >= maxObjects) {
+      s.Error("too many objects. ");  // 手动管理：上限内也不自动回收，必须
+                                      // obj:delete；走正常错误通道不 throw
+      return;
+    }
     BasicVM::Value objHandle = NewObject(cls.id);
-    runtime->InvokeMethod(m, *HandleToObject(objHandle), args, nullptr);
+    // 构造器压帧：返回值是新对象本身（out），不走「弹栈回填」通道。
+    runtime->PushMethodFrame(m, *HandleToObject(objHandle), args, false);
     out = std::move(objHandle);
     return;
   }
@@ -169,7 +175,10 @@ void ObjectManager::Call(BasicVM::State& s, const BasicVM::Value& handle,
       s.Error("\"Call\" can only call a function. ");  // 属性不可调
       return;
     }
-    runtime->InvokeMethod(cls.methods[(size_t)ref.index], *obj, args, &out);
+    // 方法调用压帧：out 只放占位 Null——opCall 把它 Move 到调用方栈顶，
+    // 方法帧弹栈时（FinishFrame）再回填真正的返回值。
+    runtime->PushMethodFrame(cls.methods[(size_t)ref.index], *obj, args, true);
+    out = BasicVM::Value{};
     return;
   }
   s.Error("\"Call\" can only call a function. ");

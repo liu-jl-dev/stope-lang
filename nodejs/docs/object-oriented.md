@@ -122,5 +122,12 @@ JS 里性质有变（见 [`cpp/docs/object-oriented.md`](../../cpp/docs/object-o
 | `demo/05-object/classes.js` | `MethodInfo` / `FunctionInfo` / `ClassInfo` + 槽位装配 |
 | `demo/05-object/object_manager.js` | `obj:*` 域全部行为：描述符创建、三个开口、`live` 表 |
 | `demo/05-object/api.js` | BasicVM 三个虚方法的薄转发 |
-| `demo/05-object/runtime.js` | `Runtime`：静态结构 + `bindEntry` + `invokeMethod` |
+| `demo/05-object/runtime.js` | 显式帧栈（`pushEntryFrame`/`pushMethodFrame`/`runSteps`/`runAll`）+ `bindEntry` + `invokeMethod`（析构同步路径） |
 | `demo/05-object/doc_visitor.js` | STML 文档 → 类与函数（含编译、索引预算、self 链接） |
+
+## 8. 存活对象上限
+
+与 C++ 一致，ObjectManager 有 `maxmaxObjects`（默认 0 = 不限，对齐 Parser / STML
+`maxDepth` 的约定）：顶到上限的构造器报 `too many objects.` 走 Stope 正常错误
+通道，而不是 throw。demo 入口设 4096 作配置演示。注意手动管理的语义：上限内
+也**不会自动回收**，必须 `obj:delete`。

@@ -28,6 +28,7 @@ node demo/02-stml.js            # 只解析 STML，不编译不执行
 node demo/03-custom-opcode.js   # 自定义指令：只编译 + 反汇编
 node demo/04-pre-export.js      # 预导出：宿主先塞形参，再编译函数体
 node demo/05-object.js          # 宿主侧面向对象：Handle 缝 + 手动生命周期
+node demo/06-gc.js              # 宿主侧垃圾回收：引用计数级联 + 标记清除
 ```
 
 demo 的输出以可读为准，不追求跨实现逐字节相同 —— 八份 demo 现在大致一致，但那是
@@ -102,8 +103,10 @@ nodejs/
 │   ├── 03-custom-opcode.js    # 自定义指令：只编译 + 反汇编
 │   ├── 04-pre-export.js       # 预导出（Compile 的第三参）
 │   ├── 05-object.js           # 宿主侧面向对象（入口；实现拆在 05-object/）
-│   └── 05-object/             # 同上多文件拆分：object / classes / object_manager /
-│                              #   runtime / doc_visitor / api（对应 cpp/demo/05-object/）
+│   ├── 05-object/             # 同上多文件拆分：object / classes / object_manager /
+│   │                          #   runtime / doc_visitor / api（对应 cpp/demo/05-object/）
+│   ├── 06-gc.js               # 宿主侧垃圾回收（入口；实现拆在 06-gc/）
+│   └── 06-gc/                 # 同上多文件拆分（对应 cpp/demo/06-gc/）
 ├── test/
 │   ├── smoke.test.js     # 工程自检：ESM / 零依赖 / exports 不悬空
 │   ├── helpers.js        # lexer 的断言族（对应 C++ 的 EXPECT_* 宏）
@@ -122,6 +125,7 @@ nodejs/
     ├── stml.md             # STML 教程：回调 → 解析 → 读树 + 可跑骨架
     ├── custom-opcode.md    # 自定义指令教程：登记 → 编译 → 反汇编 → 执行
     ├── object-oriented.md  # demo/05：宿主侧面向对象 + JS 内存管理的差异
+    ├── gc.md               # demo/06：宿主侧垃圾回收（引用计数级联 + 标记清除）
     ├── testing.md          # 测试说明：怎么跑、三种驱动方式、加用例流程、没覆盖的
     └── lexer-test-plan.md  # lexer 测试计划：覆盖矩阵、与 C++ 的差异、交叉验证做法
 ```

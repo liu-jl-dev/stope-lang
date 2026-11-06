@@ -52,7 +52,8 @@
 | 解析一份 STML 文档 | [`stml.md`](stml.md)（配 `demo/02-*.cpp`） |
 | 给编译器加一条自己的指令 | [`custom-opcode.md`](custom-opcode.md)（配 `demo/03-*.cpp`） |
 | 编译前先导出几个宿主变量 | [`docs/zh-cn/pre-export.md`](../../docs/zh-cn/pre-export.md)（配 `demo/04-*.cpp`；契约见 [`compiler-test-plan.md`](compiler-test-plan.md) §5.9） |
-| 给宿主对象接上方法与属性（手动生命周期） | [`object-oriented.md`](object-oriented.md)——**参考实现 + 教程**，逐步讲清宿主侧面向对象的完整做法（配 `demo/05-object.cpp` + `demo/05-object/`；GC 见 demo 6） |
+| 给宿主对象接上方法与属性（手动生命周期） | [`object-oriented.md`](object-oriented.md)——**参考实现 + 教程**，逐步讲清宿主侧面向对象的完整做法（配 `demo/05-object.cpp` + `demo/05-object/`） |
+| 给宿主对象接上垃圾回收 | [`gc.md`](gc.md)——**参考实现 + 教程**：引用计数即时级联 + 标记清除破环，安全点根扫描的完整做法（配 `demo/06-gc.cpp` + `demo/06-gc/`） |
 | 查 Stope 的语法与错误文案 | [`docs/zh-cn/syntax-reference.md`](../../docs/zh-cn/syntax-reference.md) |
 | 查 Stope 从零开始的介绍 | [`docs/zh-cn/syntax-intro.md`](../../docs/zh-cn/syntax-intro.md) |
 | 查常量折叠会折掉什么 | [`docs/zh-cn/constant-folding.md`](../../docs/zh-cn/constant-folding.md) |

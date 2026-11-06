@@ -7,6 +7,7 @@ export class ObjectManager {
   constructor(runtime) {
     this.runtime = runtime
     this.live = new Set() // MyObject；delete 后移除
+    this.maxObjects = 0 // 存活对象上限（live 表大小）；0 = 不限（对齐 maxDepth 约定）
     // 去重缓存：对象 -> (成员 id -> 绑定描述符)。绑定描述符只存这两样且创建后
     // 不可变，同一绑定永远等价；delete 时整组驱逐，不可达的描述符交给 GC。
     this.bindCache = new Map()
@@ -90,9 +91,15 @@ export class ObjectManager {
     const d = handle.data
     if (d instanceof CtorDesc) {
       // 构造
+      if (this.maxObjects !== 0 && this.live.size >= this.maxObjects) {
+        s.error('too many objects. ') // 手动管理：上限内也不自动回收，必须 obj:delete
+        return null
+      }
       const cls = this.runtime.classes[d.clsId]
       const objHandle = this.newObject(cls.id)
-      this.runtime.invokeMethod(cls.methods[d.ctorIdx], objHandle.data, args)
+      // 构造器压帧：返回值是新对象本身（不走「弹帧回填」通道）。
+      this.runtime.pushMethodFrame(cls.methods[d.ctorIdx], objHandle.data,
+        args, false)
       return objHandle
     }
     if (d instanceof MemberDesc) {
@@ -126,7 +133,10 @@ export class ObjectManager {
         s.Error('"Call" can only call a function. ') // 属性不可调
         return null
       }
-      return this.runtime.invokeMethod(cls.methods[ref.index], obj, args)
+      // 方法调用压帧：返回占位 null——op_call 把它压到调用方栈顶，
+      // 方法帧弹栈时（finishFrame）再回填真正的返回值。
+      this.runtime.pushMethodFrame(cls.methods[ref.index], obj, args, true)
+      return null
     }
     s.Error('"Call" can only call a function. ')
     return null

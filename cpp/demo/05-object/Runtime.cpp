@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <limits>
 
 using namespace Stope;
 using namespace std;
@@ -80,12 +81,27 @@ void Runtime::BindEntry(BasicVM::State& state, Function& entry) {
   }
 }
 
-// 装配方法 State 并执行。方法体里的 self:<属性> 槽位与对象字段按下标互达：
-// 进入时从字段复制，返回后把槽位写回字段；没碰的属性原样复制，无变化。
-void Runtime::InvokeMethod(Method& m, Object& self,
-                           std::span<const BasicVM::Value> args,
-                           BasicVM::Value* out) {
-  BasicVM::State state;
+// 装配入口函数并压帧。绑定归 BindEntry（契约同旧版注释）。
+Frame& Runtime::PushEntryFrame(Function& entry) {
+  auto f = make_unique<Frame>();
+  BasicVM::State& state = f->state;
+  state.SetAPI(api);
+  state.SetAllocator(basicAlloc);
+  state.SetProgramConstants(*entry.constAlloc);
+  state.SetProgram(entry.program);
+  state.variables.resize(entry.program.variableNum);
+  entry.InitializeState(state, {});
+  BindEntry(state, entry);
+  frames.push_back(std::move(f));
+  return *frames.back();
+}
+
+// 装配方法 State（PushMethodFrame / InvokeMethod 共用）。方法体里的
+// self:<属性> 槽位与对象字段按下标互达：进入时从字段复制，弹栈/返回后把
+// 槽位写回字段；没碰的属性原样复制，无变化。
+void Runtime::SetupMethodState(Method& m, Object& self,
+                               std::span<const BasicVM::Value> args,
+                               BasicVM::State& state) {
   state.SetAPI(api);
   state.SetAllocator(basicAlloc);
   state.SetProgramConstants(*m.constAlloc);
@@ -110,14 +126,86 @@ void Runtime::InvokeMethod(Method& m, Object& self,
     slot.Clear2(basicAlloc);
     BasicVM::Value::Copy(basicAlloc, handle, slot);
   }
+}
 
+// 压入方法帧，不执行——驱动循环（RunSteps）自然切到栈顶帧。调用方停在
+// Call 的下一条指令；opCall 会把本开口返回的占位 Null Move 到调用方栈顶，
+// 弹栈回填时覆盖它。
+void Runtime::PushMethodFrame(Method& m, Object& self,
+                              std::span<const BasicVM::Value> args,
+                              bool wantsReturn) {
+  auto f = make_unique<Frame>();
+  SetupMethodState(m, self, args, f->state);
+  f->method = &m;
+  f->self = &self;
+  f->wantsReturn = wantsReturn;
+  frames.push_back(std::move(f));
+}
+
+// 每帧限步驱动：只跑栈顶帧，至多 maxSteps 条指令；帧弹栈（Return / 指令流
+// 走完 / 出错中止当前函数）不消耗步数。false = 帧栈已空、程序结束。
+bool Runtime::RunSteps(int maxSteps) {
+  while (maxSteps > 0 && !frames.empty()) {
+    BasicVM::State& s = frames.back()->state;
+    if (s.i >= static_cast<int>(s.program->opcodes.size())) {
+      FinishTopFrame();  // Return 已把返回值备好；弹栈不消耗步数
+      continue;
+    }
+    if (s.Step() != Stope::Result::Success) {
+      FinishTopFrame();  // 运行期错误：只中止当前函数，调用方继续
+      continue;
+    }
+    --maxSteps;
+  }
+  return !frames.empty();
+}
+
+// 直接执行：一口气跑到帧栈清空。
+void Runtime::RunAll() {
+  while (RunSteps(std::numeric_limits<int>::max())) {
+  }
+}
+
+// 帧收尾。selfProps 只含方法体实际引用的属性，没碰的零开销。
+void Runtime::FinishFrame(Frame& f) {
+  for (const auto& e : f.state.errors) {
+    cout << "  vm: " << e << "\n";
+    hadErrors = true;
+  }
+  if (f.method == nullptr) {
+    return;  // 入口帧：没有 selfProps / 返回值
+  }
+  for (auto& [slotIdx, fieldIdx] : f.method->selfProps) {
+    BasicVM::Value& dst = f.self->fields[fieldIdx];
+    dst.Clear2(basicAlloc);
+    BasicVM::Value::Copy(basicAlloc, f.state.variables[slotIdx], dst);
+  }
+  // 回填调用方栈顶（wantsReturn 帧）。构造器帧返回的是新对象本身，不走这里。
+  if (f.wantsReturn && !frames.empty() && !f.state.returns.empty()) {
+    BasicVM::Value& slot = frames.back()->state.stack.back();
+    slot.Clear2(basicAlloc);
+    BasicVM::Value::Copy(basicAlloc, f.state.returns[0], slot);
+  }
+}
+
+void Runtime::FinishTopFrame() {
+  std::unique_ptr<Frame> f = std::move(frames.back());
+  frames.pop_back();
+  FinishFrame(*f);
+}
+
+// 同步执行整个方法（obj:delete 的析构路径）：装配 + Run + 收尾。Delete 的
+// 清理序列中间不能让出执行权——析构跑完后还要驱逐描述符、清字段。
+void Runtime::InvokeMethod(Method& m, Object& self,
+                           std::span<const BasicVM::Value> args,
+                           BasicVM::Value* out) {
+  BasicVM::State state;
+  SetupMethodState(m, self, args, state);
   state.Run();
   for (const auto& e : state.errors) {
     cout << "  vm: " << e << "\n";
+    hadErrors = true;
   }
-
-  // 返回前把 self:<属性> 槽位写回字段——selfProps 只含方法体实际引用的
-  // 属性，没碰的零开销。
   for (auto& [slotIdx, fieldIdx] : m.selfProps) {
     BasicVM::Value& dst = self.fields[fieldIdx];
     dst.Clear2(basicAlloc);

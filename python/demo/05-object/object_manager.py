@@ -9,6 +9,7 @@ class ObjectManager:
     def __init__(self, runtime):
         self.runtime = runtime
         self.live = []  # Object，delete 后移除
+        self.max_objects = 0  # 存活对象上限（live 表大小）；0 = 不限（对齐 maxDepth 约定）
         # 去重缓存：对象 -> (成员 id -> 绑定描述符)。绑定描述符只存这两样且创建后
         # 不可变，同一绑定永远等价；delete 时整组驱逐，不可达的描述符交给回收机制。
         self.bind_cache = {}
@@ -76,9 +77,14 @@ class ObjectManager:
     def call_member(self, s, handle, args):
         d = handle.data
         if isinstance(d, CtorDesc):
+            if self.max_objects != 0 and len(self.live) >= self.max_objects:
+                s.error("too many objects. ")  # 手动管理：上限内也不自动回收，必须 obj:delete
+                return None
             cls = self.runtime.classes[d.cls_id]
             obj_handle = self.new_object(cls.id)
-            self.runtime.invoke_method(cls.methods[d.ctor_idx], obj_handle.data, args)
+            # 构造器压帧：返回值是新对象本身（不走「弹帧回填」通道）。
+            self.runtime.push_method_frame(cls.methods[d.ctor_idx],
+                                           obj_handle.data, args, False)
             return obj_handle
         if isinstance(d, MemberDesc):
             # kind 由 member_by_id 查表揭晓；类来自绑定对象或实参对象。
@@ -104,7 +110,10 @@ class ObjectManager:
             if ref.kind != METHOD:
                 s.error('"Call" can only call a function. ')  # 属性不可调
                 return None
-            return self.runtime.invoke_method(cls.methods[ref.index], obj, args)
+            # 方法调用压帧：返回占位 None——op_call 把它压到调用方栈顶，
+            # 方法帧弹栈时（_finish_frame）再回填真正的返回值。
+            self.runtime.push_method_frame(cls.methods[ref.index], obj, args, True)
+            return None
         s.error('"Call" can only call a function. ')
         return None
 

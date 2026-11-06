@@ -51,6 +51,18 @@ add_executable(demo05
 target_include_directories(demo05 PUBLIC include)
 target_link_libraries(demo05 PRIVATE stope)
 
+add_executable(demo06
+    demo/06-gc.cpp
+    demo/06-gc/Object.cpp
+    demo/06-gc/Class.cpp
+    demo/06-gc/Function.cpp
+    demo/06-gc/Runtime.cpp
+    demo/06-gc/ObjectManager.cpp
+    demo/06-gc/API.cpp
+    demo/06-gc/DocVisitor.cpp)
+target_include_directories(demo06 PUBLIC include)
+target_link_libraries(demo06 PRIVATE stope)
+
 if(MSVC)
     add_compile_options(/utf-8)
 endif()

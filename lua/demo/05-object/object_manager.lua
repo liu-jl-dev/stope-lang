@@ -13,6 +13,7 @@ function ObjectManager.new(runtime)
     local self = setmetatable({}, ObjectManager)
     self.runtime = runtime
     self.live = {}       -- 对象数组；delete 后移除
+    self.max_objects = 0 -- 存活对象上限（live 表大小）；0 = 不限（对齐 maxDepth 约定）
     -- 去重缓存：对象 -> { [成员 id] = 绑定描述符 }。绑定描述符只存这两样且
     -- 创建后不可变，同一绑定永远等价；delete 时整组驱逐，不可达的描述符交给 GC。
     self.bind_cache = {}
@@ -96,9 +97,14 @@ function ObjectManager:call_member(s, handle, args)
     local d = handle.data
     if d.cls_id ~= nil then
         -- CtorDesc：构造
+        if self.max_objects ~= 0 and #self.live >= self.max_objects then
+            s:error("too many objects. ") -- 手动管理：上限内也不自动回收，必须 obj:delete
+            return nil
+        end
         local cls = self.runtime.classes[d.cls_id + 1]
         local obj_handle = self:new_object(d.cls_id)
-        self.runtime:invoke_method(cls.methods[d.ctor_idx + 1], obj_handle.data, args)
+        -- 构造器压帧：返回值是新对象本身（不走「弹帧回填」通道）。
+        self.runtime:push_method_frame(cls.methods[d.ctor_idx + 1], obj_handle.data, args, false)
         return obj_handle
     end
     -- MemberDesc：kind 由 member_by_id 查表揭晓；类来自绑定对象或实参对象。
@@ -134,7 +140,11 @@ function ObjectManager:call_member(s, handle, args)
         s:error('"Call" can only call a function. ') -- 属性不可调
         return nil
     end
-    return self.runtime:invoke_method(cls.methods[ref.index + 1], obj, args)
+    -- 方法调用压帧：返回占位 NULL——op_call 把它压到调用方栈顶，方法帧弹栈
+    -- 时（finish_top_frame）再回填真正的返回值。⚠ 必须是 stope.NULL 而不是
+    -- Lua nil：`stack[#stack] = nil` 是删条目（栈会缩短），不是占位。
+    self.runtime:push_method_frame(cls.methods[ref.index + 1], obj, args, true)
+    return stope.NULL
 end
 
 -- 跑 <delete>（可读写字段）-> 驱逐绑定描述符 -> 删除标记。双重 delete 拦下。

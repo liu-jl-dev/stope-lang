@@ -118,21 +118,23 @@ int main() {
     return 1;
   }
 
-  // ---------- 3. 装配主 State：绑定归 Runtime::BindEntry ----------
-  BasicVM::State state;
-  state.SetAPI(runtime.api);
-  state.SetAllocator(runtime.basicAlloc);
-  state.SetProgramConstants(*mainFunc->constAlloc);
-  state.SetProgram(mainFunc->program);
-  state.variables.resize(mainFunc->program.variableNum);
-  mainFunc->InitializeState(state, {});
-  runtime.BindEntry(state, *mainFunc);
+  // ---------- 3. 装配入口帧：绑定归 Runtime::PushEntryFrame ----------
+  runtime.objMgr.maxObjects = 4096;  // 存活对象上限（忘了 obj:delete 顶到
+                                     // 上限时构造器直接报错）；0 = 不限
+  runtime.PushEntryFrame(*mainFunc);
 
-  // ---------- 4. 运行 + 手动清理诊断 ----------
-  state.Run();
-  for (const auto& e : state.errors) {
-    cout << "  vm: " << e << "\n";
+  // ---------- 4. 运行：两种驱动，随时可切 + 清理诊断 ----------
+  // 限步：RunSteps(20) 每帧最多 20 条指令，帧间就是宿主的逻辑帧；方法调用
+  //   压帧、返回弹帧，预算跨调用共享——main 与方法体的每条指令都在循环里
+  //   跑完，没有一步是「隐式连跑」的。单步调试就把 20 改成 1。
+  // 直接：RunAll() 一口气跑到帧栈清空。两者随时可切：demo 先限步 1 帧，
+  //   再直接执行跑完剩下的。
+  int slices = 0;
+  while (slices < 1 && runtime.RunSteps(20)) {
+    ++slices;
   }
+  runtime.RunAll();
+  cout << "-- " << slices << " stepped slice(s), 20 steps each, then RunAll --\n";
   runtime.objMgr.ReportLive();  // 忘了 obj:delete 的对象在这里现形
-  return state.errors.empty() ? 0 : 1;
+  return runtime.hadErrors ? 1 : 0;
 }

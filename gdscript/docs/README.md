@@ -85,6 +85,9 @@ gdscript/
     demo_05.gd/.tscn     宿主侧面向对象：Handle 缝 + 手动生命周期（对齐 05-object/）
       05-object/         demo_05 的多文件拆分（objects / classes / object_manager /
                          demo_api / runtime / doc_visitor，同构 cpp/demo/05-object/）
+    demo_06.gd/.tscn     宿主侧垃圾回收：引用计数级联 + 标记清除（对齐 06-gc/）
+      06-gc/             demo_06 的多文件拆分（objects / gc / classes / object_manager /
+                         runtime / doc_visitor / demo_api，同构 cpp/demo/06-gc/）
   test/                  run_tests.gd + 五组测试 + golden 数据（数据由 cpp/tools/ 生成）
   docs/                  本目录
   project.godot          Godot 工程文件（已启用本插件）
@@ -179,6 +182,7 @@ godot --headless --path gdscript res://demo/demo_01.tscn
 | `demo_03.gd` | `... res://demo/demo_03.tscn` | `cpp/demo/03-custom-opcode.cpp`（只编译 + 反汇编） |
 | `demo_04.gd` | `... res://demo/demo_04.tscn` | `cpp/demo/04-pre-export.cpp`（预导出 + 执行） |
 | `demo_05.gd` | `... res://demo/demo_05.tscn` | `cpp/demo/05-object/`（宿主侧面向对象 + 手动生命周期） |
+| `demo_06.gd` | `... res://demo/demo_06.tscn` | `cpp/demo/06-gc/`（宿主侧垃圾回收 + 标记清除） |
 
 > `demo_02` 的宿主回调（`config` → Nevext、带 `stope` 属性 → Stope、其余 → Xml）与
 > `cpp/demo/02-stml.cpp` 的 lambda 逐条对应，输入文档也是同一份。
@@ -208,6 +212,7 @@ GDScript 侧专属的坑表）在 [`quick-start.md`](quick-start.md)。
 | **给编译器加自定义指令**：登记 → 编译 → 反汇编 → 执行 | [custom-opcode.md](custom-opcode.md) |
 | **编译前先导出宿主变量**（形参先进作用域） | [../../docs/zh-cn/pre-export.md](../../docs/zh-cn/pre-export.md) |
 | **宿主侧面向对象**：Handle 缝 + 手动生命周期 + 引用计数与 GC 的差异 | [object-oriented.md](object-oriented.md)（配 demo_05；C++ 版是教程正典） |
+| **宿主侧垃圾回收**：引用计数级联 + 标记清除破环，安全点根扫描 | [gc.md](gc.md)（配 demo_06；C++ 版是语义权威） |
 | **报错了**该改哪（按阶段查文案） | [troubleshooting.md](troubleshooting.md) |
 | 测试怎么跑、数据怎么重生成 | [testing.md](testing.md) |
 | GDScript 本身的坑与实现约定 | [gdscript-notes.md](gdscript-notes.md) |

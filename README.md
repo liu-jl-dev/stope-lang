@@ -223,7 +223,7 @@ cd cpp
 cmake -B build -G "MinGW Makefiles"
 cmake --build build
 ctest --test-dir build
-./build/demo01.exe                        # 编译 + 运行；还有 demo02 STML / demo03 自定义指令 / demo04 预导出 / demo05 宿主对象
+./build/demo01.exe                        # 编译 + 运行；还有 demo02 STML / demo03 自定义指令 / demo04 预导出 / demo05 宿主对象 / demo06 宿主侧 GC
 cmake --build build --target gen-golden   # 重生成 GDScript 侧的期望值，不属于 ctest
 ```
 
@@ -327,6 +327,7 @@ Python 侧另有几处宿主语言语义要兜（`1.0 / 0` 抛异常、`-7 // 2`
 | 加自定义指令（上手） | [C++](cpp/docs/custom-opcode.md) · [GDScript](gdscript/docs/custom-opcode.md) · [Node.js](nodejs/docs/custom-opcode.md) · [C#](csharp/docs/custom-opcode.md) · [Python](python/docs/custom-opcode.md) · [Lua](lua/docs/custom-opcode.md) · [Go](go/docs/custom-opcode.md) · [Rust](rust/docs/custom-opcode.md) |
 | 编译前先导出宿主变量（预导出） | [docs/zh-cn/pre-export.md](docs/zh-cn/pre-export.md) |
 | 宿主侧面向对象（demo5，教程正典） | [C++](cpp/docs/object-oriented.md) · [GDScript](gdscript/docs/object-oriented.md) · [Node.js](nodejs/docs/object-oriented.md) · [C#](csharp/docs/object-oriented.md) · [Python](python/docs/object-oriented.md) · [Lua](lua/docs/object-oriented.md) · [Go](go/docs/object-oriented.md) · [Rust](rust/docs/object-oriented.md) |
+| 宿主侧垃圾回收（demo6，语义权威） | [C++](cpp/docs/gc.md) · [GDScript](gdscript/docs/gc.md) · [Node.js](nodejs/docs/gc.md) · [C#](csharp/docs/gc.md) · [Python](python/docs/gc.md) · [Lua](lua/docs/gc.md) · [Go](go/docs/gc.md) · [Rust](rust/docs/gc.md) |
 | 各宿主语言的内存管理对照（demo5/6） | [docs/zh-cn/host-memory.md](docs/zh-cn/host-memory.md) |
 | 构建 / 测试 / 行尾约定 | [cpp/docs/development.md](cpp/docs/development.md)               |
 | 提交信息规范         | [docs/zh-cn/commit-convention.md](docs/zh-cn/commit-convention.md) |

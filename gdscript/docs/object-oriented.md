@@ -104,6 +104,7 @@ godot --headless --path gdscript res://demo/demo_05.tscn
 i am James, 18 years old.
 age via self:Age() = 18
 [Person] deleted!
+-- 1 stepped slice(s), 20 steps each, then RunAll --
 [objects] all freed
 [bind-cache] 0 entries
 ```
@@ -111,7 +112,17 @@ age via self:Age() = 18
 `[Person] deleted!` 出现在 `obj:delete(p)` 那一行——析构时机由文档程序员
 决定，这正是 demo 5 的核心演示点。
 
-## 6. 已知局限
+## 6. 执行模型：显式帧栈 + 两种驱动
+
+与 C++ 版 §6 同一套模型（语义权威在那边）：`runtime.frames` 是显式帧栈，
+方法调用压帧（`push_method_frame`）、返回弹帧（`finish_top_frame`），调用
+栈不走 GDScript 递归栈。驱动有两种，随时可切：**限步**
+`while runtime.run_steps(20):`（每帧最多 20 条指令，帧间就是宿主的逻辑帧，
+单步调试把 20 改 1）与**直接** `runtime.run_all()`。demo 先限步 1 帧再
+`run_all()` 跑完，输出带统计行。唯一的同步旁路是 `obj:delete` 的析构
+（`invoke_method`）：Delete 的清理序列中间不能让出执行权。
+
+## 7. 已知局限
 
 C++ 版 §10 列出的未定义行为与已知局限**全部适用于本移植**（悬空 Handle、
 属性无 rvalue 读、构造失败返回半成品、缺参静默、方法递归无深度限制、
@@ -124,7 +135,7 @@ GDScript 特有的两条：
 - RefCounted 描述符若在 `bind_cache` 驱逐前被 VM 变量长期持有，会活到
   持有者销毁——正常用法下这就是期望行为，不算泄漏。
 
-## 7. 文件结构（多文件拆分，与 C++ 参考实现同构）
+## 8. 文件结构（多文件拆分，与 C++ 参考实现同构）
 
 | 文件 | 职责 |
 | --- | --- |
@@ -133,9 +144,16 @@ GDScript 特有的两条：
 | `demo/05-object/classes.gd` | `MethodInfo` / `FunctionInfo` / `ClassInfo`（内类容器） |
 | `demo/05-object/object_manager.gd` | `obj:*` 域全部行为：描述符创建、三个开口、`live` 表 |
 | `demo/05-object/demo_api.gd` | BasicVM 三个虚方法的薄转发 |
-| `demo/05-object/runtime.gd` | `Runtime`：静态结构 + `bind_entry` + `invoke_method` |
+| `demo/05-object/runtime.gd` | 显式帧栈（`push_entry_frame`/`push_method_frame`/`run_steps`/`run_all`）+ `bind_entry` + `invoke_method`（析构同步路径） |
 | `demo/05-object/doc_visitor.gd` | STML 文档 → 类与函数（含编译、索引预算、self 链接） |
 
 跨文件引用走 `preload` 常量（如 `Objects.MyObject.new()`）；引用方向无环
 （runtime → object_manager / demo_api，doc_visitor → classes / objects），
 `ObjectManager` 里的 `runtime` 故意不写静态类型，避免 preload 成环。
+
+## 9. 存活对象上限
+
+与 C++ 一致，ObjectManager 有 `maxmax_objects`（默认 0 = 不限，对齐 Parser / STML
+`maxDepth` 的约定）：顶到上限的构造器报 `too many objects.` 走 Stope 正常错误
+通道，而不是 throw。demo 入口设 4096 作配置演示。注意手动管理的语义：上限内
+也**不会自动回收**，必须 `obj:delete`。

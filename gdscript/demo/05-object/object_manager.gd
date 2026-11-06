@@ -10,6 +10,7 @@ enum MemberKind { PROP, METHOD, DELETE }
 
 var runtime	# runtime.gd 的 Runtime（跨文件不写静态类型：避免 preload 环）
 var live:Array = []	# MyObject，手动管理：delete 后移除
+var max_objects := 0	# 存活对象上限（live 表大小）；0 = 不限（对齐 maxDepth 约定）
 # 去重缓存：对象 -> (成员 id -> 绑定描述符)。绑定描述符只存这两样且创建后
 # 不可变，同一绑定永远等价；delete 时整组驱逐（Dictionary 按实例哈希，
 # O(1)），驱逐后无人引用的描述符由引用计数立即回收。
@@ -83,8 +84,13 @@ func call_member(s:StopeBasicVM.State, handle:StopeBasicVM.Handle,
 	var d = handle.data
 	if d is Objects.CtorDesc:
 		var cls = runtime.classes[d.cls_id]
+		if max_objects != 0 and live.size() >= max_objects:
+			s.error('too many objects. ')	# 手动管理：上限内也不自动回收，必须 obj:delete
+			return null
 		var obj_handle := new_object(cls.id)
-		runtime.invoke_method(cls.methods[d.ctor_idx], obj_handle.data, args)
+		# 构造器压帧：返回值是新对象本身（不走「弹帧回填」通道）。
+		runtime.push_method_frame(cls.methods[d.ctor_idx], obj_handle.data,
+			args, false)
 		return obj_handle
 	if d is Objects.MemberDesc:
 		# kind 由 member_by_id 查表揭晓；类来自绑定对象或实参对象。
@@ -110,7 +116,10 @@ func call_member(s:StopeBasicVM.State, handle:StopeBasicVM.Handle,
 		if ref.kind != MemberKind.METHOD:
 			s.error('"Call" can only call a function. ')	# 属性不可调
 			return null
-		return runtime.invoke_method(cls.methods[ref.index], obj, args)
+		# 方法调用压帧：返回占位 null——op_call 把它压到调用方栈顶，
+		# 方法帧弹栈时（_finish_frame）再回填真正的返回值。
+		runtime.push_method_frame(cls.methods[ref.index], obj, args, true)
+		return null
 	s.error('"Call" can only call a function. ')
 	return null
 

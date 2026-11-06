@@ -80,6 +80,7 @@ DOC = """
 
 def main():
     runtime = Runtime()
+    runtime.obj_mgr.max_objects = 4096  # 存活对象上限：忘了 obj:delete 顶到上限时构造器直接报错
     runtime.add_host_function("println", host_println)
 
     # ---------- 1. STML 解析：代码段标签按 Stope 代码扫 ----------
@@ -103,18 +104,20 @@ def main():
         print("no main function")
         raise SystemExit(1)
 
-    # ---------- 3. 装配主 State：绑定归 Runtime.bind_entry ----------
-    state = State()
-    state.set_api(runtime.api)
-    state.set_program(main_func.program)
-    runtime.bind_entry(state, main_func)
+    # ---------- 3. 装配入口帧：绑定归 Runtime.push_entry_frame ----------
+    runtime.push_entry_frame(main_func)
 
-    # ---------- 4. 运行 + 手动清理诊断 ----------
-    if state.run() != Result.Success:
-        for e in state.errors:
-            print("  vm: " + e)
+    # ---------- 4. 运行：两种驱动，随时可切 + 手动清理诊断 ----------
+    # 限步：run_steps(20) 每帧最多 20 条指令，帧间就是宿主的逻辑帧；方法
+    #   调用压帧、返回弹帧，预算跨调用共享——单步调试就把 20 改成 1。
+    # 直接：run_all() 一口气跑到帧栈清空。demo 先限步 1 帧，再直接跑完。
+    slices = 0
+    while slices < 1 and runtime.run_steps(20):
+        slices += 1
+    runtime.run_all()
+    print(f"-- {slices} stepped slice(s), 20 steps each, then RunAll --")
     runtime.obj_mgr.report_live()  # 忘了 obj:delete 的对象在这里现形
-    if state.errors:
+    if runtime.had_errors:
         raise SystemExit(1)
 
 

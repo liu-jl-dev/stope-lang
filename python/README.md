@@ -19,6 +19,7 @@ python python/demo/02-stml.py               # 只解析一份 STML 文档
 python python/demo/03-custom-opcode.py      # 只编译 + 反汇编（自定义指令）
 python python/demo/04-pre-export.py         # 预导出：宿主先塞形参，再编译函数体
 python python/demo/05-object.py             # 宿主侧面向对象：Handle 缝 + 手动生命周期
+python python/demo/06-gc.py                 # 宿主侧垃圾回收：引用计数级联 + 标记清除
 ```
 
 测试与 demo 都**不需要 C++ 工具链**：期望值读的是入库的 `gdscript/test/data/*.txt`
@@ -148,6 +149,7 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 | 自定义指令（逐段讲 `demo/03-custom-opcode.py`） | [`docs/custom-opcode.md`](docs/custom-opcode.md) |
 | 预导出：编译前先占好槽位（`demo/04-pre-export.py`） | [`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md) |
 | **宿主侧面向对象**（`demo/05-object/`，入口 `demo/05-object.py`）：Handle 缝 + Python 内存管理与手动生命周期 | [`docs/object-oriented.md`](docs/object-oriented.md) |
+| **宿主侧垃圾回收**（`demo/06-gc/`，入口 `demo/06-gc.py`）：引用计数级联 + 标记清除破环，安全点根扫描 | [`docs/gc.md`](docs/gc.md)（语义权威：[`cpp/docs/gc.md`](../cpp/docs/gc.md)） |
 | **改实现**：测试怎么跑、数据怎么来、Python 特有的坑 | [`docs/testing.md`](docs/testing.md) |
 | STML / 自定义指令的**语义权威** | [`cpp/docs/stml.md`](../cpp/docs/stml.md)、[`cpp/docs/custom-opcode.md`](../cpp/docs/custom-opcode.md) |
 | 语言本身 | [`docs/zh-cn/syntax-intro.md`](../docs/zh-cn/syntax-intro.md)、[`syntax-reference.md`](../docs/zh-cn/syntax-reference.md) |

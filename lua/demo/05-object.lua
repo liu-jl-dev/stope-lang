@@ -109,6 +109,7 @@ end
 
 local function main()
     local runtime = Runtime.new()
+    runtime.obj_mgr.max_objects = 4096 -- 存活对象上限：忘了 obj:delete 顶到上限时构造器直接报错
     runtime:add_host_function("println", host_println)
 
     -- ---------- 1. STML 解析：代码段标签按 Stope 代码扫 ----------
@@ -135,20 +136,22 @@ local function main()
         os.exit(1)
     end
 
-    -- ---------- 3. 装配主 State：绑定归 Runtime.bind_entry ----------
-    local state = stope.State.new()
-    state:set_api(runtime.api)
-    state:set_program(main_func.program)
-    runtime:bind_entry(state, main_func)
+    -- ---------- 3. 装配入口帧：绑定归 Runtime.push_entry_frame ----------
+    runtime:push_entry_frame(main_func)
 
-    -- ---------- 4. 运行 + 手动清理诊断 ----------
-    if state:run() ~= stope.Result.Success then
-        for _, e in ipairs(state.errors) do
-            print("  vm: " .. e)
-        end
+    -- ---------- 4. 运行：两种驱动，随时可切 + 手动清理诊断 ----------
+    -- 限步：run_steps(20) 每帧最多 20 条指令，帧间就是宿主的逻辑帧——方法
+    --   调用压帧、返回弹帧，预算跨调用共享。单步调试就把 20 改成 1。
+    -- 直接：run_all() 一口气跑到帧栈清空。demo 先限步 1 帧（点出「每帧
+    --   限步」是驱动方式而非程序属性），再直接执行跑完剩下的。
+    local slices = 0
+    while slices < 1 and runtime:run_steps(20) do
+        slices = slices + 1
     end
+    runtime:run_all()
+    print("-- " .. slices .. " stepped slice(s), 20 steps each, then RunAll --")
     runtime.obj_mgr:report_live() -- 忘了 obj:delete 的对象在这里现形
-    if #state.errors > 0 then
+    if runtime.had_errors then
         os.exit(1)
     end
 end

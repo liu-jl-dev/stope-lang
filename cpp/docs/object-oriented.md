@@ -27,7 +27,7 @@
 | 2 | 定义宿主侧的对象模型 | `Object.*` |
 | 3 | 用 STML 文档描述类并编译出方法 | `DocVisitor.*` / `Class.*` / `Function.*` |
 | 4 | 实现 Handle 的三个开口 | `API.*` / `ObjectManager.*` |
-| 5 | 设计描述符与绑定（`obj:*` / `<Class>:<New>`） | `ObjectManager.*` / `Runtime.cpp`（BindEntry） |
+| 5 | 设计描述符与绑定（`obj:*` / `<Class>:<New>`） | `ObjectManager.*` / `Runtime.cpp`（BindEntry，由 PushEntryFrame 调） |
 | 6 | 接通 self 与字段的槽位契约 | `Runtime.*` |
 | 7 | 手动生命周期（new / delete / 泄漏诊断） | `ObjectManager.cpp` |
 
@@ -245,9 +245,10 @@ struct API : Stope::BasicVM::API {
   返回绑定描述符的 Handle。属性引用与绑定方法都从这里出发；
 - **Assign**：`obj:<属性>[p] = v` → 经**两层整数查询**定位字段槽位（见第 5 步），
   `Clear2` 旧值后 `Copy` 新值；
-- **Call**：按查表得到的 kind 分发——构造描述符走 `NewObject` + `InvokeMethod`
-  并把对象 Handle 作为返回值压栈；`kMemberDelete` 跑 `<delete>` 后回收；绑定
-  方法走 `InvokeMethod`。
+- **Call**：按查表得到的 kind 分发——构造描述符走 `NewObject` + `PushMethodFrame`
+  （构造器帧不取方法返回值）并把对象 Handle 作为返回值压栈；`kMemberDelete`
+  跑 `<delete>` 后回收；绑定方法走 `PushMethodFrame`，开口返回占位 Null、
+  弹栈时回填真正的返回值。
 
 `Assign` 的实现不长，可以直接看「两层整数查询」长什么样（描述符的设计见
 第 5 步）：
@@ -308,7 +309,7 @@ void ObjectManager::Assign(BasicVM::State& s, const BasicVM::Value& handle,
 （`self:` 槽位下标即字段下标）依赖它。
 
 **为什么 fields 里装的是整数而不是名字**：按名查找（字符串比较、线性扫、
-map）都不该出现在 `state.Run()` 期间。所有索引在**装配期**算好：
+map）都不该出现在 `RunSteps` 驱动的执行期间。所有索引在**装配期**算好：
 
 - `Method::slotIdx` / `Function::paramVarIdx`：槽位名 → 变量槽位下标（编译后
   从 `exports` 一次抄出）；
@@ -373,14 +374,13 @@ Handle——运行中零查找。
 2. 形参槽位按序注入实参——所有 State 共享一个 `Allocator`，String 句柄直接
    `Copy`，不存在跨 allocator 问题。
 
-`Runtime::InvokeMethod` 负责整个调用过程：
+`Runtime` 把调用过程拆成「压帧」与「弹帧收尾」两半，共用一个装配函数：
 
 ```cpp
-// Runtime.cpp
-void Runtime::InvokeMethod(Method& m, Object& self,
-                           std::span<const BasicVM::Value> args,
-                           BasicVM::Value* out) {
-  BasicVM::State state;
+// Runtime.cpp —— 装配（PushMethodFrame / InvokeMethod 共用）
+void Runtime::SetupMethodState(Method& m, Object& self,
+                               std::span<const BasicVM::Value> args,
+                               BasicVM::State& state) {
   state.SetAPI(api);
   state.SetAllocator(basicAlloc);
   state.SetProgramConstants(*m.constAlloc);
@@ -390,39 +390,64 @@ void Runtime::InvokeMethod(Method& m, Object& self,
 
   // 方法体里的宿主函数（println 等）绑进隐式导出槽位——装配期已预算好
   // (变量槽位下标, 宿主函数序号) 对，运行中零查找。
-  for (auto& [varIdx, hostIdx] : m.hostBinds) {
-    BasicVM::Value& slot = state.variables[varIdx];
-    slot.type = BasicVM::Value::Type::HostFunction;
-    slot.data.hostFuncPtr = hostFuncs[hostIdx];
-  }
+  for (auto& [varIdx, hostIdx] : m.hostBinds) { ... }
 
   // self:<方法名> 槽位绑 self 的绑定方法描述符——self:Greet() 直接调本类
   // 方法，无需 [对象]：描述符创建时即绑定 self，Call 走绑定分支。
-  for (auto& [varIdx, memberId] : m.selfMethodBinds) {
-    BasicVM::Value handle = objMgr.Bind(memberId, ObjectToHandle(&self));
-    BasicVM::Value& slot = state.variables[varIdx];
-    slot.Clear2(basicAlloc);
-    BasicVM::Value::Copy(basicAlloc, handle, slot);
-  }
+  for (auto& [varIdx, memberId] : m.selfMethodBinds) { ... }
+}
 
-  state.Run();
-  ...
-  // 返回前把 self:<属性> 槽位写回字段——selfProps 只含方法体实际引用的
-  // 属性，没碰的零开销。
-  for (auto& [slotIdx, fieldIdx] : m.selfProps) {
-    BasicVM::Value& dst = self.fields[fieldIdx];
-    dst.Clear2(basicAlloc);
-    BasicVM::Value::Copy(basicAlloc, state.variables[slotIdx], dst);
+// Runtime.cpp —— 方法调用：只装配、压帧，**不执行**
+void Runtime::PushMethodFrame(Method& m, Object& self,
+                              std::span<const BasicVM::Value> args,
+                              bool wantsReturn) {
+  auto f = make_unique<Frame>();
+  SetupMethodState(m, self, args, f->state);
+  f->method = &m;
+  f->self = &self;
+  f->wantsReturn = wantsReturn;
+  frames.push_back(std::move(f));
+}
+
+// Runtime.cpp —— 驱动循环：只跑栈顶帧，至多 maxSteps 条指令
+bool Runtime::RunSteps(int maxSteps) {
+  while (maxSteps > 0 && !frames.empty()) {
+    BasicVM::State& s = frames.back()->state;
+    if (s.i >= static_cast<int>(s.program->opcodes.size())) {
+      FinishTopFrame();  // Return 已把返回值备好；弹栈不消耗步数
+      continue;
+    }
+    if (s.Step() != Stope::Result::Success) {
+      FinishTopFrame();  // 运行期错误：只中止当前函数，调用方继续
+      continue;
+    }
+    --maxSteps;
   }
-  if (out != nullptr && !state.returns.empty()) {
-    BasicVM::Value::Copy(basicAlloc, state.returns[0], *out);
+  return !frames.empty();
+}
+
+// Runtime.cpp —— 帧收尾（弹栈时）
+void Runtime::FinishFrame(Frame& f) {
+  for (const auto& e : f.state.errors) { cout << "  vm: " << e << "\n"; }
+  if (f.method == nullptr) return;  // 入口帧
+  for (auto& [slotIdx, fieldIdx] : f.method->selfProps) {
+    BasicVM::Value& dst = f.self->fields[fieldIdx];   // self:<属性> 槽位写回
+    dst.Clear2(basicAlloc);                           // 字段——selfProps 只含
+    BasicVM::Value::Copy(basicAlloc,                  // 方法体实际引用的属性
+                         f.state.variables[slotIdx], dst);
+  }
+  // 回填调用方栈顶：Call 开口当时返回的占位 Null 就在那里，覆盖即可
+  if (f.wantsReturn && !frames.empty() && !f.state.returns.empty()) {
+    BasicVM::Value& slot = frames.back()->state.stack.back();
+    slot.Clear2(basicAlloc);
+    BasicVM::Value::Copy(basicAlloc, f.state.returns[0], slot);
   }
 }
 ```
 
 **self 绑定与链接遍**：`self:` 前缀的两类引用走同一条隐式导出编译路径，链接
 遍按成员种类分流——属性配对字段、方法记入 `selfMethodBinds`。链接在
-`VisitDoc` 全部类访问完之后跑（方法可以引用文档里后定义的成员）；`InvokeMethod`
+`VisitDoc` 全部类访问完之后跑（方法可以引用文档里后定义的成员）；`SetupMethodState`
 据 `selfMethodBinds` 往槽位绑 `objMgr.Bind(memberId, self)` 的绑定描述符——
 **创建时即绑定 self**，所以 `self:Greet()` 无需 `[对象]`，Call 直接走绑定
 分支；去重缓存保证反复调用（含方法递归）不重复分配。
@@ -431,36 +456,47 @@ void Runtime::InvokeMethod(Method& m, Object& self,
 本类方法（典型如拼写错误 `self:Gret`），装配期就抛错拦下——否则要等运行时
 槽位是 Null 才炸。
 
-**调用栈在哪**：入口的宿主 main 创建并驱动 driver State；方法/函数调用的 State 在
-`InvokeMethod` 里临时创建、随调用返回销毁——嵌套调用就是 C++ 递归栈。Runtime
-不保存调用栈（demo 6 做 GC 根扫描时才需要它）。
+**调用栈在哪**：Runtime 持有一个**显式帧栈**（`std::vector<std::unique_ptr<Frame>>`），
+一个 Frame = 一个 State + 收尾元数据。入口 main 调 `PushEntryFrame` 压入第一帧，
+方法调用压帧（`PushMethodFrame`）、方法返回弹帧（`FinishTopFrame`）——
+**调用栈从 C++ 递归栈搬到了 Runtime 的成员里**。这样做换来的能力是
+`RunSteps(maxSteps)`：驱动循环每次只跑栈顶帧、至多 maxSteps 条指令，方法
+调用与返回都不消耗步数——游戏里「每帧给脚本 N 条指令的预算」就是一行
+`while (runtime.RunSteps(20)) {}`；单步调试就是把 20 改成 1，嵌套方法体的
+每一条指令都会停下来。
 
-展开说，**压栈帧的点全部在宿主侧**，`InvokeMethod` 是唯一的压帧函数：
+展开说，**压栈帧的点全部在宿主侧**，`PushMethodFrame` 是唯一的压帧函数：
 
-| 时机 | 压帧点 | 帧链 |
+| 时机 | 压帧点 | 说明 |
 | --- | --- | --- |
-| 运行期·构造 | `ObjectManager::Call` 构造分支 | Call → InvokeMethod |
-| 运行期·方法 | `ObjectManager::Call` 方法分支 | Call → InvokeMethod |
-| 运行期·析构 | `ObjectManager::Delete` | Delete → InvokeMethod |
+| 入口 | 宿主 main | `PushEntryFrame(*mainFunc)` |
+| 运行期·构造 | `ObjectManager::Call` 构造分支 | `wantsReturn=false`：返回值是新对象本身 |
+| 运行期·方法 | `ObjectManager::Call` 方法分支 | `wantsReturn=true`：弹栈时回填调用方栈顶 |
+| 运行期·析构 | `ObjectManager::Delete` | **不走帧栈**：`InvokeMethod` 同步跑完（见下） |
 
-每层 Stope 方法调用压一对「C++ 帧 + 临时 State」——`InvokeMethod` 的局部变量
-`BasicVM::State state` 持有这一帧的 VM 值栈（形参、`self:` 槽位、表达式中间值）；
-方法体里再调 `obj:X[q]()` 就是 `Run → opCall → HandleCall → Call → InvokeMethod`
-递归。宿主函数（`println`）例外：`opCall` 直接在**同一个** State 上调 C++
-函数，不压新帧。
+每层 Stope 方法调用是一个 Frame——`Frame::state` 持有这一帧的 VM 值栈（形参、
+`self:` 槽位、表达式中间值）；方法体里再调 `obj:X[q]()` 就是
+`Step → opCall → HandleCall → Call → PushMethodFrame` 压新帧。Call 开口
+返回占位 Null，`opCall` 把它 Move 到调用方栈顶后，调用方停在 `Call` 的下一
+条指令——驱动循环只跑栈顶帧，它自然被压住；被调帧弹栈时 `FinishFrame` 把
+真正的返回值覆盖到调用方栈顶。宿主函数（`println`）例外：`opCall` 直接在
+**同一个** State 上调 C++ 函数，不压新帧。
+
+**唯一的例外是析构**：`<delete>` 在 `Delete` 的清理序列中间被调用（之后还要
+移出存活表、`delete` 对象），必须一口气跑完——`InvokeMethod`（同步版：装配 +
+`Run` + 收尾）专供这条路。析构里再调方法也走这条同步路：压进帧栈的帧没有
+驱动循环去跑（此刻正停在 Step 中间），返回值会永远是占位 Null。
 
 两个值得点透的事实：
 
 - **BasicVM 没有 call/return 帧指令**——一个 Program 配一个 State，语言层是
-  平的。「调用栈」整体由宿主的 C++ 递归栈充当；driver State 只有宿主 main 里那
-  一份、不嵌套。
-- **临时 State 是栈展开安全的关键**（见第 8 步错误通道）：`Bind` 的 `throw`
-  若发生在方法体执行中，展开的正是「每层调用的 InvokeMethod 帧 + 各帧的
-  临时 State」——State 是局部变量，展开时自动析构、值栈随之释放，无需任何
-  手工清理。
+  平的。「调用栈」是 demo 侧的概念：显式帧栈 + 每帧一个 State。
+- **帧是 `unique_ptr`**（`RunSteps` 执行中 `frames` 可能因嵌套调用扩容）；
+  弹栈收尾先摘出再 `FinishFrame`，回写 `selfProps` 期间即使触发嵌套动作，
+  也不影响回填目标（调用方栈顶）的稳定性。
 
-一个已知性质：方法递归的嵌套深度 = C++ 栈深度，demo 未设限（解析期有 256
-层嵌套上限，**运行期**没有）——深度递归会栈溢出，demo 规模无碍。
+一个已知性质：方法递归的嵌套深度 = 帧数，demo 未设限（解析期有 256 层嵌套
+上限，**运行期**没有）——深度递归会耗尽内存/栈，demo 规模无碍。
 
 ## 7. 第七步：手动生命周期
 
@@ -491,7 +527,9 @@ void ObjectManager::Delete(BasicVM::State& s, Object& obj) {
 三件配套：
 
 - **`live` 表**：`ReportLive()` 在程序结束打印存活对象——忘了 `obj:delete`
-  的在这里现形；
+  的在这里现形；`maxObjects`（默认 0 = 不限，对齐 Parser / STML `maxDepth`
+  的约定）给存活数封顶，顶到上限的构造器报 `too many objects.` 走正常错误
+  通道（demo 设 4096 作配置演示）；
 - **双重 delete** 在 `Delete` 里拦下（`live.erase` 返回 0 即报错）；
 - **悬空 Handle 是程序错误**：`obj:delete(p)` 之后 `p` 还留着旧指针，再用是
   未定义行为。demo 5 不设防——这正是「手动管理」的教学点，demo 6 的 GC 把
@@ -529,13 +567,20 @@ At 都会 `Bind` 出一个绑定描述符，文档程序员拿不到它，没法
 ```cpp
 // ---------- 1. STML 解析（stateFunc 放行代码段标签）
 // ---------- 2. DocVisitor 访问文档：构建类、编译函数（第 3 步）
-// ---------- 3. 装配主 State，runtime.BindEntry 做绑定（第 5 步）
-// ---------- 4. state.Run() + ReportLive()（第 7 步）
+// ---------- 3. runtime.PushEntryFrame(*mainFunc)（第 5 步：装配 + 绑定 + 压帧）
+// ---------- 4. RunSteps / RunAll + ReportLive()（第 7 步）
 ```
 
-主 State 的装配与任何 Stope 程序相同（`SetAPI` / `SetAllocator` /
-`SetProgramConstants` / `SetProgram` / `variables.resize`），唯一的区别是
-`SetAPI(runtime.api)` 传入了覆写过三个虚函数的 API——这一行接通第 4 步。
+主 State 的装配收进 `PushEntryFrame`（`SetAPI` / `SetAllocator` /
+`SetProgramConstants` / `SetProgram` / `variables.resize` / `BindEntry`），
+唯一的区别是 `SetAPI(runtime.api)` 传入了覆写过三个虚函数的 API——这一行
+接通第 4 步。驱动有两种，**随时可切**：
+
+* **限步**：`while (runtime.RunSteps(20)) {}`——每帧最多 20 条指令，帧间
+  就是宿主的逻辑帧（游戏「每帧给 N 条预算」就这一行；单步调试把 20 改 1）；
+* **直接**：`runtime.RunAll()`——一口气跑到帧栈清空。
+
+demo 先限步 1 帧再 `RunAll` 跑完，输出带一行统计。
 
 **错误通道：demo 5 包含 throw 隐藏控制流。** 全部 5 个抛出点是：`DocVisitor`
 四处（方法/函数解析、编译失败）加 `Bind` 一处（描述符契约检查）；唯一的
@@ -565,11 +610,13 @@ cmake --build build --target demo05
 i am James, 18 years old.
 age via self:Age() = 18
 [Person] deleted!
+-- 1 stepped slice(s), 20 steps each, then RunAll --
 [objects] all freed
 ```
 
 五行分别对应：`self:Greet()` 调通同对象方法、属性写入生效、`self:Age()`
-带回返回值、`<delete>` 真的跑了、没有泄漏。
+带回返回值、`<delete>` 真的跑了、限步 1 帧后直接执行跑完（整棵调用树只
+用了 40 条指令）、没有泄漏。
 
 ## 9. 文件清单
 
@@ -579,7 +626,7 @@ age via self:Age() = 18
 | 文件 | 职责 |
 | --- | --- |
 | `../05-object.cpp` | 入口：STML 文档、装配、运行、清理诊断 |
-| `Runtime.hpp/.cpp` | `Runtime`：静态结构 + `BindEntry`（入口绑定）+ `InvokeMethod`（方法 State 的装配与执行） |
+| `Runtime.hpp/.cpp` | `Runtime`：显式帧栈（`Frame`/`PushEntryFrame`/`PushMethodFrame`/`RunSteps`）+ `BindEntry`（入口绑定）+ `InvokeMethod`（析构专用的同步路径） |
 | `ObjectManager.hpp/.cpp` | `obj:*` 域全部行为：描述符创建、三个开口的实现、`live` 表 |
 | `API.hpp/.cpp` | BasicVM 三个虚函数的薄转发 |
 | `Object.hpp/.cpp` | `Object` 结构 + Handle↔指针 helper |

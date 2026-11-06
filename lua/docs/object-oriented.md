@@ -129,8 +129,15 @@ Lua 里性质有变（见 [`cpp/docs/object-oriented.md`](../../cpp/docs/object-
 | --- | --- |
 | `demo/05-object.lua` | 入口：STML 文档、装配、运行、清理诊断（把 `demo/05-object/` 挂进 `package.path`） |
 | `demo/05-object/object_manager.lua` | `obj:*` 域全部行为：描述符创建、三个开口、`live` 表 |
-| `demo/05-object/runtime.lua` | `Runtime`：静态结构 + `bind_entry` + `invoke_method`（含 Api 三个开口的实例覆写） |
+| `demo/05-object/runtime.lua` | `Runtime`：静态结构 + 显式帧栈（`push_entry_frame` / `push_method_frame` / `run_steps` / `run_all`）+ 同步 `invoke_method`（析构专用）（含 Api 三个开口的实例覆写） |
 | `demo/05-object/doc_visitor.lua` | STML 文档 → 类与函数（含编译、索引预算、self 链接） |
 
 （Lua 的业务对象与描述符都是平 table，没有独立的"对象模型"文件；类/方法/
 函数结构也长在 `runtime.lua` 的 `new_class` 里。）
+
+## 8. 存活对象上限
+
+与 C++ 一致，ObjectManager 有 `maxmax_objects`（默认 0 = 不限，对齐 Parser / STML
+`maxDepth` 的约定）：顶到上限的构造器报 `too many objects.` 走 Stope 正常错误
+通道，而不是 throw。demo 入口设 4096 作配置演示。注意手动管理的语义：上限内
+也**不会自动回收**，必须 `obj:delete`。
