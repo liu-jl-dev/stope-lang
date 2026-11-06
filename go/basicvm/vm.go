@@ -62,14 +62,14 @@ func Normalize(v Value) Value {
 
 // ============================== 类型判定 ==============================
 
-func isInt(v Value) bool    { _, ok := v.(int64); return ok }
-func isFloat(v Value) bool  { _, ok := v.(float64); return ok }
-func isNumber(v Value) bool { return isInt(v) || isFloat(v) }
-func isString(v Value) bool { _, ok := v.(string); return ok }
-func isBinarr(v Value) bool { _, ok := v.([]byte); return ok }
-func isFunc(v Value) bool   { _, ok := v.(HostFunction); return ok }
+func isInt(v Value) bool      { _, ok := v.(int64); return ok }
+func isFloat(v Value) bool    { _, ok := v.(float64); return ok }
+func isNumber(v Value) bool   { return isInt(v) || isFloat(v) }
+func isString(v Value) bool   { _, ok := v.(string); return ok }
+func isBinarr(v Value) bool   { _, ok := v.([]byte); return ok }
+func isFunc(v Value) bool     { _, ok := v.(HostFunction); return ok }
 func isSequence(v Value) bool { return isString(v) || isBinarr(v) }
-func isNull(v Value) bool   { return v == nil }
+func isNull(v Value) bool     { return v == nil }
 
 func asDouble(v Value) float64 {
 	if i, ok := v.(int64); ok {
@@ -700,8 +700,8 @@ func opGE(s *State) {
 
 func opIf(s *State) {
 	yes := Truely(s.Stack[len(s.Stack)-1])
-	s.pop()  // 条件用完即弹，不再留在栈上
-	s.I++    // 跳过操作数；条件成立时 step/run 的 +1 正好落到下一句
+	s.pop() // 条件用完即弹，不再留在栈上
+	s.I++   // 跳过操作数；条件成立时 step/run 的 +1 正好落到下一句
 	target := s.Program.Opcodes[s.I]
 	if !yes {
 		s.I = target - 1
