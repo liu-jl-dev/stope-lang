@@ -30,15 +30,44 @@ struct Scope {
     kind: ScopeKind,
     /// 名字作用域：标识符 → 变量总表中的索引（While 不参与名字查找）
     id_map: HashMap<String, i32>,
+    /// 名字 → 声明序号（`decl_counter` 的全局值，跨 scope 可比）。
+    /// defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于
+    /// defer 语句处的基线，报 "declared after the defer statement."。
+    /// 隐式导出（从未声明的宿主变量）记 -1，豁免检查。
+    id_order: HashMap<String, i32>,
+    /// defer 语句在本 scope 的登记（载荷、defer 行号、登记时的声明序号基线）。
+    /// 退出点（块尾 / break / continue / return）由 `splice_defers` 逆序拼接
+    /// —— 运行时没有 defer 栈，顺序在编译期物化。
+    defers: Vec<Deferred>,
+    /// 该 scope 是否为 defer 载荷的隐式作用域：break / continue / return 不得
+    /// 跨越它（break/continue 的目标循环在载荷外 → 报错；return 在载荷内一律报错）。
+    is_defer_payload: bool,
     /// While：continue 跳回这里（循环开头）
     start_index: i32,
     /// While：待回填的 break 跳转目标（code 中的操作数位置）
     break_indices: Vec<i32>,
 }
 
+/// 一条 defer 登记。载荷存**克隆**的语句节点：编译期 AST 只读，克隆与 C++
+/// 持指针等价，还能让作用域栈的借用模型保持简单（不必给 `Compiler` 挂生命周期）。
+#[derive(Debug, Clone)]
+struct Deferred {
+    stmt: Option<Stmt>,
+    line: i32,
+    order_baseline: i32,
+}
+
 impl Scope {
     fn new(kind: ScopeKind) -> Self {
-        Scope { kind, id_map: HashMap::new(), start_index: 0, break_indices: Vec::new() }
+        Scope {
+            kind,
+            id_map: HashMap::new(),
+            id_order: HashMap::new(),
+            defers: Vec::new(),
+            is_defer_payload: false,
+            start_index: 0,
+            break_indices: Vec::new(),
+        }
     }
 }
 
@@ -135,6 +164,19 @@ pub struct Compiler {
     stack_size_mgr: StackSizeManager,
     scope_stack: Vec<Scope>,
     cur_line: i32,
+    /// 全局声明序号：`declare_local` / `declare_exported`（非隐式）时递增。
+    /// defer 的「冻结名字绑定」靠它判定「在 defer 之后才声明」。
+    decl_counter: i32,
+    /// 正在拼接的 defer 载荷的声明序号基线；-1 = 不在拼接中。载荷解析本地名字
+    /// 时，命中条目的序号 >= 它 → "declared after the defer statement."
+    defer_order_floor: i32,
+    /// 当前拼接的 defer 语句行号（冻结绑定报错归到 defer 那一行）。
+    defer_err_line: i32,
+    /// 刚访问完的语句是否终止控制流（return / break / continue / 真死循环）。
+    /// 死代码消除：终止语句之后的语句不再发射，defer 也不再登记。
+    stmt_terminates: bool,
+    /// 最内层 while 体里是否出现过本层 break（死循环判定用；按 while 保存/恢复）
+    saw_break: bool,
 }
 
 impl Compiler {
@@ -146,6 +188,11 @@ impl Compiler {
             stack_size_mgr: StackSizeManager::default(),
             scope_stack: Vec::new(),
             cur_line: -1,
+            decl_counter: 0,
+            defer_order_floor: -1,
+            defer_err_line: -1,
+            stmt_terminates: false,
+            saw_break: false,
         }
     }
 
@@ -167,10 +214,22 @@ impl Compiler {
         self.stack_size_mgr = StackSizeManager::default();
         self.scope_stack = vec![Scope::new(ScopeKind::File)];
         self.cur_line = -1;
+        self.decl_counter = 0;
+        self.defer_order_floor = -1;
+        self.defer_err_line = -1;
+        self.stmt_terminates = false;
+        self.saw_break = false;
         out.clear();
 
         self.export_pre_exports(out, pre_exports);
         self.visit_prog(ast, out);
+        // 顶层 defer：程序尾结算。程序以终止语句（return / 死循环等）结尾时
+        // 这里不可达（return 出口已在 Return 分支结算过），再拼就是 Return
+        // 之后的死代码——跳过；自然结束（fall-through）才需要这份结算。
+        if !self.stmt_terminates {
+            self.splice_defers(0, out);
+        }
+        self.scope_stack[0].defers.clear();
         if !self.errors.is_empty() {
             out.clear();
             return StopeResult::Error;
@@ -193,7 +252,7 @@ impl Compiler {
                 continue;
             }
             let idx = self.var_alloc.new_unique_var(n);
-            self.declare_exported(out, n, idx);
+            self.declare_exported(out, n, idx, false);
         }
     }
 
@@ -291,17 +350,101 @@ impl Compiler {
             .find(|&i| matches!(self.scope_stack[i].kind, ScopeKind::Block | ScopeKind::File))
     }
 
-    fn top_while_scope(&mut self) -> Option<usize> {
-        (0..self.scope_stack.len())
-            .rev()
-            .find(|&i| self.scope_stack[i].kind == ScopeKind::While)
-    }
-
     fn find_ident_host(&self, name: &str) -> Option<usize> {
         (0..self.scope_stack.len()).rev().find(|&i| {
             matches!(self.scope_stack[i].kind, ScopeKind::Block | ScopeKind::File)
                 && self.scope_stack[i].id_map.contains_key(name)
         })
+    }
+
+    /// 冻结名字绑定下的宿主查找（仅在拼接 defer 载荷时使用）。
+    ///
+    /// 最内层载荷根（栈中最靠内的 `is_defer_payload` 块）以内是载荷自己的内部
+    /// 作用域，名字解析不过滤；它以外才应用「defer 语句处可见」的基线 —— 跳过
+    /// 声明序号 >= floor 的本地名（那些在 defer 之后才声明，对载荷不可见）。
+    fn find_ident_host_frozen(&self, name: &str, floor: i32) -> Option<usize> {
+        let payload_idx =
+            (0..self.scope_stack.len()).rev().find(|&i| self.scope_stack[i].is_defer_payload);
+        (0..self.scope_stack.len()).rev().find(|&i| {
+            let s = &self.scope_stack[i];
+            if !(matches!(s.kind, ScopeKind::Block | ScopeKind::File)
+                && s.id_map.contains_key(name))
+            {
+                return false;
+            }
+            if let Some(pi) = payload_idx {
+                if i < pi {
+                    // 登记 scope 一侧：跳过 defer 之后才声明的（遮蔽）。
+                    // 基线 = 登记时的 declCounter（= 下一个待分配序号），所以
+                    // 「order >= 基线」⟺ 在 defer 之后声明。隐式导出记 -1 豁免。
+                    if let Some(&order) = s.id_order.get(name) {
+                        if order >= 0 && order >= floor {
+                            return false;
+                        }
+                    }
+                }
+            }
+            true
+        })
+    }
+
+    /// 拼接期间的名字解析（冻结绑定）。defer 处不可见、现在可见 = 后文声明
+    /// → 报错（行号归 defer 语句），报错后按当前绑定继续（编译已失败）；都空
+    /// → 返回 None 走隐式导出路径。
+    fn resolve_at_splice(&mut self, name: &str) -> Option<usize> {
+        let now = self.find_ident_host(name);
+        let floor = self.defer_order_floor;
+        let frozen = self.find_ident_host_frozen(name, floor);
+        if frozen.is_some() {
+            return frozen;
+        }
+        if let Some(_) = now {
+            let line = self.defer_err_line;
+            self.error(line, &format!("\"{}\" is declared after the defer statement. ", name));
+        }
+        now
+    }
+
+    /// 退出点结算：逆序拼接 `bs` 登记的 defer 载荷（LIFO，后登记先执行）。
+    ///
+    /// ⚠ 不清空 `bs.defers`：一个块可以有多个运行期出口（break / continue /
+    /// return 各一处 + 块尾），每个出口都要拼一份自己的副本；只有块尾 / 程序尾
+    /// 的「最终结算」由调用方在拼接后清空。某个载荷编译出错即停（错误去重：
+    /// 载荷在每个退出点重编译，报一次就够）。
+    fn splice_defers(&mut self, bs: usize, out: &mut Program) {
+        if self.scope_stack[bs].defers.is_empty() || !self.errors.is_empty() {
+            return;
+        }
+        let mut k = self.scope_stack[bs].defers.len();
+        while k > 0 {
+            k -= 1;
+            if !self.errors.is_empty() {
+                return; // 某个载荷编译出错即停，不再拼后续
+            }
+            let d = self.scope_stack[bs].defers[k].clone();
+            let saved_floor = self.defer_order_floor;
+            let saved_line = self.defer_err_line;
+            self.defer_order_floor = d.order_baseline;
+            self.defer_err_line = d.line;
+            // 载荷包一层隐式作用域并打标记：break/continue/return 的越界检查
+            // 靠它识别「从收尾代码里跳回主流程」。
+            self.push_block_scope();
+            let ps = self.scope_stack.len() - 1;
+            self.scope_stack[ps].is_defer_payload = true;
+            if let Some(stmt) = &d.stmt {
+                self.visit_stmt(stmt, out);
+            }
+            // 载荷 scope 自己的 defers（直接嵌套 defer defer X 落在这里）：
+            // 触发点 = 载荷 scope 结束 = 同一退出点，就地拼接。
+            self.splice_defers(ps, out);
+            let idxs: Vec<i32> = self.scope_stack[ps].id_map.values().copied().collect();
+            self.pop_scope();
+            for idx in idxs {
+                self.var_alloc.free_var(idx);
+            }
+            self.defer_order_floor = saved_floor;
+            self.defer_err_line = saved_line;
+        }
     }
 
     fn file_scope(&mut self) -> &mut Scope {
@@ -311,9 +454,19 @@ impl Compiler {
     // ---------------- 语句遍历 ----------------
 
     fn visit_prog(&mut self, p: &Prog, out: &mut Program) {
+        // 语句序列：终止语句（return / break / continue / 死循环）之后的语句
+        // 在语言语义下执行不到——不再发射，也不登记它们的 defer（死代码消除）。
+        // 序列的终止性 = 最后一条已发射语句。
+        let mut terminated = false;
         for s in &p.stmts {
+            if terminated {
+                break;
+            }
+            self.stmt_terminates = false; // 每条语句先清零；终止语句的 visitor 置 true
             self.visit_stmt(s, out);
+            terminated = self.stmt_terminates;
         }
+        self.stmt_terminates = terminated;
     }
 
     fn visit_stmt(&mut self, s: &Stmt, out: &mut Program) {
@@ -338,7 +491,7 @@ impl Compiler {
                     }
                     // 不要 visit 标识符本身（那会生成 PushValue 取值），这里是要绑定到新变量
                     let idx = self.var_alloc.new_var();
-                    self.scope_stack[bs].id_map.insert(name.clone(), idx);
+                    self.declare_local(bs, name, idx);
                     self.emit_op(out, Opcode::PushId);
                     self.emit_index(out, idx);
                     self.stack_size_mgr.inc(1);
@@ -354,17 +507,30 @@ impl Compiler {
                             continue;
                         }
                         let idx = self.var_alloc.new_var();
-                        self.scope_stack[bs].id_map.insert(nm.clone(), idx);
+                        self.declare_local(bs, nm, idx);
                     }
                 }
             }
-            Stmt::Return { exprs, .. } => {
+            Stmt::Return { line, exprs } => {
+                // defer 边界：return 的终点是整个程序，在载荷内必然越界，一律报错。
+                if self.scope_stack.iter().any(|sc| sc.is_defer_payload) {
+                    self.error(*line, "\"return\" cannot be used in a defer statement. ");
+                    return;
+                }
+                // 顺序：先结算，再求返回值，最后 Return（结算 → PushValue → Return）。
+                // 结算先于退出动作，与块退出一致——defer 可以影响返回值。
+                for i in (0..self.scope_stack.len()).rev() {
+                    if matches!(self.scope_stack[i].kind, ScopeKind::Block | ScopeKind::File) {
+                        self.splice_defers(i, out);
+                    }
+                }
                 for e in exprs {
                     self.visit_expr(e, out);
                 }
                 self.emit_op(out, Opcode::Return);
                 self.emit_index(out, exprs.len() as i32);
                 out.max_return_num = out.max_return_num.max(exprs.len() as i32);
+                self.stmt_terminates = true;
                 // Return 会让 VM 直接跳到 code 末尾，栈上的返回值不回收
             }
             Stmt::Export { line, idents } => {
@@ -377,15 +543,22 @@ impl Compiler {
                         continue;
                     }
                     let idx = self.var_alloc.new_unique_var(name);
-                    self.declare_exported(out, name, idx);
+                    self.declare_exported(out, name, idx, false);
                 }
             }
             Stmt::Block { prog, .. } => {
                 self.push_block_scope();
+                let bs = self.scope_stack.len() - 1;
                 self.visit_prog(prog, out);
+                // 块尾结算：本 scope 的 defer 在这里执行（LIFO）。块体以终止语句
+                // 结尾时这里不可达（return 出口已结算、break/continue 出口就地
+                // 结算过）——跳过，避免拼出不可达的副本。
+                if !self.stmt_terminates {
+                    self.splice_defers(bs, out);
+                }
+                self.scope_stack[bs].defers.clear(); // 最终结算：途中出口已各拼过副本
                 // 先取回本块登记的局部变量再弹栈（对齐 python：pop 前存下 bs 引用）
-                let idxs: Vec<i32> =
-                    self.scope_stack.last().unwrap().id_map.values().copied().collect();
+                let idxs: Vec<i32> = self.scope_stack[bs].id_map.values().copied().collect();
                 self.pop_scope();
                 for idx in idxs {
                     self.var_alloc.free_var(idx); // 回收局部变量索引
@@ -396,9 +569,16 @@ impl Compiler {
                 self.emit_op(out, Opcode::If);
                 self.stack_size_mgr.dec(1);
                 let mut last_if_pos = self.emit_placeholder(out); // 条件为假时跳到这里
+                let mut goto_end_indices: Vec<i32> = Vec::new();
+                let mut all_branches_terminate = true;
                 self.visit_body_as_block(first_prog, out);
-                self.emit_op(out, Opcode::GoTo); // 分支走完，跳出整个 if
-                let mut goto_end_indices = vec![self.emit_placeholder(out)];
+                let mut branch_term = self.stmt_terminates;
+                all_branches_terminate = all_branches_terminate && branch_term;
+                if !branch_term {
+                    // 分支走完会落到这里，需要跳出整个 if；终止则尾跳是死代码
+                    self.emit_op(out, Opcode::GoTo);
+                    goto_end_indices.push(self.emit_placeholder(out));
+                }
                 self.patch_index(out, last_if_pos, self.code_size(out));
                 for ei in elifs {
                     self.visit_expr(&ei.cond, out);
@@ -406,17 +586,27 @@ impl Compiler {
                     self.stack_size_mgr.dec(1);
                     last_if_pos = self.emit_placeholder(out);
                     self.visit_body_as_block(&ei.prog, out);
-                    self.emit_op(out, Opcode::GoTo);
-                    goto_end_indices.push(self.emit_placeholder(out));
+                    branch_term = self.stmt_terminates;
+                    all_branches_terminate = all_branches_terminate && branch_term;
+                    if !branch_term {
+                        self.emit_op(out, Opcode::GoTo);
+                        goto_end_indices.push(self.emit_placeholder(out));
+                    }
                     self.patch_index(out, last_if_pos, self.code_size(out));
                 }
+                let has_else = else_prog.is_some();
                 if let Some(ep) = else_prog {
+                    // 与 C++/Python 权威实现一致：else 分支自身的终止性不并入判定
                     self.visit_body_as_block(ep, out);
+                } else {
+                    all_branches_terminate = false; // 无 else：条件全假时落到 if 之后
                 }
                 let end = self.code_size(out);
                 for pos in goto_end_indices {
                     self.patch_index(out, pos, end);
                 }
+                // if 语句的终止性：else 存在且所有（if/elif）分支终止
+                self.stmt_terminates = has_else && all_branches_terminate;
             }
             Stmt::While { cond, prog, .. } => {
                 let ws = self.push_while_scope();
@@ -429,10 +619,19 @@ impl Compiler {
                     self.stack_size_mgr.dec(1);
                     case_goto_end_pos = self.emit_placeholder(out);
                 }
+                // saw_break 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
+                let saved_saw_break = self.saw_break;
+                self.saw_break = false;
                 self.visit_body_as_block(prog, out);
-                self.emit_op(out, Opcode::GoTo);
-                let start = self.scope_stack[ws].start_index;
-                self.emit_index(out, start);
+                let body_term = self.stmt_terminates;
+                let body_saw_break = self.saw_break;
+                self.saw_break = saved_saw_break;
+                if !body_term {
+                    // 体终止（return/break/continue 收尾）则回跳是死代码
+                    self.emit_op(out, Opcode::GoTo);
+                    let start = self.scope_stack[ws].start_index;
+                    self.emit_index(out, start);
+                }
                 let breaks: Vec<i32> = self.scope_stack[ws].break_indices.clone();
                 for pos in breaks {
                     self.patch_index(out, pos, self.code_size(out));
@@ -442,6 +641,9 @@ impl Compiler {
                     let end = self.code_size(out);
                     self.patch_index(out, case_goto_end_pos, end);
                 }
+                // while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才
+                // 永不退出。`while true { }` 带条件，按可退出处理，不做字面量折叠。
+                self.stmt_terminates = cond.is_none() && !body_saw_break;
                 self.pop_scope();
             }
             Stmt::Assign { left, right, .. } => {
@@ -460,22 +662,78 @@ impl Compiler {
                 self.stack_size_mgr.dec(2);
             }
             Stmt::Break(line) => {
-                let Some(ws) = self.top_while_scope() else {
+                // 找最内层 WhileScope。途中先撞到 defer 载荷边界 = 目标循环在
+                // 载荷外：载荷在退出点才执行，break 从收尾代码里跳回主流程是
+                // 灾难语义，禁。
+                let mut wi: Option<usize> = None;
+                for i in (0..self.scope_stack.len()).rev() {
+                    let sc = &self.scope_stack[i];
+                    if sc.kind == ScopeKind::While {
+                        wi = Some(i);
+                        break;
+                    }
+                    if sc.is_defer_payload {
+                        self.error(*line, "\"break\" cannot cross a defer statement. ");
+                        return;
+                    }
+                }
+                let Some(ws) = wi else {
                     self.error(*line, "cannot use \"break\" outside of a loop. ");
                     return;
                 };
+                // 结算 break 越过的所有块：从最内层到循环体块（不含 WhileScope
+                // 本身、不含循环外的任何 scope）。运行时 break 直接跳循环尾，
+                // 这些块的正常块尾拼接不会执行到，必须在跳转前就地结算。
+                for i in ((ws + 1)..self.scope_stack.len()).rev() {
+                    if self.scope_stack[i].kind == ScopeKind::Block {
+                        self.splice_defers(i, out);
+                    }
+                }
                 self.emit_op(out, Opcode::GoTo);
                 let pos = self.emit_placeholder(out);
                 self.scope_stack[ws].break_indices.push(pos);
+                self.saw_break = true; // 告知最内层 while：本层有 break（死循环判定用）
+                self.stmt_terminates = true;
             }
             Stmt::Continue(line) => {
-                let Some(ws) = self.top_while_scope() else {
+                // 同 break：continue 也退出循环体块，体块的 defer 必须先结算。
+                let mut wi: Option<usize> = None;
+                for i in (0..self.scope_stack.len()).rev() {
+                    let sc = &self.scope_stack[i];
+                    if sc.kind == ScopeKind::While {
+                        wi = Some(i);
+                        break;
+                    }
+                    if sc.is_defer_payload {
+                        self.error(*line, "\"continue\" cannot cross a defer statement. ");
+                        return;
+                    }
+                }
+                let Some(ws) = wi else {
                     self.error(*line, "cannot use \"continue\" outside of a loop. ");
                     return;
                 };
+                for i in ((ws + 1)..self.scope_stack.len()).rev() {
+                    if self.scope_stack[i].kind == ScopeKind::Block {
+                        self.splice_defers(i, out);
+                    }
+                }
                 self.emit_op(out, Opcode::GoTo);
                 let start = self.scope_stack[ws].start_index;
                 self.emit_index(out, start);
+                self.stmt_terminates = true;
+            }
+            Stmt::Defer { line, stmt } => {
+                let Some(bs) = self.top_block_scope() else { return };
+                // 纯编译期登记，defer 语句位置零指令。载荷在退出点才编译（每个
+                // 退出点各编译一次——If/GoTo 操作数是绝对下标，编译一次再拷贝
+                // 会破坏跳转目标）。
+                let d = Deferred {
+                    stmt: stmt.as_deref().cloned(),
+                    line: *line,
+                    order_baseline: self.decl_counter,
+                };
+                self.scope_stack[bs].defers.push(d);
             }
         }
     }
@@ -669,27 +927,59 @@ impl Compiler {
     // ---------------- 小工具 ----------------
 
     /// 标识符 → 变量槽位索引。没声明过就当作外部变量，登记到文件作用域。
+    /// `PushValue` / `PushId` 共用这一处查找；拼接 defer 载荷时
+    /// （`defer_order_floor >= 0`）走冻结名字绑定（`resolve_at_splice`）。
     fn ident_slot(&mut self, out: &mut Program, name: &str) -> i32 {
-        if let Some(host) = self.find_ident_host(name) {
+        let host = if self.defer_order_floor >= 0 {
+            self.resolve_at_splice(name)
+        } else {
+            self.find_ident_host(name)
+        };
+        if let Some(host) = host {
             return self.scope_stack[host].id_map[name];
         }
         let idx = self.var_alloc.new_unique_var(name);
-        self.declare_exported(out, name, idx);
+        self.declare_exported(out, name, idx, true);
         self.file_scope().id_map[name]
     }
 
     /// 登记一个会进 `Program.exports` 的变量（索引来自 `new_unique_var`，不回收）。
-    fn declare_exported(&mut self, out: &mut Program, name: &str, idx: i32) {
+    ///
+    /// 隐式导出（从未声明的宿主变量）记序号 -1：豁免 defer 冻结绑定检查——
+    /// 它不是本地槽位，是宿主变量。
+    fn declare_exported(&mut self, out: &mut Program, name: &str, idx: i32, implicit_export: bool) {
         self.file_scope().id_map.insert(name.to_string(), idx);
+        let order = if implicit_export { -1 } else { self.next_decl_order() };
+        self.file_scope().id_order.insert(name.to_string(), order);
         out.exports.insert(name.to_string(), idx);
+    }
+
+    /// 块内声明：登记名字与声明序号（`decl_counter` 全局递增，跨 scope 可比）。
+    fn declare_local(&mut self, bs: usize, name: &str, idx: i32) {
+        self.scope_stack[bs].id_map.insert(name.to_string(), idx);
+        let order = self.next_decl_order();
+        self.scope_stack[bs].id_order.insert(name.to_string(), order);
+    }
+
+    fn next_decl_order(&mut self) -> i32 {
+        let order = self.decl_counter;
+        self.decl_counter += 1;
+        order
     }
 
     /// 块 / if 分支 / 循环体在 AST 里都是裸 `Prog`（没有 BlockStmt 包着），
     /// 这里补一层 BlockScope，让内部 let 的变量在离开时被回收。
     fn visit_body_as_block(&mut self, p: &Prog, out: &mut Program) {
         self.push_block_scope();
+        let bs = self.scope_stack.len() - 1;
         self.visit_prog(p, out);
-        let idxs: Vec<i32> = self.scope_stack.last().unwrap().id_map.values().copied().collect();
+        // 块尾结算（if 分支 / 循环体同普通块）。体以终止语句结尾时这里不可达，
+        // 跳过——出口结算（return / break / continue）已就地拼过副本。
+        if !self.stmt_terminates {
+            self.splice_defers(bs, out);
+        }
+        self.scope_stack[bs].defers.clear(); // 最终结算
+        let idxs: Vec<i32> = self.scope_stack[bs].id_map.values().copied().collect();
         self.pop_scope();
         for idx in idxs {
             self.var_alloc.free_var(idx);

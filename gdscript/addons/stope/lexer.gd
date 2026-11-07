@@ -1,10 +1,11 @@
 class_name StopeLexer
 
-# 17 个关键字
+# 18 个关键字
 const key_words := {
 	'idiv':Token.Type.IDiv,'if':Token.Type.If,'not':Token.Type.Not,'and':Token.Type.And,
 	'or':Token.Type.Or,'elif':Token.Type.Elif,'else':Token.Type.Else,'let':Token.Type.Let,
 	'return':Token.Type.Return,'while':Token.Type.While,'break':Token.Type.Break,'continue':Token.Type.Continue,
+	'defer':Token.Type.Defer,
 	'null':Token.Type.Null,'false':Token.Type.False,'true':Token.Type.True,'args':Token.Type.Args,
 	'argc':Token.Type.Argc,'export':Token.Type.Export}
 
@@ -57,6 +58,7 @@ class Token:
 		While,		#  while
 		Break,		#  break
 		Continue,	#  continue
+		Defer,		#  defer
 
 		Null,		#  null
 		False,		#  false
@@ -65,7 +67,7 @@ class Token:
 		Argc,		#  argc
 		Export,		#  export
 		Custom,		#  自定义指令
-	} # 共 47 个
+	} # 共 48 个
 	static func type_name(t:int) -> String:
 		return Type.keys()[t] if t >= 0 and t < Type.size() else str("?", t)
 

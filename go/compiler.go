@@ -20,14 +20,39 @@ import (
 type Scope interface{ isScope() }
 
 // BlockScope 名字作用域：标识符 → 变量总表中的索引。
+//
+// IdOrder：名字 → 声明序号（Compiler.declCounter 的全局值，跨 scope 可比）。
+// defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于 defer 语句处
+// 的基线，报 "declared after the defer statement."。隐式导出（从未声明的宿主
+// 变量）记 -1，豁免检查。
+//
+// Defers：defer 语句在本 scope 的登记（载荷节点、defer 行号、登记时的声明序号
+// 基线）。退出点（块尾 / break / continue / return）由 Compiler 逆序拼接 ——
+// 运行时没有 defer 栈，顺序在编译期物化。
+//
+// IsDeferPayload：该 scope 是否为 defer 载荷的隐式作用域。break / continue /
+// return 不得跨越它（break/continue 的目标循环在载荷外 → 报错；return 在
+// 载荷内一律报错）。
 type BlockScope struct {
-	IdMap map[string]int
+	IdMap          map[string]int
+	IdOrder        map[string]int
+	Defers         []deferredEntry
+	IsDeferPayload bool
+}
+
+// deferredEntry 一个 defer 登记：载荷、defer 行号、登记时的声明序号基线。
+type deferredEntry struct {
+	stmt          Node
+	line          int
+	orderBaseline int
 }
 
 func (*BlockScope) isScope() {}
 
 // NewBlockScope 构造。
-func NewBlockScope() *BlockScope { return &BlockScope{IdMap: make(map[string]int)} }
+func NewBlockScope() *BlockScope {
+	return &BlockScope{IdMap: make(map[string]int), IdOrder: make(map[string]int)}
+}
 
 // FileScope 文件作用域。export 与「未声明就使用的标识符」都落到这里。
 type FileScope struct{ BlockScope }
@@ -157,6 +182,18 @@ type Compiler struct {
 	stackSizeMgr  *StackSizeManager
 	scopeStack    []Scope
 	curLine       int
+	// 声明序号：declareLocal / declareExported（非隐式）时递增，跨 scope 可比。
+	// defer 的冻结名字绑定靠它判定「在 defer 之后才声明」。
+	declCounter int
+	// 正在拼接的 defer 载荷的声明序号基线；-1 = 不在拼接中。载荷解析本地名字
+	// 时，命中条目的序号 >= 它 → "declared after the defer statement."
+	deferOrderFloor int
+	// 当前拼接的 defer 语句行号（冻结绑定报错归到 defer 那一行）。
+	deferErrLine int
+	// 死代码消除：终止语句之后的语句不再发射，defer 也不再登记。
+	stmtTerminates bool
+	// 最内层 while 体里有没有 break（死循环判定用），按 while 保存/恢复。
+	sawBreak bool
 }
 
 // NewCompiler 构造。
@@ -181,6 +218,13 @@ func (c *Compiler) Compile(ast Node, out *Program, preExports []string) Result {
 	c.resetCompile(out)
 	c.exportPreExports(preExports)
 	c.visit(ast)
+	// 顶层 defer：程序尾结算。程序以终止语句（return / 死循环等）结尾时
+	// 这里不可达（return 出口已在 visitReturnStmt 结算过），再拼就是
+	// Return 之后的死代码——跳过；自然结束（fall-through）才需要这份结算。
+	if !c.stmtTerminates {
+		c.spliceDefers(&c.fileScope().BlockScope)
+	}
+	c.fileScope().Defers = nil
 	if len(c.Errors) > 0 {
 		c.prog.Clear()
 		return RError
@@ -202,7 +246,7 @@ func (c *Compiler) exportPreExports(names []string) {
 			c.error(0, "duplicate export of \""+n+"\". ")
 			continue
 		}
-		c.declareExported(n, c.varAlloc.newUniqueVar(n))
+		c.declareExported(n, c.varAlloc.newUniqueVar(n), false)
 	}
 }
 
@@ -212,9 +256,15 @@ func (c *Compiler) resetCompile(out *Program) {
 	c.stackSizeMgr = &StackSizeManager{}
 	c.scopeStack = nil
 	c.curLine = -1
+	c.declCounter = 0
+	c.deferOrderFloor = -1
+	c.deferErrLine = -1
+	c.stmtTerminates = false
+	c.sawBreak = false
 	c.prog = out
 	out.Clear()
-	c.scopeStack = append(c.scopeStack, &FileScope{BlockScope{make(map[string]int)}})
+	c.scopeStack = append(c.scopeStack,
+		&FileScope{BlockScope{make(map[string]int), make(map[string]int), nil, false}})
 }
 
 // ---------------- 指令输出 ----------------
@@ -295,15 +345,6 @@ func (c *Compiler) topBlockScope() *BlockScope {
 	return nil
 }
 
-func (c *Compiler) topWhileScope() *WhileScope {
-	for i := len(c.scopeStack) - 1; i >= 0; i-- {
-		if ws, ok := c.scopeStack[i].(*WhileScope); ok {
-			return ws
-		}
-	}
-	return nil
-}
-
 func (c *Compiler) findIdentHost(name string) *BlockScope {
 	for i := len(c.scopeStack) - 1; i >= 0; i-- {
 		var bs *BlockScope
@@ -324,6 +365,96 @@ func (c *Compiler) findIdentHost(name string) *BlockScope {
 
 func (c *Compiler) fileScope() *FileScope {
 	return c.scopeStack[0].(*FileScope)
+}
+
+// findIdentHostFrozen 冻结名字绑定下的宿主查找（仅在拼接 defer 载荷时使用）。
+//
+// 最内层载荷根（栈中最靠内的 IsDeferPayload 块）以内是载荷自己的内部作用域，
+// 名字解析不过滤；它以外才应用「defer 语句处可见」的基线 —— 跳过声明序号 >=
+// floor 的本地名（那些在 defer 之后才声明，对载荷不可见）。
+func (c *Compiler) findIdentHostFrozen(name string, floor int) *BlockScope {
+	payloadIdx := -1
+	for i := len(c.scopeStack) - 1; i >= 0; i-- {
+		if bs, ok := c.scopeStack[i].(*BlockScope); ok && bs.IsDeferPayload {
+			payloadIdx = i
+			break
+		}
+	}
+	for i := len(c.scopeStack) - 1; i >= 0; i-- {
+		var bs *BlockScope
+		switch s := c.scopeStack[i].(type) {
+		case *FileScope:
+			bs = &s.BlockScope
+		case *BlockScope:
+			bs = s
+		}
+		if bs == nil {
+			continue
+		}
+		if _, ok := bs.IdMap[name]; !ok {
+			continue
+		}
+		if i < payloadIdx { // 登记 scope 一侧：跳过 defer 之后才声明的（遮蔽）
+			// 基线 = 登记时的 declCounter（= 下一个待分配序号），所以
+			// 「order >= 基线」⟺ 在 defer 之后声明。
+			if order, ok := bs.IdOrder[name]; ok && order >= 0 && order >= floor {
+				continue
+			}
+		}
+		return bs
+	}
+	return nil
+}
+
+// resolveAtSplice 拼接期间的名字解析（冻结绑定）。defer 处不可见、现在可见 =
+// 后文声明 → 报错（行号归 defer 语句），报错后按当前绑定继续（编译已失败）；
+// 都空 → 返回 nil 走隐式导出路径。
+func (c *Compiler) resolveAtSplice(name string) *BlockScope {
+	now := c.findIdentHost(name)
+	frozen := c.findIdentHostFrozen(name, c.deferOrderFloor)
+	if frozen != nil {
+		return frozen
+	}
+	if now != nil {
+		c.error(c.deferErrLine, "\""+name+"\" is declared after the defer statement. ")
+	}
+	return now
+}
+
+// spliceDefers 退出点结算：逆序拼接 bs 登记的 defer 载荷（LIFO，后登记先执行）。
+//
+// ⚠ 不清空 bs.Defers：一个块可以有多个运行期出口（break / continue / return
+// 各一处 + 块尾），每个出口都要拼一份自己的副本；只有块尾 / 程序尾的「最终结算」
+// 由调用方在拼接后清空。某个载荷编译出错即停（错误去重：载荷在每个退出点重编译，
+// 报一次就够）。
+func (c *Compiler) spliceDefers(bs *BlockScope) {
+	if len(bs.Defers) == 0 || len(c.Errors) > 0 {
+		return
+	}
+	for k := len(bs.Defers) - 1; k >= 0; k-- {
+		if len(c.Errors) > 0 {
+			return
+		}
+		d := bs.Defers[k]
+		savedFloor := c.deferOrderFloor
+		savedLine := c.deferErrLine
+		c.deferOrderFloor = d.orderBaseline
+		c.deferErrLine = d.line
+		// 载荷包一层隐式作用域并打标记：break/continue/return 的越界检查
+		// 靠它识别「从收尾代码里跳回主流程」。
+		ps := c.pushBlockScope()
+		ps.IsDeferPayload = true
+		c.visit(d.stmt)
+		// 载荷 scope 自己的 defers（直接嵌套 defer defer X 落在这里）：
+		// 触发点 = 载荷 scope 结束 = 同一退出点，就地拼接。
+		c.spliceDefers(ps)
+		c.popScope()
+		for _, idx := range ps.IdMap {
+			c.varAlloc.freeVar(idx)
+		}
+		c.deferOrderFloor = savedFloor
+		c.deferErrLine = savedLine
+	}
 }
 
 // ---------------- 遍历 ----------------
@@ -356,6 +487,8 @@ func (c *Compiler) visit(n Node) {
 		c.visitBreakStmt(e)
 	case *ContinueStmt:
 		c.visitContinueStmt(e)
+	case *DeferStmt:
+		c.visitDeferStmt(e)
 	case *NullExpr:
 		c.emitOp(OpPushNull)
 		c.stackSizeMgr.inc(1)
@@ -438,9 +571,19 @@ func (c *Compiler) visit(n Node) {
 // ---------------- 语句 ----------------
 
 func (c *Compiler) visitProg(p *Prog) {
+	// 语句序列：终止语句（return / break / continue / 死循环）之后的语句
+	// 在语言语义下执行不到——不再发射，也不登记它们的 defer（死代码消除）。
+	// 序列的终止性 = 最后一条已发射语句。
+	terminated := false
 	for _, s := range p.Stmts {
+		if terminated {
+			break
+		}
+		c.stmtTerminates = false // 每条语句先清零；终止语句的 visitor 置 true
 		c.visit(s)
+		terminated = c.stmtTerminates
 	}
+	c.stmtTerminates = terminated
 }
 
 func (c *Compiler) visitExprStmt(s *ExprStmt) {
@@ -466,7 +609,7 @@ func (c *Compiler) visitLetStmt(s *LetStmt) {
 		}
 		// 不要 visit 标识符本身（那会生成 PushValue 取值），这里是要绑定到新变量
 		idx := c.varAlloc.newVar()
-		bs.IdMap[name] = idx
+		c.declareLocal(bs, name, idx)
 		c.emitOp(OpPushId)
 		c.emitIndex(idx)
 		c.stackSizeMgr.inc(1)
@@ -479,12 +622,29 @@ func (c *Compiler) visitLetStmt(s *LetStmt) {
 				c.error(s.Line_, "duplicate declaration of '"+nm+"'. ")
 				continue
 			}
-			bs.IdMap[nm] = c.varAlloc.newVar()
+			c.declareLocal(bs, nm, c.varAlloc.newVar())
 		}
 	}
 }
 
 func (c *Compiler) visitReturnStmt(s *ReturnStmt) {
+	// defer 边界：return 的终点是整个程序，在载荷内必然越界，一律报错。
+	for _, sc := range c.scopeStack {
+		if bs, ok := sc.(*BlockScope); ok && bs.IsDeferPayload {
+			c.error(s.Line_, "\"return\" cannot be used in a defer statement. ")
+			return
+		}
+	}
+	// 顺序：先结算，再求返回值，最后 Return（结算 → PushValue → Return）。
+	// 结算先于退出动作，与块退出一致——defer 可以影响返回值。
+	for i := len(c.scopeStack) - 1; i >= 0; i-- {
+		switch b := c.scopeStack[i].(type) {
+		case *FileScope:
+			c.spliceDefers(&b.BlockScope)
+		case *BlockScope:
+			c.spliceDefers(b)
+		}
+	}
 	for _, e := range s.Exprs {
 		c.visit(e)
 	}
@@ -493,6 +653,7 @@ func (c *Compiler) visitReturnStmt(s *ReturnStmt) {
 	if len(s.Exprs) > c.prog.MaxReturnNum {
 		c.prog.MaxReturnNum = len(s.Exprs)
 	}
+	c.stmtTerminates = true
 	// Return 会让 VM 直接跳到 code 末尾，栈上的返回值不回收
 }
 
@@ -506,13 +667,20 @@ func (c *Compiler) visitExportStmt(s *ExportStmt) {
 			c.error(s.Line_, "duplicate export of \""+name+"\". ")
 			continue
 		}
-		c.declareExported(name, c.varAlloc.newUniqueVar(name))
+		c.declareExported(name, c.varAlloc.newUniqueVar(name), false)
 	}
 }
 
 func (c *Compiler) visitBlockStmt(s *BlockStmt) {
 	bs := c.pushBlockScope()
 	c.visit(s.Prog)
+	// 块尾结算：本 scope 的 defer 在这里执行（LIFO）。块体以终止语句结尾时
+	// 这里不可达（return 出口已结算、break/continue 出口就地结算过）——
+	// 跳过，避免拼出不可达的副本。
+	if !c.stmtTerminates {
+		c.spliceDefers(bs)
+	}
+	bs.Defers = nil // 最终结算：途中出口（break/return）已各拼过副本
 	c.popScope()
 	for _, idx := range bs.IdMap {
 		c.varAlloc.freeVar(idx) // 回收局部变量索引
@@ -524,13 +692,18 @@ func (c *Compiler) visitIfStmt(s *IfStmt) {
 		return
 	}
 	var gotoEndIndices []int
+	allBranchesTerminate := true
 	c.visit(s.Cond)
 	c.emitOp(OpIf)
 	c.stackSizeMgr.dec(1)
 	lastIfPos := c.emitPlaceholder() // 条件为假时跳到这里
 	c.visitBodyAsBlock(s.FirstProg)
-	c.emitOp(OpGoTo) // 分支走完，跳出整个 if
-	gotoEndIndices = append(gotoEndIndices, c.emitPlaceholder())
+	branchTerm := c.stmtTerminates
+	allBranchesTerminate = allBranchesTerminate && branchTerm
+	if !branchTerm { // 分支走完会落到这里，需要跳出整个 if；终止则死代码
+		c.emitOp(OpGoTo)
+		gotoEndIndices = append(gotoEndIndices, c.emitPlaceholder())
+	}
 	c.patchIndex(lastIfPos, c.codeSize())
 	for _, ei := range s.Elifs {
 		if ei.Cond == nil {
@@ -541,16 +714,25 @@ func (c *Compiler) visitIfStmt(s *IfStmt) {
 		c.stackSizeMgr.dec(1)
 		lastIfPos = c.emitPlaceholder()
 		c.visitBodyAsBlock(ei.Prog)
-		c.emitOp(OpGoTo)
-		gotoEndIndices = append(gotoEndIndices, c.emitPlaceholder())
+		branchTerm = c.stmtTerminates
+		allBranchesTerminate = allBranchesTerminate && branchTerm
+		if !branchTerm {
+			c.emitOp(OpGoTo)
+			gotoEndIndices = append(gotoEndIndices, c.emitPlaceholder())
+		}
 		c.patchIndex(lastIfPos, c.codeSize())
 	}
-	if s.ElseProg != nil {
+	hasElse := s.ElseProg != nil
+	if hasElse {
 		c.visitBodyAsBlock(s.ElseProg)
+	} else {
+		allBranchesTerminate = false // 无 else：条件全假时落到 if 之后
 	}
 	for _, pos := range gotoEndIndices {
 		c.patchIndex(pos, c.codeSize())
 	}
+	// if 语句的终止性：else 存在且所有分支终止（组合式，逐分支局部判断）
+	c.stmtTerminates = hasElse && allBranchesTerminate
 }
 
 func (c *Compiler) visitWhileStmt(s *WhileStmt) {
@@ -564,9 +746,17 @@ func (c *Compiler) visitWhileStmt(s *WhileStmt) {
 		c.stackSizeMgr.dec(1)
 		caseGotoEndPos = c.emitPlaceholder()
 	}
+	// sawBreak 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
+	savedSawBreak := c.sawBreak
+	c.sawBreak = false
 	c.visitBodyAsBlock(s.Prog)
-	c.emitOp(OpGoTo)
-	c.emitIndex(ws.StartIndex)
+	bodyTerm := c.stmtTerminates
+	bodySawBreak := c.sawBreak
+	c.sawBreak = savedSawBreak
+	if !bodyTerm { // 体终止（return/break/continue 收尾）则回跳是死代码
+		c.emitOp(OpGoTo)
+		c.emitIndex(ws.StartIndex)
+	}
 	for _, pos := range ws.BreakIndices {
 		c.patchIndex(pos, c.codeSize())
 	}
@@ -574,6 +764,10 @@ func (c *Compiler) visitWhileStmt(s *WhileStmt) {
 	if caseGotoEndPos >= 0 {
 		c.patchIndex(caseGotoEndPos, c.codeSize())
 	}
+	// while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才永不
+	// 退出。`while true { }` 带条件，按可退出处理（用户明确要求），不视同
+	// `while { }`，不做字面量折叠。
+	c.stmtTerminates = s.Cond == nil && !bodySawBreak
 	c.popScope()
 }
 
@@ -594,23 +788,74 @@ func (c *Compiler) visitAssignStmt(s *AssignStmt) {
 }
 
 func (c *Compiler) visitBreakStmt(s *BreakStmt) {
-	ws := c.topWhileScope()
-	if ws == nil {
+	// 找最内层 WhileScope。途中先撞到 defer 载荷边界 = 目标循环在载荷外：
+	// 载荷在退出点才执行，break 从收尾代码里跳回主流程是灾难语义，禁。
+	wi := -1
+	for i := len(c.scopeStack) - 1; i >= 0; i-- {
+		if _, ok := c.scopeStack[i].(*WhileScope); ok {
+			wi = i
+			break
+		}
+		if bs, ok := c.scopeStack[i].(*BlockScope); ok && bs.IsDeferPayload {
+			c.error(s.Line_, "\"break\" cannot cross a defer statement. ")
+			return
+		}
+	}
+	if wi < 0 {
 		c.error(s.Line_, "cannot use \"break\" outside of a loop. ")
 		return
 	}
+	// 结算 break 越过的所有块：从最内层到循环体块（不含 WhileScope 本身、
+	// 不含循环外的任何 scope）。运行时 break 直接跳循环尾，这些块的正常
+	// 块尾拼接不会执行到，必须在跳转前就地结算。
+	for i := len(c.scopeStack) - 1; i > wi; i-- {
+		if bs, ok := c.scopeStack[i].(*BlockScope); ok {
+			c.spliceDefers(bs)
+		}
+	}
 	c.emitOp(OpGoTo)
+	ws := c.scopeStack[wi].(*WhileScope)
 	ws.BreakIndices = append(ws.BreakIndices, c.emitPlaceholder())
+	c.sawBreak = true // 告知最内层 while：本层有 break（死循环判定用）
+	c.stmtTerminates = true
 }
 
 func (c *Compiler) visitContinueStmt(s *ContinueStmt) {
-	ws := c.topWhileScope()
-	if ws == nil {
+	// 同 break：continue 也退出循环体块，体块的 defer 必须先结算。
+	wi := -1
+	for i := len(c.scopeStack) - 1; i >= 0; i-- {
+		if _, ok := c.scopeStack[i].(*WhileScope); ok {
+			wi = i
+			break
+		}
+		if bs, ok := c.scopeStack[i].(*BlockScope); ok && bs.IsDeferPayload {
+			c.error(s.Line_, "\"continue\" cannot cross a defer statement. ")
+			return
+		}
+	}
+	if wi < 0 {
 		c.error(s.Line_, "cannot use \"continue\" outside of a loop. ")
 		return
 	}
+	for i := len(c.scopeStack) - 1; i > wi; i-- {
+		if bs, ok := c.scopeStack[i].(*BlockScope); ok {
+			c.spliceDefers(bs)
+		}
+	}
 	c.emitOp(OpGoTo)
-	c.emitIndex(ws.StartIndex)
+	c.emitIndex(c.scopeStack[wi].(*WhileScope).StartIndex)
+	c.stmtTerminates = true
+}
+
+func (c *Compiler) visitDeferStmt(s *DeferStmt) {
+	bs := c.topBlockScope()
+	if bs == nil {
+		return // 不可能：FileScope 常驻栈底
+	}
+	// 纯编译期登记，defer 语句位置零指令。载荷在退出点才编译（每个退出点
+	// 各编译一次——If/GoTo 操作数是绝对下标，编译一次再拷贝会破坏跳转目标）。
+	// 死代码里的 defer 到不了这里：visitProg 在终止语句后停止访问。
+	bs.Defers = append(bs.Defers, deferredEntry{s.Stmt, s.Line_, c.declCounter})
 }
 
 // ---------------- 表达式：短路 ----------------
@@ -697,19 +942,43 @@ func (c *Compiler) visitCustomOpcodeExpr(e *CustomOpcodeExpr) {
 
 // ---------------- 小工具 ----------------
 
-// identSlot 标识符 → 变量槽位索引。没声明过就当作外部变量，登记到文件作用域。
+// identSlot 标识符 → 变量槽位索引。没声明过就当作外部变量，登记到文件作用域
+// （名字非空正是 Program.Exports 的判据）。PushValue / PushId 共用这一处查找；
+// 拼接 defer 载荷时走冻结名字绑定（resolveAtSplice）。
 func (c *Compiler) identSlot(name string) int {
-	if host := c.findIdentHost(name); host != nil {
+	var host *BlockScope
+	if c.deferOrderFloor >= 0 {
+		host = c.resolveAtSplice(name)
+	} else {
+		host = c.findIdentHost(name)
+	}
+	if host != nil {
 		return host.IdMap[name]
 	}
-	c.declareExported(name, c.varAlloc.newUniqueVar(name))
+	c.declareExported(name, c.varAlloc.newUniqueVar(name), true)
 	return c.fileScope().IdMap[name]
 }
 
-func (c *Compiler) declareExported(name string, idx int) {
-	// 登记一个会进 Program.Exports 的变量。索引来自 newUniqueVar（不回收）。
+// declareExported 登记一个会进 Program.Exports 的变量。索引来自 newUniqueVar
+// （不回收）。implicitExport：隐式导出（从未声明的宿主变量）记序号 -1，豁免
+// defer 冻结绑定检查——它不是本地槽位，是宿主变量。
+func (c *Compiler) declareExported(name string, idx int, implicitExport bool) {
 	c.fileScope().IdMap[name] = idx
+	if implicitExport {
+		c.fileScope().IdOrder[name] = -1
+	} else {
+		c.fileScope().IdOrder[name] = c.declCounter
+		c.declCounter++
+	}
 	c.prog.SetExport(name, idx)
+}
+
+// declareLocal 登记一个局部变量：名字只进块作用域（宿主看不到），声明序号取
+// declCounter 的全局当前值。
+func (c *Compiler) declareLocal(bs *BlockScope, name string, idx int) {
+	bs.IdMap[name] = idx
+	bs.IdOrder[name] = c.declCounter
+	c.declCounter++
 }
 
 // visitBodyAsBlock 块 / if 分支 / 循环体在 AST 里都是裸 Prog（没有 BlockStmt 包着），
@@ -719,6 +988,12 @@ func (c *Compiler) visitBodyAsBlock(p *Prog) {
 	if p != nil {
 		c.visit(p)
 	}
+	// 块尾结算（if 分支 / 循环体同普通块）。体以终止语句结尾时这里不可达，
+	// 跳过——出口结算（return / break / continue）已就地拼过副本。
+	if !c.stmtTerminates {
+		c.spliceDefers(bs)
+	}
+	bs.Defers = nil // 最终结算
 	c.popScope()
 	for _, idx := range bs.IdMap {
 		c.varAlloc.freeVar(idx)

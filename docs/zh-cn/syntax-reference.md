@@ -17,7 +17,7 @@
 > - `cpp/include/stope/token.hpp` / `common.hpp` / `custom_opcode.hpp` —— Token 种类、优先级、自定义指令配置
 >
 > 另有 GDScript 参考实现（`gdscript/addons/stope/parser.gd`），C++ 侧在**错误恢复**与**顶层 `}`**
-> 两处有意与之不同，差异集中列在 §7。
+> 两处有意与之不同（差异见 [syntax-impl.md §9.3](syntax-impl.md)）。
 > 行为细节以 `cpp/docs/parser-test-plan.md`、`cpp/docs/lexer-test-plan.md` 中的实测用例为准。
 > 文中所有边界行为（数字切分、转义、二进制数组、缺分号等）均于 **2026-10-16** 用探针实测核对过。
 > 实现层面的已知缺陷（PD 编号、源码位置、修法建议）不在本文展开，
@@ -32,7 +32,6 @@
   - 4.1 优先级与结合性 · 4.2 主表达式 · 4.3 调用与索引 · 4.4 常量折叠
 - [5. 内建特性：args / argc / 自定义指令](#5-内建特性args--argc--自定义指令)
 - [6. 错误处理与实现限制](#6-错误处理与实现限制)
-- [7. 与 GDScript 参考实现的差异](#7-与-gdscript-参考实现的差异)
 
 ---
 
@@ -93,13 +92,13 @@ ident = ( letter | "_" ) { letter | digit | "_" } { ":" ( letter | "_" ) { lette
 
 ### 2.2 关键字
 
-共 18 个，全部小写。**关键字优先于自定义指令名**——即使注册了同名自定义指令，也仍被识别为关键字。
+共 19 个，全部小写。**关键字优先于自定义指令名**——即使注册了同名自定义指令，也仍被识别为关键字。
 
 | 类别 | 关键字 |
 | --- | --- |
 | 字面量 | `null` `false` `true` |
 | 逻辑/算术运算符 | `not`（同 `!`）`and`（同 `&&`）`or`（同 `\|\|`）`idiv`（整除） |
-| 控制流 | `if` `elif` `else` `while` `break` `continue` |
+| 控制流 | `if` `elif` `else` `while` `break` `continue` `defer` |
 | 声明 | `let` `export` |
 | 返回 | `return` |
 | 参数 | `args`（按下标取参数）`argc`（参数个数） |
@@ -212,6 +211,7 @@ statement      = empty_stmt
                | while_stmt
                | break_stmt
                | continue_stmt
+               | defer_stmt
                | expr_or_assign_stmt ;
 
 empty_stmt     = ";" ;
@@ -226,6 +226,7 @@ if_stmt        = "if" expr "{" program "}"
 while_stmt     = "while" [ expr ] "{" program "}" ;
 break_stmt     = "break" ";" ;
 continue_stmt  = "continue" ";" ;
+defer_stmt     = "defer" statement ;
 expr_or_assign_stmt = expr [ "=" expr ] ";" ;
 ```
 
@@ -331,6 +332,39 @@ continue;
 ```
 
 必须紧跟 `;`，不带操作数。
+
+#### `defer` —— 退出结算
+
+```stope
+defer stmt;         // 载荷是一条完整语句（赋值 / 块 / if / while 均可）
+```
+
+**触发时机是块作用域**（不是函数——本语言没有函数）：`defer` 把载荷登记到
+当前块，控制流离开该块时执行。登记是纯编译期动作，`defer` 语句位置**零指令**；
+编译器把载荷拼接到每个退出点（块尾、`break`、`continue`、`return` 各一份副本）。
+
+- **同一块内多条 defer 按 LIFO 执行**（后登记先执行）；跨块时内层块的先于
+  外层块。顺序在编译期就物化成指令布局，可静态推演。
+- **载荷在退出点读变量的当前值**——不是 Go 那样的 defer 点参数快照。要快照
+  请显式 `let s = x; defer print(s);`。要快照的只有「名字绑定」：载荷引用的
+  名字按 `defer` 语句位置的词法作用域解析，此后块内再声明或遮蔽的同名变量
+  与载荷无关。
+- **循环体块的 defer 每轮块尾执行一次**。`while` 条件为假、块未进入时自然
+  不执行。
+- **`return` 的返回值在 defer 结算之后求值**（出口次序：结算 → 求值 → Return）
+  ——defer 可以影响返回值（结算先于退出动作，与块退出一致）。程序以 `return`
+  结尾时，产物里没有 Return 之后的结算副本（那段路径不可达）。
+- **引用后文声明的本地名字报错**：`defer print(msg); let msg = 1;` 报
+  `"msg" is declared after the defer statement.`（行号归 defer 语句）。
+  从未声明的名字（隐式导出，如 `fmt:println`）不受限。
+- **载荷是一条控制流边界**：载荷内的 `break` / `continue` 不得越出载荷命中
+  外层循环（`"break" cannot cross a defer statement.`）；`return` 在载荷内
+  一律报错（`"return" cannot be used in a defer statement.`——它的终点是
+  整个程序，必然越界）。载荷内部自己的循环不受影响。
+- 直接嵌套（`defer defer X;`）合法但退化：内层 defer 的触发点 = 外层载荷
+  scope 的结束 = 同一退出点，等同直接写 X。
+- **运行期出错（VM 错误通道）不触发 defer 结算**——结算代码是编译进正常
+  退出路径的，错误路径不会到达它。
 
 #### 表达式语句与赋值
 
@@ -512,24 +546,13 @@ Parser p(lexer, &cfg);                                 // config 必须在构造
 
 | 限制 | 说明 |
 | --- | --- |
-| **递归无深度上限** | 解析与析构都是递归的。8 MB 栈下实测：约 12000 层嵌套括号会**解析阶段栈溢出**；约 5000 层嵌套块会在**析构阶段**崩溃。病态输入会直接让进程崩溃，不是报错。 |
+| **嵌套深度上限 256** | 解析递归深度默认上限 256，超限报一条 `line N: nesting too deep (max 256). ` 并停止递归（不产生连锁错误）。设为 0 表示不限，病态输入可致栈溢出崩溃 |
 | 解析不校验左值 | `1 = 2;` 语法通过 |
 | `let a = 1`（缺 `;`）不报错 | 见 §3.2 |
 | 空括号 `()` 不支持 | 见 §4.3 |
 
 > 这些限制是**实现现状**，其缺陷编号（PD-x）、源码位置与修法建议见
 > [syntax-impl.md §10](syntax-impl.md#10-已知缺陷清单)。
-
----
-
-## 7. 与 GDScript 参考实现的差异
-
-参考实现位于 `gdscript/addons/stope/parser.gd`。C++ 侧在以下两处**有意偏离**，其余保持一致：
-
-| 场景 | 参考实现 | C++ 实现 |
-| --- | --- | --- |
-| 出错后是否推进 Token | `parse_break_stmt` / `parse_args_expr` / `parse_call_expr` / `parse_custom_inst` 等出错后都 `next_token()`（吞掉后续内容） | 只报错、不推进，让后续 Token 作为独立语句重新解析 |
-| 顶层孤立 `}` | `prog_end_tokens` 让解析静默结束，后续语句被丢弃 | 报 `unexpected "}" at top level.` 并跳过继续解析 |
 
 ---
 
@@ -545,6 +568,7 @@ if c { } elif c2 { } else { }
 while { }              while c { }
 break;                 continue;
 { }                    // 块
+defer a = 1;           defer { cleanup(); }   // 退出结算（块作用域，LIFO）
 
 // 返回
 return;                return 1;              return 1, 2;

@@ -33,6 +33,19 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	var stack_size_mgr:StackSizeManager
 	var scope_stack:Array[Scope] = []
 
+	# 全局声明序号：declare_local 与 declare_exported（非隐式导出）时递增。
+	# defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于 defer
+	# 语句处的基线，报 "declared after the defer statement."。隐式导出记 -1 豁免。
+	var decl_counter:int = 0
+	# defer 载荷编译期状态：当前生效的声明序号基线（< 0 = 不在载荷里）与
+	# 「declared after」错误的归责行号（defer 语句行）。
+	var defer_order_floor:int = -1
+	var defer_err_line:int = -1
+	# 死代码消除：每条语句 visitor 维护的终止标志；进入语句前由语句序列循环清零。
+	var stmt_terminates:bool = false
+	# 最内层 while 的循环体里是否有本层 break（死循环判定用）；按 while 配对保存恢复。
+	var saw_break:bool = false
+
 	func _init(custom:StopeOpcode.CustomOpcodeConfig = null) -> void:
 		custom_opcodes = custom
 
@@ -53,6 +66,11 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		_reset(out)
 		_export_pre_exports(pre_exports)
 		visit(ast)
+		# 顶层 defer：程序尾结算。程序以终止语句（return / 死循环等）结尾时
+		# 这里不可达（return 出口已在 on_visit_return_stmt 结算过），再拼就是
+		# Return 之后的死代码——跳过；自然结束（fall-through）才需要这份结算。
+		if not stmt_terminates: _splice_defers(_file_scope())
+		_file_scope().defers.clear()	# 最终结算：途中出口（return）已各拼过副本
 		if not errors.is_empty():
 			_clear_output()
 			return StopeResult.Error
@@ -67,6 +85,11 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		var_alloc = VariableAllocator.new()
 		stack_size_mgr = StackSizeManager.new()
 		scope_stack = []
+		decl_counter = 0
+		defer_order_floor = -1
+		defer_err_line = -1
+		stmt_terminates = false
+		saw_break = false
 		cur_line = -1
 		prog = out
 		_clear_output()
@@ -131,21 +154,58 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 			var s:Scope = scope_stack[i]
 			if s is BlockScope: return s
 		return null
-	func _top_while_scope() -> WhileScope:
-		for i in range(len(scope_stack) - 1, -1, -1):
-			var s:Scope = scope_stack[i]
-			if s is WhileScope: return s
-		return null
 	func _find_ident_host(name:String) -> BlockScope:
 		for i in range(len(scope_stack) - 1, -1, -1):
 			var s:Scope = scope_stack[i]
 			if s is BlockScope and (name in s.id_map): return s
 		return null
+	# 冻结名字绑定：defer 载荷里找名字宿主时用（floor = defer 登记时的声明序号基线）。
+	# 最内层载荷根以内（栈中更靠内）不过滤；以外跳过「声明序号 >= floor」的本地名
+	# （defer 之后才声明 / 遮蔽的）。与 cpp/src/compiler.cpp 的 findIdentHostFrozen 一致。
+	func _find_ident_host_frozen(name:String, floor:int) -> BlockScope:
+		# 最内层载荷根：它以内是载荷自己的内部作用域，名字解析不过滤
+		var payload_idx:int = -1
+		for i in range(len(scope_stack) - 1, -1, -1):
+			var s:Scope = scope_stack[i]
+			if s is BlockScope and s.is_defer_payload:
+				payload_idx = i
+				break
+		for i in range(len(scope_stack) - 1, -1, -1):
+			var s:Scope = scope_stack[i]
+			if not (s is BlockScope): continue
+			if not (name in s.id_map): continue
+			if i < payload_idx:	# 登记 scope 一侧：跳过 defer 之后才声明的（遮蔽）
+				# 基线 = 登记时的 decl_counter（= 下一个待分配序号），所以
+				# 「order >= 基线」⟺ 在 defer 之后声明。隐式导出记 -1，豁免。
+				if s.id_order.has(name):
+					var o:int = s.id_order[name]
+					if o >= 0 and o >= floor: continue
+			return s
+		return null
+	# defer 载荷编译期的名字解析：冻结规则优先；冻结找不到但当前找得到 =
+	# 后文声明 → 报错（行号归 defer 语句），按当前绑定继续。都空 → 返回 null
+	# 走隐式导出路径。与 cpp/src/compiler.cpp 的 resolveAtSplice 一致。
+	func _resolve_at_splice(name:String) -> BlockScope:
+		var now:BlockScope = _find_ident_host(name)
+		var frozen:BlockScope = _find_ident_host_frozen(name, defer_order_floor)
+		if frozen != null: return frozen
+		if now != null:
+			error(defer_err_line, str('"', name, '" is declared after the defer statement. '))
+		return now
 	func _file_scope() -> FileScope: return scope_stack.front()
 
 	# ---------------- 语句 ----------------
+	# 语句序列（顶层 Prog / 块体 / if 分支 / while 体共用）：终止语句（return /
+	# break / continue / 死循环）之后的语句在语言语义下执行不到——不再发射，也
+	# 不登记它们的 defer（死代码消除）。序列的终止性 = 最后一条已发射语句。
 	func on_visit_prog(p:StopeAst.Prog) -> void:
-		for s in p.stmts: visit(s)
+		var terminated := false
+		for s in p.stmts:
+			if terminated: break
+			stmt_terminates = false	# 每条语句先清零；终止语句的 visitor 置 true
+			visit(s)
+			terminated = stmt_terminates
+		stmt_terminates = terminated
 	func on_visit_expr_stmt(s:StopeAst.ExprStmt) -> void:
 		visit(s.expr)
 		_emit_op(Opcode.Pop); stack_size_mgr.dec()
@@ -160,7 +220,7 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 				return
 			# 不要 visit 标识符本身（那会生成 PushValue 取值），这里是要绑定到新变量
 			var idx:int = var_alloc.new_var()
-			bs.id_map[name] = idx
+			_declare_local(bs, name, idx)
 			_emit_op(Opcode.PushId); _emit_index(idx); stack_size_mgr.inc()
 			visit(s.expr)
 			_emit_op(Opcode.Assign); stack_size_mgr.dec(2)
@@ -169,11 +229,22 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 				if nm in bs.id_map:
 					error(s.line, str("duplicate declaration of '", nm, "'. "))
 					continue
-				bs.id_map[nm] = var_alloc.new_var()
+				_declare_local(bs, nm, var_alloc.new_var())
 	func on_visit_return_stmt(s:StopeAst.ReturnStmt) -> void:
+		# defer 边界：return 的终点是整个程序，在载荷内必然越界，一律报错。
+		for sc in scope_stack:
+			if sc is BlockScope and sc.is_defer_payload:
+				error(s.line, '"return" cannot be used in a defer statement. ')
+				return
+		# 顺序：先结算，再求返回值，最后 Return（结算 → PushValue → Return）。
+		# 结算先于退出动作，与块退出一致——defer 可以影响返回值。
+		for i in range(len(scope_stack) - 1, -1, -1):
+			var sc:Scope = scope_stack[i]
+			if sc is BlockScope: _splice_defers(sc)
 		for e in s.exprs: visit(e)
 		_emit_op(Opcode.Return); _emit_index(len(s.exprs))
 		prog.max_return_num = maxi(prog.max_return_num, len(s.exprs))
+		stmt_terminates = true
 		# Return 会让 VM 直接跳到 code 末尾，栈上的返回值不回收
 	func on_visit_export_stmt(s:StopeAst.ExportStmt) -> void:
 		if len(scope_stack) > 1:
@@ -187,17 +258,27 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	func on_visit_block_stmt(s:StopeAst.BlockStmt) -> void:
 		var bs:BlockScope = _push_block_scope()
 		visit(s.prog)
+		# 块尾结算：本 scope 的 defer 在这里执行（LIFO）。块体以终止语句结尾时
+		# 这里不可达（return 出口已结算、break/continue 出口就地结算过）——
+		# 跳过，避免拼出不可达的副本。
+		if not stmt_terminates: _splice_defers(bs)
+		bs.defers.clear()	# 最终结算：途中出口（break/return）已各拼过副本
 		_pop_scope()
 		for idx in bs.id_map.values(): var_alloc.free_var(int(idx))	# 回收局部变量索引
 	func on_visit_if_stmt(s:StopeAst.IfStmt) -> void:
 		if s.cond == null: return
 		var goto_end_indices:Array[int] = []
+		var all_branches_terminate := true
+		var has_else := false
 		visit(s.cond)
 		_emit_op(Opcode.If); stack_size_mgr.dec()
 		var last_if_pos:int = _emit_placeholder()	# 条件为假时跳到这里
 		_visit_body_as_block(s.first_prog)
-		_emit_op(Opcode.GoTo)					# 分支走完，跳出整个 if
-		goto_end_indices.append(_emit_placeholder())
+		var branch_term:bool = stmt_terminates
+		all_branches_terminate = all_branches_terminate and branch_term
+		if not branch_term:	# 分支走完会落到这里，需要跳出整个 if；终止则死代码
+			_emit_op(Opcode.GoTo)
+			goto_end_indices.append(_emit_placeholder())
 		_patch_index(last_if_pos, _code_size())
 		for ei in s.elifs:
 			if ei.cond == null: continue
@@ -205,11 +286,18 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 			_emit_op(Opcode.If); stack_size_mgr.dec()
 			last_if_pos = _emit_placeholder()
 			_visit_body_as_block(ei.prog)
-			_emit_op(Opcode.GoTo)
-			goto_end_indices.append(_emit_placeholder())
+			branch_term = stmt_terminates
+			all_branches_terminate = all_branches_terminate and branch_term
+			if not branch_term:
+				_emit_op(Opcode.GoTo)
+				goto_end_indices.append(_emit_placeholder())
 			_patch_index(last_if_pos, _code_size())
-		if s.else_prog != null: _visit_body_as_block(s.else_prog)
+		has_else = s.else_prog != null
+		if has_else: _visit_body_as_block(s.else_prog)
+		else: all_branches_terminate = false	# 无 else：条件全假时落到 if 之后
 		for pos in goto_end_indices: _patch_index(pos, _code_size())
+		# if 语句的终止性：else 存在且所有分支终止（组合式，逐分支局部判断）
+		stmt_terminates = has_else and all_branches_terminate
 	func on_visit_while_stmt(s:StopeAst.WhileStmt) -> void:
 		var ws:WhileScope = _push_while_scope()
 		ws.start_index = _code_size()	# continue 回到这里
@@ -218,11 +306,21 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 			visit(s.cond)
 			_emit_op(Opcode.If); stack_size_mgr.dec()
 			case_goto_end_pos = _emit_placeholder()
+		# saw_break 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
+		var saved_saw_break:bool = saw_break
+		saw_break = false
 		_visit_body_as_block(s.prog)
-		_emit_op(Opcode.GoTo); _emit_index(ws.start_index)
+		var body_term:bool = stmt_terminates
+		var body_saw_break:bool = saw_break
+		saw_break = saved_saw_break
+		if not body_term:	# 体终止（return/break/continue 收尾）则回跳是死代码
+			_emit_op(Opcode.GoTo); _emit_index(ws.start_index)
 		for pos in ws.break_indices: _patch_index(pos, _code_size())
 		# [纠正 4] 条件可省。无条件时必须跳过回填，否则会把第 0 条指令改成跳转目标。
 		if case_goto_end_pos >= 0: _patch_index(case_goto_end_pos, _code_size())
+		# while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才永不退出。
+		# `while true { }` 带条件，按可退出处理，不做字面量折叠。
+		stmt_terminates = s.cond == null and not body_saw_break
 		_pop_scope()
 	func on_visit_assign_stmt(s:StopeAst.AssignStmt) -> void:
 		if s.left_expr.node_type == StopeAst.NodeType.IdentExpr:
@@ -238,18 +336,85 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		visit(s.right_expr)
 		_emit_op(Opcode.Assign); stack_size_mgr.dec(2)
 	func on_visit_break_stmt(s:StopeAst.BreakStmt) -> void:
-		var ws:WhileScope = _top_while_scope()
-		if ws == null:
+		# 找最内层 WhileScope。途中先撞到 defer 载荷边界 = 目标循环在载荷外：
+		# 载荷在退出点才执行，break 从收尾代码里跳回主流程是灾难语义，禁。
+		var wi:int = -1
+		for i in range(len(scope_stack) - 1, -1, -1):
+			var sc:Scope = scope_stack[i]
+			if sc is WhileScope:
+				wi = i
+				break
+			if sc is BlockScope and sc.is_defer_payload:
+				error(s.line, '"break" cannot cross a defer statement. ')
+				return
+		if wi < 0:
 			error(s.line, 'cannot use "break" outside of a loop. ')
 			return
+		# 结算 break 越过的所有块：从最内层到循环体块（不含 WhileScope 本身、
+		# 不含循环外的任何 scope）。运行时 break 直接跳循环尾，这些块的正常
+		# 块尾拼接不会执行到，必须在跳转前就地结算。
+		for i in range(len(scope_stack) - 1, wi, -1):
+			if scope_stack[i] is BlockScope: _splice_defers(scope_stack[i])
 		_emit_op(Opcode.GoTo)
-		ws.break_indices.append(_emit_placeholder())
+		scope_stack[wi].break_indices.append(_emit_placeholder())
+		saw_break = true	# 告知最内层 while：本层有 break（死循环判定用）
+		stmt_terminates = true
 	func on_visit_continue_stmt(s:StopeAst.ContinueStmt) -> void:
-		var ws:WhileScope = _top_while_scope()
-		if ws == null:
+		# 同 break：continue 也退出循环体块，体块的 defer 必须先结算。
+		var wi:int = -1
+		for i in range(len(scope_stack) - 1, -1, -1):
+			var sc:Scope = scope_stack[i]
+			if sc is WhileScope:
+				wi = i
+				break
+			if sc is BlockScope and sc.is_defer_payload:
+				error(s.line, '"continue" cannot cross a defer statement. ')
+				return
+		if wi < 0:
 			error(s.line, 'cannot use "continue" outside of a loop. ')
 			return
-		_emit_op(Opcode.GoTo); _emit_index(ws.start_index)
+		for i in range(len(scope_stack) - 1, wi, -1):
+			if scope_stack[i] is BlockScope: _splice_defers(scope_stack[i])
+		_emit_op(Opcode.GoTo); _emit_index(scope_stack[wi].start_index)
+		stmt_terminates = true
+	# defer：纯编译期登记，defer 语句位置零指令。载荷在退出点才编译（每个退出点
+	# 各编译一次——If/GoTo 操作数是绝对下标，编译一次再拷贝会破坏跳转目标）。
+	func on_visit_defer_stmt(s:StopeAst.DeferStmt) -> void:
+		var bs:BlockScope = _top_block_scope()
+		if bs == null: return	# 不可能：FileScope 常驻栈底
+		var d := Deferred.new()
+		d.stmt = s.stmt
+		d.line = s.line
+		d.order_baseline = decl_counter
+		bs.defers.append(d)
+
+	# ---------------- defer 拼接 ----------------
+	# 对 bs 的 defers 逆序逐条编译载荷（LIFO）。⚠ 不清空 bs.defers：一个块可以
+	# 有多个运行期出口（break / continue / return 各一处 + 块尾），每个出口都
+	# 要拼一份自己的副本；只有块尾 / 程序尾的「最终结算」由调用方在拼接后清空。
+	# 开头先检查：defers 为空或已有错误就直接返回（错误去重：载荷在每个退出点
+	# 重编译，报一次就够）；载荷循环内报错即停，不再拼后续。
+	func _splice_defers(bs:BlockScope) -> void:
+		if bs.defers.is_empty() or not errors.is_empty(): return
+		for k in range(len(bs.defers) - 1, -1, -1):
+			if not errors.is_empty(): return
+			var d:Deferred = bs.defers[k]
+			var saved_floor:int = defer_order_floor
+			var saved_line:int = defer_err_line
+			defer_order_floor = d.order_baseline
+			defer_err_line = d.line
+			# 载荷包一层隐式作用域并打标记：break/continue/return 的越界检查
+			# 靠它识别「从收尾代码里跳回主流程」。
+			var ps:BlockScope = _push_block_scope()
+			ps.is_defer_payload = true
+			visit(d.stmt)
+			# 载荷 scope 自己的 defers（直接嵌套 defer defer X 落在这里）：
+			# 触发点 = 载荷 scope 结束 = 同一退出点，就地拼接。
+			_splice_defers(ps)
+			_pop_scope()
+			for idx in ps.id_map.values(): var_alloc.free_var(int(idx))
+			defer_order_floor = saved_floor
+			defer_err_line = saved_line
 
 	# ---------------- 表达式 ----------------
 	# NullExpr / ArgcExpr 没有子节点，但签名保持一致以便统一 call(n)
@@ -364,15 +529,26 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	# 标识符 -> 变量槽位索引。没声明过就当作外部变量，登记到文件作用域
 	# （名字非空正是 Program.exports 的判据）。PushValue / PushId 共用这一处查找，
 	# 否则两边容易一边登记一边漏。
+	# defer 载荷编译期（defer_order_floor >= 0）走冻结名字绑定规则。
 	func _ident_slot(name:String) -> int:
-		var host:BlockScope = _find_ident_host(name)
+		var host:BlockScope = _resolve_at_splice(name) if defer_order_floor >= 0 \
+				else _find_ident_host(name)
 		if host != null: return host.id_map[name]
-		_declare_exported(name, var_alloc.new_unique_var(name))
+		_declare_exported(name, var_alloc.new_unique_var(name), true)
 		return _file_scope().id_map[name]
 	# 登记一个会进 Program.exports 的变量。索引来自 new_unique_var（不回收）。
-	func _declare_exported(name:String, idx:int) -> void:
-		_file_scope().id_map[name] = idx
+	# 隐式导出（从未声明的宿主变量）记 -1：豁免 defer 冻结绑定检查。
+	func _declare_exported(name:String, idx:int, implicit_export:bool = false) -> void:
+		var fs:FileScope = _file_scope()
+		fs.id_map[name] = idx
+		fs.id_order[name] = -1 if implicit_export else decl_counter
+		if not implicit_export: decl_counter += 1
 		prog.exports[name] = idx
+	# 登记一个局部变量：id_map 之外再记声明序号（defer 冻结绑定用）。
+	func _declare_local(bs:BlockScope, name:String, idx:int) -> void:
+		bs.id_map[name] = idx
+		bs.id_order[name] = decl_counter
+		decl_counter += 1
 	# 预导出：必须在 _reset() 之后调用（reset 会重建 var_alloc、清空 out.exports）。
 	# 走 new_unique_var，并且先于源码里任何变量分配 —— 这一步定了整个程序的槽位编号。
 	func _export_pre_exports(names:Array) -> void:
@@ -389,9 +565,13 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 			_declare_exported(name, var_alloc.new_unique_var(name))
 	# 块 / if 分支 / 循环体在 AST 里都是裸 Prog（没有 BlockStmt 包着），
 	# 这里补一层 BlockScope，让内部 let 的变量在离开时被回收。
+	# 块尾结算（if 分支 / 循环体同普通块）：体以终止语句结尾时这里不可达，
+	# 跳过——出口结算（return / break / continue）已就地拼过副本。
 	func _visit_body_as_block(p:StopeAst.Prog) -> void:
 		var bs:BlockScope = _push_block_scope()
 		visit(p)
+		if not stmt_terminates: _splice_defers(bs)
+		bs.defers.clear()	# 最终结算
 		_pop_scope()
 		for idx in bs.id_map.values(): var_alloc.free_var(int(idx))
 	# 二元运算符 -> 指令。注意二元 `-` 是 Sub 而不是 Minus（[纠正 1]）
@@ -419,7 +599,25 @@ class Scope:
 # 名字作用域：标识符 -> 变量总表中的索引
 class BlockScope extends Scope:
 	var id_map:Dictionary[String,int]
-	func _init() -> void: type = 'block'; id_map = {}
+	# 名字 -> 声明序号（decl_counter 的全局值，跨 scope 可比）。defer 的
+	# 「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于 defer 语句处
+	# 的基线，报 "declared after the defer statement."。隐式导出记 -1 豁免。
+	var id_order:Dictionary[String,int]
+	# defer 语句在本 scope 的登记：载荷（所有权留在 AST）、defer 行号、登记时
+	# 的声明序号基线。退出点（块尾 / break / continue / return）由编译器逆序
+	# 拼接——运行时没有 defer 栈，顺序在编译期物化。
+	var defers:Array[Deferred] = []
+	# 该 scope 是否为 defer 载荷的隐式作用域：break / continue / return
+	# 不得跨越它（break/continue 的目标循环在载荷外 → 报错；return 在
+	# 载荷内一律报错）。
+	var is_defer_payload:bool = false
+	func _init() -> void: type = 'block'; id_map = {}; id_order = {}
+
+# defer 登记条目（对照 C++ BlockScope::Deferred）
+class Deferred:
+	var stmt:StopeAst.Stmt = null
+	var line:int = 0
+	var order_baseline:int = 0
 
 # 文件作用域。export 与「未声明就使用的标识符」都落到这里。
 class FileScope extends BlockScope:

@@ -76,8 +76,8 @@ int main() {
   printf("   PD-10 不校验赋值左值                        : 未修（S-44）\n");
   printf("   PD-11b 空括号 () 不支持                     : 未修（F-17）\n");
   printf("   PD-12 每发 1 条 error 计量多 1 次 delete    : 未修（B-08，根因已定位）\n");
-  printf("   PD-13 递归无深度上限（解析爆栈）            : 未修（test_parser_depth）\n");
-  printf("   PD-13b 析构同样递归                          : 未修（test_parser_depth unary）\n");
+  printf("   PD-13 递归无深度上限（解析爆栈）            : 已修 2026-10-30（maxDepth 256，test_parser_depth B-02）\n");
+  printf("   PD-13b 析构同样递归                          : 已修 2026-10-30（随 PD-13，AST 深度有界）\n");
   printf("   PD-14 lexer.errors 不合并进 parser.errors   : 未修（R-06）\n");
   printf("   PD-15 tokens 环形缓冲未零初始化             : 未修（无直接断言）\n");
   printf("   PD-16 parseDecicalInteger 拼写              : 已修 2026-10-16（方案A 重构消解）\n");

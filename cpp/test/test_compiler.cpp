@@ -386,9 +386,9 @@ void runCompilerTests() {
     auto r = compileSrc(u"args[0]; argc;");
     expectCode(r, "PushInt(0) GetArg Pop ArgNum Pop", "C-26");
   }
-  {  // C-27 return：返回值个数Recorded
+  {  // C-27 return：返回值个数Recorded；后面的 return; 不可达，不发射
     auto r = compileSrc(u"return 1, 2; return;");
-    expectCode(r, "PushInt(0) PushInt(1) Return(2) Return(0)", "C-27");
+    expectCode(r, "PushInt(0) PushInt(1) Return(2)", "C-27");
     check(r.prog.maxReturnNum == 2, "C-27", "max return num == 2",
           "got=" + std::to_string(r.prog.maxReturnNum));
   }
@@ -406,13 +406,15 @@ void runCompilerTests() {
                "PushValue(4) Pop",
                "C-29");
   }
-  {  // C-30 while + continue：回到条件开头（索引 0）
+  {  // C-30 while + continue：回到条件开头（索引 0）。体以 continue 结尾
+     //   → 回跳 GoTo 是死代码，省略
     auto r = compileSrc(u"while a { continue; }");
-    expectCode(r, "PushValue(0) If(8) GoTo(0) GoTo(0)", "C-30");
+    expectCode(r, "PushValue(0) If(6) GoTo(0)", "C-30");
   }
-  {  // C-31 while + break：跳到循环末尾（索引 8）
+  {  // C-31 while + break：跳到循环末尾（索引 6）。体以 break 结尾
+     //   → 回跳 GoTo 是死代码，省略
     auto r = compileSrc(u"while a { break; }");
-    expectCode(r, "PushValue(0) If(8) GoTo(8) GoTo(0)", "C-31");
+    expectCode(r, "PushValue(0) If(6) GoTo(6)", "C-31");
   }
   {  // C-32 无条件 while：没有条件就不需要回填跳转目标
     // （参考实现这里会把 code[0] 写成 code 长度，见 compiler.hpp 的偏离说明 4）
@@ -573,21 +575,17 @@ void runCompilerTests() {
     auto r = compileSrc(u"{ let a = 1; let a = 2; }");
     expectErrCount(r, 1, "C-50");
   }
-  {  // C-51 嵌套循环：break / continue 归最近的那一层
+  {  // C-51 嵌套循环：break / continue 归最近的那一层。内层体以 break
+     //   结尾 → 内层回跳省略；continue 终止外层体 → 外层回跳省略
     auto r = compileSrc(u"while a { while b { break; } continue; }");
-    expectCode(
-        r,
-        "PushValue(0) If(16) PushValue(1) If(12) GoTo(12) GoTo(4) GoTo(0) "
-        "GoTo(0)",
-        "C-51");
+    expectCode(r, "PushValue(0) If(12) PushValue(1) If(10) GoTo(10) GoTo(0)",
+               "C-51");
   }
-  {  // C-52 循环嵌套 if 时的跳转目标仍然正确
+  {  // C-52 循环嵌套 if（两分支都终止）→ 回跳省略；分支体终止 → 分支尾
+     //   GoTo 也省略（旧产物里 break 的 GoTo 后面还有一条分支尾 GoTo）
     auto r = compileSrc(u"while a { if b { break; } else { continue; } }");
-    expectCode(
-        r,
-        "PushValue(0) If(16) PushValue(1) If(12) GoTo(16) GoTo(14) GoTo(0) "
-        "GoTo(0)",
-        "C-52");
+    expectCode(r, "PushValue(0) If(12) PushValue(1) If(10) GoTo(12) GoTo(0)",
+               "C-52");
   }
   // ---------- C-53…C-56 预导出 ----------
   // 与 golden.txt 的 CM-73…CM-78 对应，只是这里手写：C++ 是权威实现，别只靠
@@ -623,6 +621,95 @@ void runCompilerTests() {
     // 块内 let 是遮蔽，不算冲突
     r = compilePre(u"{ let a = 1; }", {u"a"});
     expectErrCount(r, 0, "C-56c");
+  }
+
+  // ---------- C-57…C-63 defer：拼接布局与两条纪律 ----------
+  {  // C-57 defer 语句位置零指令：载荷在程序尾拼接，指令流与手写赋值相同
+    auto withDefer = compileSrc(u"defer x = 5;");
+    auto without = compileSrc(u"x = 5;");
+    expectCode(withDefer, "PushId(0) PushInt(0) Assign", "C-57");
+    check(withDefer.prog.opcodes == without.prog.opcodes, "C-57",
+          "defer compiles to the same layout as the bare assignment", "");
+  }
+  {  // C-58 前向引用：载荷引用 defer 之后才声明的本地名字 → 报错，
+     //   行号归 defer 语句（第 1 行），不是载荷编译处的程序尾
+    auto r = compileSrc(u"defer print(msg); let msg = 1;");
+    expectErrCount(r, 1, "C-58");
+    check(r.errors.size() == 1 &&
+              r.errors[0] ==
+                  "line 1: \"msg\" is declared after the defer statement. ",
+          "C-58", "error attributed to the defer line",
+          r.errors.empty() ? "" : r.errors[0]);
+  }
+  {  // C-59 break 越过 defer 边界（目标循环在载荷外）→ 报错
+    auto r = compileSrc(u"while a { defer { break; } }");
+    check(r.errors.size() == 1 &&
+              r.errors[0].find("\"break\" cannot cross a defer statement.") !=
+                  std::string::npos,
+          "C-59", "break cannot cross defer boundary",
+          r.errors.empty() ? "" : r.errors[0]);
+  }
+  {  // C-60 载荷内 return 一律报错（终点是整个程序，必然越界）
+    auto r = compileSrc(u"defer { return 1; }");
+    check(r.errors.size() == 1 &&
+              r.errors[0].find(
+                  "\"return\" cannot be used in a defer statement.") !=
+                  std::string::npos,
+          "C-60", "return cannot be used in defer",
+          r.errors.empty() ? "" : r.errors[0]);
+  }
+  {  // C-61 LIFO：同 scope 多条 defer 逆序发射（后登记先执行）。
+     //   常量池：Int(0)→0、Int(2)→1、Int(1)→2，故 b=2 是 PushInt(1)、a=1 是 PushInt(2)
+    auto r = compileSrc(u"let a = 0; let b = 0; defer a = 1; defer b = 2;");
+    expectCode(r,
+               "PushId(0) PushInt(0) Assign PushId(1) PushInt(0) Assign "
+               "PushId(1) PushInt(1) Assign PushId(0) PushInt(2) Assign",
+               "C-61");
+  }
+  {  // C-62 冻结绑定：遮蔽情形下载荷绑定 defer 处可见的外层 msg（槽 0），
+     //   不是块内后来声明的同名变量（槽 2）
+    auto r = compileSrc(
+        u"let msg = 0; let got = 0; { defer got = msg; let msg = 2; }");
+    expectCode(r,
+               "PushId(0) PushInt(0) Assign PushId(1) PushInt(0) Assign "
+               "PushId(2) PushInt(1) Assign PushId(1) PushValue(0) Assign",
+               "C-62");
+  }
+  {  // C-63 体以 break 结尾：break 出口拼一份结算，块尾副本与回跳都是
+     //   死代码，省略（旧产物里 GoTo 16 之后还有一份块尾副本 + 回跳）
+    auto r = compileSrc(
+        u"let n = 0; while a { defer n = 1; break; }");
+    expectCode(r,
+               "PushId(0) PushInt(0) Assign PushValue(1) If(16) "
+               "PushId(0) PushInt(1) Assign GoTo(16)",
+               "C-63");
+  }
+  {  // C-64 多出口各拼一份（体不终止）：块尾正常退出一份（回跳 GoTo 5 前）、
+     //   break 路径一份（GoTo 28 前）——运行期每轮块尾跑一次，break 时再跑
+     //   一次（对应 V-40 的 2）
+    auto r = compileSrc(
+        u"let n = 0; while a { defer n = 1; if b { break; } }");
+    expectCode(r,
+               "PushId(0) PushInt(0) Assign PushValue(1) If(27) "
+               "PushValue(2) If(20) PushId(0) PushInt(1) Assign GoTo(27) "
+               "PushId(0) PushInt(1) Assign GoTo(5)",
+               "C-64");
+  }
+  {  // C-65 终止语句之后的语句不发射：块内 return 已出栈，后面的 return 2
+     //   不可达；常量 2 也不进池
+    auto r = compileSrc(u"{ return 1; } return 2;");
+    expectCode(r, "PushInt(0) Return(1)", "C-65");
+    check(r.prog.intConsts.size() == 1, "C-65", "int consts == 1",
+          "got=" + std::to_string(r.prog.intConsts.size()));
+  }
+  {  // C-66 无条件 while 且体无 break = 真死循环，其后的语句不发射
+    auto r = compileSrc(u"while { } a = 1;");
+    expectCode(r, "GoTo(0)", "C-66");
+  }
+  {  // C-67 `while true { }` 带条件，按可退出处理，不视同 `while { }`
+     //   —— 其后的语句照常发射（用户明确要求的豁免）
+    auto r = compileSrc(u"while true { } a = 1;");
+    expectCode(r, "PushTrue If(5) GoTo(0) PushId(0) PushInt(0) Assign", "C-67");
   }
 }
 

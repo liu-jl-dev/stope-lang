@@ -83,19 +83,7 @@ public sealed class Parser
                 continue;
             }
 
-            Stmt? stmt;
-            switch (_cur.Type)
-            {
-                case TokenType.Let: stmt = ParseLetStmt(depth); break;
-                case TokenType.Export: stmt = ParseExportStmt(depth); break;
-                case TokenType.Return: stmt = ParseReturnStmt(depth); break;
-                case TokenType.LBrace: stmt = ParseBlockStmt(depth); break;
-                case TokenType.If: stmt = ParseIfStmt(depth); break;
-                case TokenType.While: stmt = ParseWhileStmt(depth); break;
-                case TokenType.Break: stmt = ParseBreakStmt(depth); break;
-                case TokenType.Continue: stmt = ParseContinueStmt(depth); break;
-                default: stmt = ParseExprOrAssignStmt(depth); break; // 表达式语句或赋值语句
-            }
+            Stmt? stmt = ParseStmtDispatch(depth);
             // 超限中止时子函数返回 null：不追加、不再往下解析（否则拿着同一个
             // token 反复调用会死循环）。
             if (stmt is null) break;
@@ -385,6 +373,48 @@ public sealed class Parser
         NextToken(); // 跳过 continue
         if (_cur.Type != TokenType.Semi) Error(_cur.Line, "expected \";\" in continue statement. ");
         else NextToken();
+        return stmt;
+    }
+
+    /// <summary>
+    /// <c>defer_stmt : "defer" stmt</c> —— 语句分派与 <see cref="ParseProg"/> 循环体共用一条链，
+    /// 载荷递归 depth + 1（defer 可经「载荷 → 分派 → ParseDeferStmt」无限自嵌套）。
+    /// </summary>
+    private DeferStmt ParseDeferStmt(int depth)
+    {
+        var stmt = new DeferStmt(_cur.Line);
+        NextToken(); // 跳过 defer
+        if (_cur.Type is TokenType.Semi or TokenType.RBrace or TokenType.Eof)
+        {
+            // 缺载荷。不推进（与 ParseLetStmt 缺 ";" 同一纪律）：";" 与 "}" 交给
+            // 外层 ParseProg 循环，否则死循环或吞掉外层的 "}"。
+            Error(_cur.Line, "expected statement after \"defer\". ");
+            return stmt;
+        }
+        stmt.Stmt = ParseStmtDispatch(depth + 1);
+        return stmt;
+    }
+
+    /// <summary>
+    /// 语句分派：ParseProg 循环体与 defer 载荷共用同一条链。
+    /// "{" / ";" / "}" 等结构性 token 由调用方（ParseProg 循环或 ParseDeferStmt）处理。
+    /// </summary>
+    private Stmt? ParseStmtDispatch(int depth)
+    {
+        Stmt? stmt;
+        switch (_cur.Type)
+        {
+            case TokenType.Let: stmt = ParseLetStmt(depth); break;
+            case TokenType.Export: stmt = ParseExportStmt(depth); break;
+            case TokenType.Return: stmt = ParseReturnStmt(depth); break;
+            case TokenType.LBrace: stmt = ParseBlockStmt(depth); break;
+            case TokenType.If: stmt = ParseIfStmt(depth); break;
+            case TokenType.While: stmt = ParseWhileStmt(depth); break;
+            case TokenType.Break: stmt = ParseBreakStmt(depth); break;
+            case TokenType.Continue: stmt = ParseContinueStmt(depth); break;
+            case TokenType.Defer: stmt = ParseDeferStmt(depth); break;
+            default: stmt = ParseExprOrAssignStmt(depth); break; // 表达式语句或赋值语句
+        }
         return stmt;
     }
 

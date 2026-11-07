@@ -26,6 +26,7 @@ const visitMap = {
   [NodeType.AssignStmt]: 'onVisitAssignStmt',
   [NodeType.BreakStmt]: 'onVisitBreakStmt',
   [NodeType.ContinueStmt]: 'onVisitContinueStmt',
+  [NodeType.DeferStmt]: 'onVisitDeferStmt',
 
   [NodeType.NullExpr]: 'onVisitNullExpr',
   [NodeType.BoolExpr]: 'onVisitBoolExpr',
@@ -104,6 +105,10 @@ class ASTVisitor {
   }
   onVisitBreakStmt(_s) {}
   onVisitContinueStmt(_s) {}
+  // 默认遍历载荷（编译器覆写后不遍历：载荷在退出点才编译）
+  onVisitDeferStmt(s) {
+    this.visit(s.stmt)
+  }
 
   // ---------------- 表达式 ----------------
   onVisitNullExpr(_n = null) {}

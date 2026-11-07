@@ -37,6 +37,29 @@ public sealed class Compiler : AstVisitor
     private StackSizeManager _stackSizeMgr = new();
     private readonly List<Scope> _scopeStack = new();
 
+    /// <summary>
+    /// 全局声明序号：declareLocal / declareExported（非隐式）时 +1，跨 scope 可比。
+    /// defer 的「冻结名字绑定」基线 = 登记时的当前值。
+    /// </summary>
+    private int _declCounter;
+
+    /// <summary>
+    /// defer 载荷编译期状态：当前生效的声明序号基线（&lt; 0 = 不在拼接中）与
+    /// 「declared after」错误的归责行号（defer 语句行）。
+    /// </summary>
+    private int _deferOrderFloor = -1;
+    private int _deferErrLine = -1;
+
+    /// <summary>
+    /// 死代码消除：最后一条已访问语句是否必然退出当前序列（return / break /
+    /// continue / 无条件死循环）。四个消费点见 OnVisitProg / OnVisitWhileStmt /
+    /// OnVisitIfStmt / 块尾与程序尾的 defer 最终结算。
+    /// </summary>
+    private bool _stmtTerminates;
+
+    /// <summary>最内层 while 的循环体里是否出现过 break（死循环判定用），按 while 配对保存/恢复。</summary>
+    private bool _sawBreak;
+
     public Compiler(CustomOpcodeConfig? custom = null) => _customOpcodes = custom;
 
     /// <summary>与 C++ 的 <c>Compiler::Reset</c> 一致：清错误、换自定义指令表。</summary>
@@ -62,6 +85,11 @@ public sealed class Compiler : AstVisitor
         ResetCompile(outProg);
         ExportPreExports(preExports);
         Visit(ast);
+        // 顶层 defer：程序尾结算。程序以终止语句（return / 死循环等）结尾时
+        // 这里不可达（return 出口已在 OnVisitReturnStmt 结算过），再拼就是
+        // Return 之后的死代码——跳过；自然结束（fall-through）才需要这份结算。
+        if (!_stmtTerminates) SpliceDefers(FileScope());
+        FileScope().Defers.Clear(); // 最终结算：途中出口（return）已各拼过副本
         if (Errors.Count > 0)
         {
             _prog.Clear();
@@ -104,6 +132,11 @@ public sealed class Compiler : AstVisitor
         _stackSizeMgr = new StackSizeManager();
         _scopeStack.Clear();
         CurLine = -1;
+        _declCounter = 0;
+        _deferOrderFloor = -1;
+        _deferErrLine = -1;
+        _stmtTerminates = false;
+        _sawBreak = false;
         _prog = outProg;
         outProg.Clear();
         _scopeStack.Add(new FileScope());
@@ -208,14 +241,6 @@ public sealed class Compiler : AstVisitor
         return null;
     }
 
-    private WhileScope? TopWhileScope()
-    {
-        for (int i = _scopeStack.Count - 1; i >= 0; --i)
-            if (_scopeStack[i] is WhileScope ws)
-                return ws;
-        return null;
-    }
-
     private BlockScope? FindIdentHost(string name)
     {
         for (int i = _scopeStack.Count - 1; i >= 0; --i)
@@ -224,12 +249,112 @@ public sealed class Compiler : AstVisitor
         return null;
     }
 
+    /// <summary>
+    /// defer 拼接期的名字查找（冻结绑定）：<paramref name="floor"/> 是 defer
+    /// 登记时的声明序号基线。最内层载荷根以内（栈中更靠内）是载荷自己的内部
+    /// 作用域，名字解析不过滤；它以外跳过「声明序号 &gt;= 基线」的本地名 ——
+    /// 基线 = 登记时的 declCounter（= 下一个待分配序号），所以「序号 &gt;= 基线」
+    /// ⟺ 在 defer 之后声明。隐式导出记 -1，豁免检查。
+    /// </summary>
+    private BlockScope? FindIdentHostFrozen(string name, int floor)
+    {
+        int payloadIdx = -1;
+        for (int i = _scopeStack.Count - 1; i >= 0; --i)
+            if (_scopeStack[i] is BlockScope b && b.IsDeferPayload)
+            {
+                payloadIdx = i;
+                break;
+            }
+        for (int i = _scopeStack.Count - 1; i >= 0; --i)
+        {
+            if (_scopeStack[i] is not BlockScope bs) continue;
+            if (!bs.IdMap.ContainsKey(name)) continue;
+            if (i < payloadIdx)
+            {
+                // 登记 scope 一侧：跳过 defer 之后才声明的（遮蔽）
+                if (bs.IdOrder.TryGetValue(name, out int o) && o >= 0 && o >= floor)
+                    continue;
+            }
+            return bs;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 拼接期间的名字解析（冻结绑定）：名字→槽位按 defer 语句位置的词法作用域。
+    /// 冻结找不到但当前找得到 = 后文声明 → 报错（行号归 defer 语句），按当前绑定
+    /// 继续（编译已失败）。都空 → 返回 null，走隐式导出路径。
+    /// </summary>
+    private BlockScope? ResolveAtSplice(string name)
+    {
+        var now = FindIdentHost(name);
+        var frozen = FindIdentHostFrozen(name, _deferOrderFloor);
+        if (frozen is not null) return frozen;
+        if (now is not null)
+            Error(_deferErrLine, "\"" + name + "\" is declared after the defer statement. ");
+        return now;
+    }
+
+    /// <summary>
+    /// 退出点结算：逆序拼接 <paramref name="bs"/> 登记的 defer 载荷（LIFO），
+    /// 每个载荷包一层 IsDeferPayload 的隐式作用域，载荷 scope 自己的 defers
+    /// 就地递归拼接（直接嵌套 defer defer X 落在这里）。
+    /// <para>
+    /// ⚠ 不清空 bs.Defers：一个块可以有多个运行期出口（break / continue /
+    /// return 各一处 + 块尾），每个出口都要拼一份自己的副本；只有块尾 /
+    /// 程序尾的「最终结算」由调用方在拼接后清空。
+    /// </para>
+    /// </summary>
+    private void SpliceDefers(BlockScope bs)
+    {
+        if (bs.Defers.Count == 0 || Errors.Count > 0)
+            return; // 错误去重：载荷在每个退出点重编译，报一次就够
+        for (int k = bs.Defers.Count - 1; k >= 0; --k)
+        {
+            if (Errors.Count > 0)
+                return; // 某个载荷编译出错即停，不再拼后续
+            Deferred d = bs.Defers[k];
+            int savedFloor = _deferOrderFloor;
+            int savedLine = _deferErrLine;
+            _deferOrderFloor = d.OrderBaseline;
+            _deferErrLine = d.Line;
+            // 载荷包一层隐式作用域并打标记：break/continue/return 的越界检查
+            // 靠它识别「从收尾代码里跳回主流程」。
+            var ps = PushBlockScope();
+            ps.IsDeferPayload = true;
+            Visit(d.Stmt);
+            SpliceDefers(ps);
+            PopScope();
+            foreach (var idx in ps.IdMap.Values) _varAlloc.FreeVar(idx);
+            _deferOrderFloor = savedFloor;
+            _deferErrLine = savedLine;
+        }
+    }
+
+    /// <summary>登记一个块内局部名，并占用一个全局声明序号（defer 冻结绑定的基线来源）。</summary>
+    private void DeclareLocal(BlockScope bs, string name, int idx)
+    {
+        bs.IdMap[name] = idx;
+        bs.IdOrder[name] = _declCounter++;
+    }
+
     private FileScope FileScope() => (FileScope)_scopeStack[0];
 
     // ---------------- 语句 ----------------
     public override void OnVisitProg(Prog p)
     {
-        foreach (var s in p.Stmts) Visit(s);
+        // 语句序列：终止语句（return / break / continue / 死循环）之后的语句
+        // 在语言语义下执行不到——不再发射，也不登记它们的 defer（死代码消除）。
+        // 序列的终止性 = 最后一条已发射语句。
+        bool terminated = false;
+        foreach (var s in p.Stmts)
+        {
+            if (terminated) break;
+            _stmtTerminates = false; // 每条语句先清零；终止语句的 visitor 置 true
+            Visit(s);
+            terminated = _stmtTerminates;
+        }
+        _stmtTerminates = terminated;
     }
 
     public override void OnVisitExprStmt(ExprStmt s)
@@ -255,7 +380,7 @@ public sealed class Compiler : AstVisitor
             }
             // 不要 Visit 标识符本身（那会生成 PushValue 取值），这里是要绑定到新变量
             int idx = _varAlloc.NewVar();
-            bs.IdMap[name] = idx;
+            DeclareLocal(bs, name, idx);
             EmitOp(Opcode.PushId);
             EmitIndex(idx);
             _stackSizeMgr.Inc();
@@ -272,17 +397,29 @@ public sealed class Compiler : AstVisitor
                     Error(s.Line, "duplicate declaration of '" + nm + "'. ");
                     continue;
                 }
-                bs.IdMap[nm] = _varAlloc.NewVar();
+                DeclareLocal(bs, nm, _varAlloc.NewVar());
             }
         }
     }
 
     public override void OnVisitReturnStmt(ReturnStmt s)
     {
+        // defer 边界：return 的终点是整个程序，在载荷内必然越界，一律报错。
+        foreach (var sc in _scopeStack)
+            if (sc is BlockScope b && b.IsDeferPayload)
+            {
+                Error(s.Line, "\"return\" cannot be used in a defer statement. ");
+                return;
+            }
+        // 顺序：先结算，再求返回值，最后 Return（结算 → PushValue → Return）。
+        // 结算先于退出动作，与块退出一致——defer 可以影响返回值。
+        for (int i = _scopeStack.Count - 1; i >= 0; --i)
+            if (_scopeStack[i] is BlockScope bs) SpliceDefers(bs);
         foreach (var e in s.Exprs) Visit(e);
         EmitOp(Opcode.Return);
         EmitIndex(s.Exprs.Count);
         _prog.MaxReturnNum = Math.Max(_prog.MaxReturnNum, s.Exprs.Count);
+        _stmtTerminates = true;
         // Return 会让执行器直接跳到指令流末尾，栈上的返回值不回收
     }
 
@@ -305,6 +442,11 @@ public sealed class Compiler : AstVisitor
     {
         var bs = PushBlockScope();
         Visit(s.Prog);
+        // 块尾结算：本 scope 的 defer 在这里执行（LIFO）。块体以终止语句结尾时
+        // 这里不可达（return 出口已结算、break/continue 出口就地结算过）——
+        // 跳过，避免拼出不可达的副本。
+        if (!_stmtTerminates) SpliceDefers(bs);
+        bs.Defers.Clear(); // 最终结算：途中出口（break/return）已各拼过副本
         PopScope();
         foreach (var idx in bs.IdMap.Values) _varAlloc.FreeVar(idx); // 回收局部变量索引
     }
@@ -313,13 +455,21 @@ public sealed class Compiler : AstVisitor
     {
         if (s.Cond is null) return;
         var gotoEndIndices = new List<int>();
+        bool allBranchesTerminate = true;
+        bool hasElse = false;
         Visit(s.Cond);
         EmitOp(Opcode.If);
         _stackSizeMgr.Dec();
         int lastIfPos = EmitPlaceholder(); // 条件为假时跳到这里
         VisitBodyAsBlock(s.FirstProg);
-        EmitOp(Opcode.GoTo); // 分支走完，跳出整个 if
-        gotoEndIndices.Add(EmitPlaceholder());
+        bool branchTerm = _stmtTerminates;
+        allBranchesTerminate = allBranchesTerminate && branchTerm;
+        if (!branchTerm)
+        {
+            // 分支走完会落到这里，需要跳出整个 if；终止则死代码
+            EmitOp(Opcode.GoTo);
+            gotoEndIndices.Add(EmitPlaceholder());
+        }
         PatchIndex(lastIfPos, CodeSize());
         foreach (var ei in s.Elifs)
         {
@@ -329,12 +479,21 @@ public sealed class Compiler : AstVisitor
             _stackSizeMgr.Dec();
             lastIfPos = EmitPlaceholder();
             VisitBodyAsBlock(ei.Prog);
-            EmitOp(Opcode.GoTo);
-            gotoEndIndices.Add(EmitPlaceholder());
+            branchTerm = _stmtTerminates;
+            allBranchesTerminate = allBranchesTerminate && branchTerm;
+            if (!branchTerm)
+            {
+                EmitOp(Opcode.GoTo);
+                gotoEndIndices.Add(EmitPlaceholder());
+            }
             PatchIndex(lastIfPos, CodeSize());
         }
-        if (s.ElseProg is not null) VisitBodyAsBlock(s.ElseProg);
+        hasElse = s.ElseProg is not null;
+        if (hasElse) VisitBodyAsBlock(s.ElseProg!);
+        else allBranchesTerminate = false; // 无 else：条件全假时落到 if 之后
         foreach (var pos in gotoEndIndices) PatchIndex(pos, CodeSize());
+        // if 语句的终止性：else 存在且所有分支终止（组合式，逐分支局部判断）
+        _stmtTerminates = hasElse && allBranchesTerminate;
     }
 
     public override void OnVisitWhileStmt(WhileStmt s)
@@ -350,12 +509,26 @@ public sealed class Compiler : AstVisitor
             _stackSizeMgr.Dec();
             caseGotoEndPos = EmitPlaceholder();
         }
+        // sawBreak 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
+        bool savedSawBreak = _sawBreak;
+        _sawBreak = false;
         VisitBodyAsBlock(s.Prog);
-        EmitOp(Opcode.GoTo);
-        EmitIndex(ws.StartIndex);
+        bool bodyTerm = _stmtTerminates;
+        bool bodySawBreak = _sawBreak;
+        _sawBreak = savedSawBreak;
+        if (!bodyTerm)
+        {
+            // 体终止（return/break/continue 收尾）则回跳是死代码
+            EmitOp(Opcode.GoTo);
+            EmitIndex(ws.StartIndex);
+        }
         foreach (var pos in ws.BreakIndices) PatchIndex(pos, CodeSize());
         // 条件可省。无条件时必须跳过回填，否则会把第 0 条指令改成跳转目标。
         if (caseGotoEndPos >= 0) PatchIndex(caseGotoEndPos, CodeSize());
+        // while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才永不
+        // 退出。`while true { }` 带条件，按可退出处理（用户明确要求），不视同
+        // `while { }`。
+        _stmtTerminates = s.Cond is null && !bodySawBreak;
         PopScope();
     }
 
@@ -384,26 +557,76 @@ public sealed class Compiler : AstVisitor
 
     public override void OnVisitBreakStmt(BreakStmt s)
     {
-        var ws = TopWhileScope();
-        if (ws is null)
+        // 找最内层 WhileScope。途中先撞到 defer 载荷边界 = 目标循环在载荷外：
+        // 载荷在退出点才执行，break 从收尾代码里跳回主流程是灾难语义，禁。
+        int wi = -1;
+        for (int i = _scopeStack.Count - 1; i >= 0; --i)
+        {
+            Scope sc = _scopeStack[i];
+            if (sc is WhileScope)
+            {
+                wi = i;
+                break;
+            }
+            if (sc is BlockScope b && b.IsDeferPayload)
+            {
+                Error(s.Line, "\"break\" cannot cross a defer statement. ");
+                return;
+            }
+        }
+        if (wi < 0)
         {
             Error(s.Line, "cannot use \"break\" outside of a loop. ");
             return;
         }
+        // 结算 break 越过的所有块：从最内层到循环体块（不含 WhileScope 本身、
+        // 不含循环外的任何 scope）。运行时 break 直接跳循环尾，这些块的正常
+        // 块尾拼接不会执行到，必须在跳转前就地结算。
+        for (int i = _scopeStack.Count - 1; i > wi; --i)
+            if (_scopeStack[i] is BlockScope bs) SpliceDefers(bs);
         EmitOp(Opcode.GoTo);
-        ws.BreakIndices.Add(EmitPlaceholder());
+        ((WhileScope)_scopeStack[wi]).BreakIndices.Add(EmitPlaceholder());
+        _sawBreak = true; // 告知最内层 while：本层有 break（死循环判定用）
+        _stmtTerminates = true;
     }
 
     public override void OnVisitContinueStmt(ContinueStmt s)
     {
-        var ws = TopWhileScope();
-        if (ws is null)
+        // 同 break：continue 也退出循环体块，体块的 defer 必须先结算。
+        int wi = -1;
+        for (int i = _scopeStack.Count - 1; i >= 0; --i)
+        {
+            Scope sc = _scopeStack[i];
+            if (sc is WhileScope)
+            {
+                wi = i;
+                break;
+            }
+            if (sc is BlockScope b && b.IsDeferPayload)
+            {
+                Error(s.Line, "\"continue\" cannot cross a defer statement. ");
+                return;
+            }
+        }
+        if (wi < 0)
         {
             Error(s.Line, "cannot use \"continue\" outside of a loop. ");
             return;
         }
+        for (int i = _scopeStack.Count - 1; i > wi; --i)
+            if (_scopeStack[i] is BlockScope bs) SpliceDefers(bs);
         EmitOp(Opcode.GoTo);
-        EmitIndex(ws.StartIndex);
+        EmitIndex(((WhileScope)_scopeStack[wi]).StartIndex);
+        _stmtTerminates = true;
+    }
+
+    public override void OnVisitDeferStmt(DeferStmt s)
+    {
+        var bs = TopBlockScope();
+        if (bs is null) return; // 不可能：FileScope 常驻栈底
+        // 纯编译期登记，defer 语句位置零指令。载荷在退出点才编译（每个退出点
+        // 各编译一次——If/GoTo 操作数是绝对下标，编译一次再拷贝会破坏跳转目标）。
+        bs.Defers.Add(new Deferred(s.Stmt, s.Line, _declCounter));
     }
 
     // ---------------- 表达式 ----------------
@@ -591,19 +814,26 @@ public sealed class Compiler : AstVisitor
     /// <summary>
     /// 标识符 → 变量槽位索引。没声明过就当作外部变量，登记到文件作用域（名字非空正是
     /// <see cref="Program.Exports"/> 的判据）。<c>PushValue</c> / <c>PushId</c> 共用这一处查找。
+    /// defer 载荷编译期（<c>_deferOrderFloor &gt;= 0</c>）走冻结名字绑定规则。
     /// </summary>
     private int IdentSlot(string name)
     {
-        var host = FindIdentHost(name);
+        var host = _deferOrderFloor >= 0 ? ResolveAtSplice(name) : FindIdentHost(name);
         if (host is not null) return host.IdMap[name];
-        DeclareExported(name, _varAlloc.NewUniqueVar(name));
+        DeclareExported(name, _varAlloc.NewUniqueVar(name), implicitExport: true);
         return FileScope().IdMap[name];
     }
 
-    /// <summary>登记一个会进 <see cref="Program.Exports"/> 的变量。索引来自 NewUniqueVar（不回收）。</summary>
-    private void DeclareExported(string name, int idx)
+    /// <summary>
+    /// 登记一个会进 <see cref="Program.Exports"/> 的变量。索引来自 NewUniqueVar（不回收）。
+    /// implicitExport=true（从未声明就使用的宿主变量）：名字记序号 -1，
+    /// 豁免 defer 的冻结绑定检查——它不是本地槽位。
+    /// </summary>
+    private void DeclareExported(string name, int idx, bool implicitExport = false)
     {
-        FileScope().IdMap[name] = idx;
+        var fs = FileScope();
+        fs.IdMap[name] = idx;
+        fs.IdOrder[name] = implicitExport ? -1 : _declCounter++;
         _prog.Exports[name] = idx;
     }
 
@@ -615,6 +845,10 @@ public sealed class Compiler : AstVisitor
     {
         var bs = PushBlockScope();
         Visit(p);
+        // 块尾结算（if 分支 / 循环体同普通块）。体以终止语句结尾时这里不可达，
+        // 跳过——出口结算（return / break / continue）已就地拼过副本。
+        if (!_stmtTerminates) SpliceDefers(bs);
+        bs.Defers.Clear(); // 最终结算
         PopScope();
         foreach (var idx in bs.IdMap.Values) _varAlloc.FreeVar(idx);
     }
@@ -661,7 +895,40 @@ public class BlockScope : Scope
 {
     public readonly Dictionary<string, int> IdMap = new();
 
+    /// <summary>
+    /// 名字 → 声明序号（<see cref="Compiler"/> 的全局 declCounter 值，跨 scope 可比）。
+    /// defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于
+    /// defer 语句处的基线，报 "declared after the defer statement."。
+    /// 隐式导出（从未声明的宿主变量）记 -1，豁免检查。
+    /// </summary>
+    public readonly Dictionary<string, int> IdOrder = new();
+
+    /// <summary>defer 语句在本 scope 的登记（逆序拼接见 Compiler.SpliceDefers）。</summary>
+    public readonly List<Deferred> Defers = new();
+
+    /// <summary>
+    /// 该 scope 是否为 defer 载荷的隐式作用域：break / continue / return
+    /// 不得跨越它（break/continue 的目标循环在载荷外 → 报错；return 在
+    /// 载荷内一律报错）。
+    /// </summary>
+    public bool IsDeferPayload;
+
     public BlockScope() : base(Kind.Block) { }
+}
+
+/// <summary>defer 登记条目：载荷语句（所有权留在 AST）、defer 行号、登记时的声明序号基线。</summary>
+public readonly struct Deferred
+{
+    public readonly Stmt? Stmt;
+    public readonly int Line;
+    public readonly int OrderBaseline;
+
+    public Deferred(Stmt? stmt, int line, int orderBaseline)
+    {
+        Stmt = stmt;
+        Line = line;
+        OrderBaseline = orderBaseline;
+    }
 }
 
 /// <summary>文件作用域。<c>export</c> 与「未声明就使用的标识符」都落到这里。</summary>

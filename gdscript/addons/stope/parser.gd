@@ -87,29 +87,52 @@ class Parser:
 			if cur_token.type == TokenType.Semi:	# 空语句
 				next_token()
 				continue
-			var stmt:StopeAst.Stmt
-			if cur_token.type == TokenType.Let:
-				stmt = parse_let_stmt(depth)
-			elif cur_token.type == TokenType.Export:
-				stmt = parse_export_stmt(depth)
-			elif cur_token.type == TokenType.Return:
-				stmt = parse_return_stmt(depth)
-			elif cur_token.type == TokenType.LBrace:
-				stmt = parse_block_stmt(depth)
-			elif cur_token.type == TokenType.If:
-				stmt = parse_if_stmt(depth)
-			elif cur_token.type == TokenType.While:
-				stmt = parse_while_stmt(depth)
-			elif cur_token.type == TokenType.Break:
-				stmt = parse_break_stmt(depth)
-			elif cur_token.type == TokenType.Continue:
-				stmt = parse_continue_stmt(depth)
-			else:	# 表达式语句或赋值语句
-				stmt = parse_expr_or_assign_stmt(depth)
+			# 语句分派：parseProg 循环与 defer 载荷共用同一条链（parse_stmt_dispatch）
+			var stmt:StopeAst.Stmt = parse_stmt_dispatch(depth)
 			# 超限中止时子函数返回 null：不追加、不再往下解析（否则拿着同一个
 			# token 反复调用会死循环）。
 			if stmt == null: break
 			prog.stmts.append(stmt)
+
+	# 语句分派。"{" / ";" / "}" 等结构性 token 由调用方（parse_prog 循环或
+	# parse_defer_stmt）处理。与 cpp/src/parser.cpp 的 parseStmtDispatch 一致。
+	func parse_stmt_dispatch(depth:int) -> StopeAst.Stmt:
+		if cur_token.type == TokenType.Let:
+			return parse_let_stmt(depth)
+		elif cur_token.type == TokenType.Export:
+			return parse_export_stmt(depth)
+		elif cur_token.type == TokenType.Return:
+			return parse_return_stmt(depth)
+		elif cur_token.type == TokenType.LBrace:
+			return parse_block_stmt(depth)
+		elif cur_token.type == TokenType.If:
+			return parse_if_stmt(depth)
+		elif cur_token.type == TokenType.While:
+			return parse_while_stmt(depth)
+		elif cur_token.type == TokenType.Break:
+			return parse_break_stmt(depth)
+		elif cur_token.type == TokenType.Continue:
+			return parse_continue_stmt(depth)
+		elif cur_token.type == TokenType.Defer:
+			return parse_defer_stmt(depth)
+		else:	# 表达式语句或赋值语句
+			return parse_expr_or_assign_stmt(depth)
+
+	# defer_stmt : "defer" stmt
+	func parse_defer_stmt(depth:int) -> StopeAst.DeferStmt:
+		if _aborted: return null
+		var stmt := StopeAst.DeferStmt.new(cur_token.line)
+		next_token()	# 跳过 defer
+		if cur_token.type == TokenType.Semi or cur_token.type == TokenType.RBrace \
+				or cur_token.type == TokenType.Eof:
+			# 缺载荷。不推进（同 parse_let_stmt 缺 ";" 的纪律）：";" 与 "}" 交给
+			# 外层 parse_prog 循环，否则死循环或吞掉外层的 "}"。
+			error(cur_token.line, 'expected statement after "defer". ')
+			return stmt
+		# 载荷 +1：defer 可经「载荷 → 分派 → parse_defer_stmt」递归（defer defer
+		# defer …），深度上限必须能数到这种嵌套。
+		stmt.stmt = parse_stmt_dispatch(depth + 1)
+		return stmt
 
 	func parse_let_stmt(depth:int) -> StopeAst.LetStmt:
 		var stmt := StopeAst.LetStmt.new(cur_token.line)

@@ -1,4 +1,4 @@
-//! 语法：`golden.txt`（201 条）+ 嵌套深度上限。
+//! 语法：`golden.txt`（215 条）+ 嵌套深度上限。
 //!
 //! 每条用例断言六件事：AST 形状串、语句行号序列、语法 / 词法错误条数与文案。
 
@@ -10,7 +10,7 @@ mod common;
 #[test]
 fn golden_parser() {
     let cases = read_golden("golden.txt", true);
-    assert_eq!(201, cases.len(), "golden.txt 应为 201 条");
+    assert_eq!(215, cases.len(), "golden.txt 应为 215 条");
     let mut n = 0;
     for rec in &cases {
         let cid = rec.get("ID").map(String::as_str).unwrap_or("");
@@ -34,7 +34,7 @@ fn golden_parser() {
         check(cid, "LEXERRS", rec.get("LEXERRS").map(String::as_str).unwrap_or(""), &join_esc(&ps.lexer().errors));
         n += 6;
     }
-    assert_eq!(201 * 6, n, "语法断言总数");
+    assert_eq!(215 * 6, n, "语法断言总数");
 }
 
 // ---------------- 嵌套深度上限 ----------------

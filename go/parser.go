@@ -88,12 +88,10 @@ func (p *Parser) parseProg(prog *Prog, isTopLevel bool, depth int) {
 			stmt = p.parseIfStmt(depth)
 		case TWhile:
 			stmt = p.parseWhileStmt(depth)
-		case TBreak:
-			stmt = p.parseBreakStmt(depth)
-		case TContinue:
-			stmt = p.parseContinueStmt(depth)
 		default:
-			stmt = p.parseExprOrAssignStmt(depth)
+			// break / continue / defer / 表达式或赋值：与 defer 载荷共用同一条
+			// 分派链（C++ 的 parseStmtDispatch）。
+			stmt = p.parseStmtDispatch(depth)
 		}
 		// 超限中止时子函数返回 nil：不追加、不再往下解析。
 		if stmt == nil {
@@ -101,6 +99,53 @@ func (p *Parser) parseProg(prog *Prog, isTopLevel bool, depth int) {
 		}
 		prog.Stmts = append(prog.Stmts, stmt)
 	}
+}
+
+// parseStmtDispatch 语句分派：parseProg 循环体与 defer 载荷共用同一条链。
+// "{" / ";" / "}" 等结构性 token 由调用方（parseProg 循环或 parseDeferStmt）处理。
+func (p *Parser) parseStmtDispatch(depth int) Node {
+	switch p.CurToken.Type {
+	case TLet:
+		return p.parseLetStmt(depth)
+	case TExport:
+		return p.parseExportStmt(depth)
+	case TReturn:
+		return p.parseReturnStmt(depth)
+	case TLBrace:
+		return p.parseBlockStmt(depth)
+	case TIf:
+		return p.parseIfStmt(depth)
+	case TWhile:
+		return p.parseWhileStmt(depth)
+	case TBreak:
+		return p.parseBreakStmt(depth)
+	case TContinue:
+		return p.parseContinueStmt(depth)
+	case TDefer:
+		return p.parseDeferStmt(depth)
+	default:
+		return p.parseExprOrAssignStmt(depth)
+	}
+}
+
+func (p *Parser) parseDeferStmt(depth int) Node {
+	// defer_stmt : "defer" stmt —— 载荷是一条完整语句（赋值 / 块 / if / while 均可）。
+	// 直接嵌套（defer defer X）合法：内层 defer 的触发点 = 外层载荷 scope 的结束
+	// = 同一退出点。载荷缺语句（defer; / defer } / defer Eof）时只报错不推进，
+	// 把 ";" 与 "}" 留给外层 parseProg 循环。
+	if p.Aborted {
+		return nil
+	}
+	stmt := &DeferStmt{NodeBase{p.CurToken.Line}, nil}
+	p.nextToken() // 跳过 defer
+	if p.CurToken.Type == TSemi || p.CurToken.Type == TRBrace || p.CurToken.Type == TEof {
+		p.error(p.CurToken.Line, "expected statement after \"defer\". ")
+		return stmt
+	}
+	// 载荷 +1：defer 可经「载荷 → 分派 → parseDeferStmt」递归（defer defer
+	// defer …），深度上限必须能数到这种嵌套。
+	stmt.Stmt = p.parseStmtDispatch(depth + 1)
+	return stmt
 }
 
 func (p *Parser) parseLetStmt(depth int) Node {

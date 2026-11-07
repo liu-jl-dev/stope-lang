@@ -461,5 +461,40 @@ int main() {
   };
   for (const auto& p : pres) one(p.id, p.src, false, p.pre);
 
+  // ================= defer（2026-11-07，OQ-7 移植锁）=================
+  // 语义权威：syntax-reference §3.2。编译期拼接零新指令；出口次序
+  // 「结算 → PushValue → Return」；块尾/程序尾结算在体终止时跳过（DCE）。
+  std::vector<C> dfs = {
+      // return 出口：结算 → 求值 → Return；以 return 结尾无程序尾副本
+      {"DF-01", "let log = \"\"; defer log = log + \"a\"; return log;", false},
+      // 程序尾结算，LIFO：后登记的 2 先发
+      {"DF-02", "let a = 0; defer a = 1; defer a = 2;", false},
+      // break 出口各拼一份；体以 break 结尾 → 回跳与块尾副本均省略（DCE）
+      {"DF-03", "let n = 0; while x { defer n = 1; break; }", false},
+      // 循环体块每轮块尾结算一次
+      {"DF-04", "let s = 0; let i = 0; while i < 3 { defer s = s + i; i = i + 1; }", false},
+      // 冻结名字绑定：got 绑定 defer 处可见的外层 msg（槽 0），不是遮蔽后的槽 2
+      {"DF-05", "let msg = 1; { defer got = msg; let msg = 2; }", false},
+      // 前向引用：报错归 defer 行；按当前绑定继续编译
+      {"DF-06", "defer print(msg); let msg = 1;", false},
+      // break 不得越过 defer 载荷
+      {"DF-07", "while a { defer { break; } }", false},
+      // 载荷内 return 一律报错
+      {"DF-08", "defer { return 1; }", false},
+      // 直接嵌套 defer defer：载荷隐式 scope 统一规则
+      {"DF-09", "defer defer a = 1;", false},
+      // 未声明名字：隐式导出 + 结算
+      {"DF-10", "defer a = 1;", false},
+      // 死代码里的 defer 不登记、不编译
+      {"DF-11", "{ return 1; } defer a = 1;", false},
+      // 缺载荷：报错不推进
+      {"DF-12", "defer;", false},
+      // 出口次序锁：结算在前、求值在后（Return 弹的是结算后的值）
+      {"DF-13", "let x = 0; defer x = 5; return x;", false},
+      // 块载荷内再登记 defer：内层在载荷 scope 结束时就地结算
+      {"DF-14", "defer { defer a = 1; }", false},
+  };
+  for (auto& c : dfs) one(c.id, c.src, c.fold);
+
   return 0;
 }

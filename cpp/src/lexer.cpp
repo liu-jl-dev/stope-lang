@@ -504,6 +504,7 @@ const std::map<std::u16string, TokenType> Lexer::keywords{
     {u"else", TokenType::Else},     {u"let", TokenType::Let},
     {u"return", TokenType::Return}, {u"while", TokenType::While},
     {u"break", TokenType::Break},   {u"continue", TokenType::Continue},
+    {u"defer", TokenType::Defer},
     {u"null", TokenType::Null},     {u"false", TokenType::False},
     {u"true", TokenType::True},     {u"args", TokenType::Args},
     {u"argc", TokenType::Argc},     {u"export", TokenType::Export},

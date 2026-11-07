@@ -41,6 +41,19 @@ class BlockScope extends Scope {
     super()
     this.type = 'block'
     this.idMap = new Map()
+    // 名字 -> 声明序号（Compiler.declCounter 的全局值，跨 scope 可比）。
+    // defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于
+    // defer 语句处的基线，报 "declared after the defer statement."。
+    // 隐式导出（从未声明的宿主变量）记 -1，豁免检查。
+    this.idOrder = new Map()
+    // defer 语句在本 scope 的登记：载荷语句（所有权留在 AST）、defer 行号、
+    // 登记时的声明序号基线。退出点（块尾 / break / continue / return）由
+    // Compiler 逆序拼接 —— 运行时没有 defer 栈，顺序在编译期物化。
+    this.defers = []
+    // 该 scope 是否为 defer 载荷的隐式作用域：break / continue / return
+    // 不得跨越它（break/continue 的目标循环在载荷外 → 报错；return 在
+    // 载荷内一律报错）。
+    this.isDeferPayload = false
   }
 }
 
@@ -194,6 +207,24 @@ class Compiler extends ASTVisitor {
     this.varAlloc = null
     this.stackSizeMgr = null
     this.scopeStack = []
+    // 名字声明序号的全局计数器（跨 scope 可比）。每次向任何 BlockScope 的
+    // idMap 登记一个「声明」（let / export）时递增；隐式导出不递增、记 -1。
+    this.declCounter = 0
+    // defer 载荷编译期状态：当前生效的声明序号基线（< 0 = 不在拼接中）与
+    // 「declared after」错误的归责行号（defer 语句行）。
+    this.deferOrderFloor = -1
+    this.deferErrLine = -1
+    // 语句终止性（组合式、逐语句局部计算，无 CFG）：return / break /
+    // continue 为 true；块 = 最后一条语句终止；if = else 存在且所有分支终止；
+    // 无条件 while 且体不含本层 break（死循环）= true；其余语句 false。
+    // 消费点：①语句序列里终止语句之后的语句不再发射（死代码消除）；
+    // ②while 体终止则省回跳 GoTo；③if 分支体终止则省分支尾 GoTo；
+    // ④程序尾 / 块尾 defer 结算同理跳过（终止后无可达路径）。
+    // 注意 `while true { }` 带条件，按可退出处理，不视同 `while { }`。
+    this.stmtTerminates = false
+    // 当前（最内层）while 的循环体里是否出现过绑定到它的 break。进入循环
+    // 前保存并清零、结束后恢复——嵌套循环各算各的，只服务死循环判定。
+    this.sawBreak = false
   }
 
   // 与 C++ 的 Compiler::Reset 一致：清错误、换自定义指令表。
@@ -214,6 +245,11 @@ class Compiler extends ASTVisitor {
     this.resetCompile(out)
     this.exportPreExports(preExports)
     this.visit(ast)
+    // 顶层 defer：程序尾结算。程序以终止语句（return / 死循环等）结尾时
+    // 这里不可达（return 出口已在 onVisitReturnStmt 结算过），再拼就是
+    // Return 之后的死代码——跳过；自然结束（fall-through）才需要这份结算。
+    if (!this.stmtTerminates) this.spliceDefers(this.fileScope())
+    this.fileScope().defers.length = 0 // 最终结算：途中出口（return）已各拼过副本
     if (this.errors.length > 0) {
       clearProgram(this.prog)
       return Result.Error
@@ -229,6 +265,11 @@ class Compiler extends ASTVisitor {
     this.stackSizeMgr = new StackSizeManager()
     this.scopeStack = []
     this.curLine = -1
+    this.declCounter = 0
+    this.deferOrderFloor = -1
+    this.deferErrLine = -1
+    this.stmtTerminates = false
+    this.sawBreak = false
     this.prog = out
     clearProgram(out)
     this.scopeStack.push(new FileScope())
@@ -297,12 +338,34 @@ class Compiler extends ASTVisitor {
     }
     return null
   }
-  topWhileScope() {
-    for (let i = this.scopeStack.length - 1; i >= 0; --i) {
-      const s = this.scopeStack[i]
-      if (s instanceof WhileScope) return s
+  // 退出点结算：逆序拼接 bs 登记的 defer 载荷（LIFO），每个载荷包一层
+  // isDeferPayload 的隐式作用域，载荷 scope 自己的 defers 就地递归拼接。
+  // errors 非空时直接返回（错误去重：载荷在每个退出点重编译，报一次就够）。
+  // ⚠ 不清空 bs.defers：一个块可以有多个运行期出口（break / continue /
+  // return 各一处 + 块尾），每个出口都要拼一份自己的副本；只有块尾 /
+  // 程序尾的「最终结算」由调用方在拼接后清空。
+  spliceDefers(bs) {
+    if (bs.defers.length === 0 || this.errors.length > 0) return
+    for (let k = bs.defers.length - 1; k >= 0; --k) {
+      if (this.errors.length > 0) return // 某个载荷编译出错即停，不再拼后续
+      const d = bs.defers[k]
+      const savedFloor = this.deferOrderFloor
+      const savedLine = this.deferErrLine
+      this.deferOrderFloor = d.orderBaseline
+      this.deferErrLine = d.line
+      // 载荷包一层隐式作用域并打标记：break/continue/return 的越界检查
+      // 靠它识别「从收尾代码里跳回主流程」。
+      const ps = this.pushBlockScope()
+      ps.isDeferPayload = true
+      this.visit(d.stmt)
+      // 载荷 scope 自己的 defers（直接嵌套 defer defer X 落在这里）：
+      // 触发点 = 载荷 scope 结束 = 同一退出点，就地拼接。
+      this.spliceDefers(ps)
+      this.popScope()
+      for (const idx of ps.idMap.values()) this.varAlloc.freeVar(idx)
+      this.deferOrderFloor = savedFloor
+      this.deferErrLine = savedLine
     }
-    return null
   }
   findIdentHost(name) {
     for (let i = this.scopeStack.length - 1; i >= 0; --i) {
@@ -311,13 +374,63 @@ class Compiler extends ASTVisitor {
     }
     return null
   }
+  // 带声明序号基线的 findIdentHost：跳过序号晚于基线的条目（遮蔽情形），
+  // 让解析落到 defer 处可见的外层名字上。载荷 scope 内不过滤。
+  findIdentHostFrozen(name, floor) {
+    // 最内层载荷根：它以内（栈中更靠内）是载荷自己的内部作用域，
+    // 名字解析不过滤；它以外才应用「defer 语句处可见」的基线。
+    let payloadIdx = -1
+    for (let i = this.scopeStack.length - 1; i >= 0; --i) {
+      const s = this.scopeStack[i]
+      if (s instanceof BlockScope && s.isDeferPayload) {
+        payloadIdx = i
+        break
+      }
+    }
+    for (let i = this.scopeStack.length - 1; i >= 0; --i) {
+      const s = this.scopeStack[i]
+      if (!(s instanceof BlockScope)) continue
+      if (!s.idMap.has(name)) continue
+      if (i < payloadIdx) {
+        // 登记 scope 一侧：跳过 defer 之后才声明的（遮蔽）。
+        // 「order >= 基线」⟺ 在 defer 之后声明。隐式导出记 -1，豁免。
+        const o = s.idOrder.get(name)
+        if (o !== undefined && o >= 0 && o >= floor) continue
+      }
+      return s
+    }
+    return null
+  }
+  // 拼接期间的名字解析（冻结绑定）：名字→槽位按 defer 语句位置的词法
+  // 作用域定——冻结规则优先；冻结找不到但当前找得到 = 后文声明 → 报错
+  // （行号归 defer 语句），按当前绑定继续（编译已失败）。都空 → 返回 null
+  // （调用方走隐式导出路径）。
+  resolveAtSplice(name) {
+    const now = this.findIdentHost(name)
+    const frozen = this.findIdentHostFrozen(name, this.deferOrderFloor)
+    if (frozen !== null) return frozen
+    if (now !== null) {
+      this.error(this.deferErrLine, `"${name}" is declared after the defer statement. `)
+    }
+    return now
+  }
   fileScope() {
     return this.scopeStack[0]
   }
 
   // ---------------- 语句 ----------------
+  // 语句序列（顶层 Prog / 块体 / if 分支 / while 体共用）：终止语句（return /
+  // break / continue / 死循环）之后的语句在语言语义下执行不到——不再发射，也
+  // 不登记它们的 defer（死代码消除）。序列的终止性 = 最后一条已发射语句。
   onVisitProg(p) {
-    for (const s of p.stmts) this.visit(s)
+    let terminated = false
+    for (const s of p.stmts) {
+      if (terminated) break
+      this.stmtTerminates = false // 每条语句先清零；终止语句的 visitor 置 true
+      this.visit(s)
+      terminated = this.stmtTerminates
+    }
+    this.stmtTerminates = terminated
   }
   onVisitExprStmt(s) {
     this.visit(s.expr)
@@ -337,7 +450,7 @@ class Compiler extends ASTVisitor {
       }
       // 不要 visit 标识符本身（那会生成 PushValue 取值），这里是要绑定到新变量
       const idx = this.varAlloc.newVar()
-      bs.idMap.set(name, idx)
+      this.declareLocal(bs, name, idx)
       this.emitOp(Opcode.PushId)
       this.emitIndex(idx)
       this.stackSizeMgr.inc()
@@ -350,15 +463,29 @@ class Compiler extends ASTVisitor {
           this.error(s.line, `duplicate declaration of '${nm}'. `)
           continue
         }
-        bs.idMap.set(nm, this.varAlloc.newVar())
+        this.declareLocal(bs, nm, this.varAlloc.newVar())
       }
     }
   }
   onVisitReturnStmt(s) {
+    // defer 边界：return 的终点是整个程序，在载荷内必然越界，一律报错。
+    for (const sc of this.scopeStack) {
+      if (sc instanceof BlockScope && sc.isDeferPayload) {
+        this.error(s.line, '"return" cannot be used in a defer statement. ')
+        return
+      }
+    }
+    // 顺序：先结算，再求返回值，最后 Return（结算 → PushValue → Return）。
+    // 结算先于退出动作，与块退出一致——defer 可以影响返回值。
+    for (let i = this.scopeStack.length - 1; i >= 0; --i) {
+      const sc = this.scopeStack[i]
+      if (sc instanceof BlockScope) this.spliceDefers(sc)
+    }
     for (const e of s.exprs) this.visit(e)
     this.emitOp(Opcode.Return)
     this.emitIndex(s.exprs.length)
     this.prog.maxReturnNum = Math.max(this.prog.maxReturnNum, s.exprs.length)
+    this.stmtTerminates = true
     // Return 会让 VM 直接跳到 code 末尾，栈上的返回值不回收
   }
   onVisitExportStmt(s) {
@@ -377,19 +504,31 @@ class Compiler extends ASTVisitor {
   onVisitBlockStmt(s) {
     const bs = this.pushBlockScope()
     this.visit(s.prog)
+    // 块尾结算：本 scope 的 defer 在这里执行（LIFO）。块体以终止语句结尾时
+    // 这里不可达（return 出口已结算、break/continue 出口就地结算过）——
+    // 跳过，避免拼出不可达的副本。
+    if (!this.stmtTerminates) this.spliceDefers(bs)
+    bs.defers.length = 0 // 最终结算：途中出口（break/return）已各拼过副本
     this.popScope()
     for (const idx of bs.idMap.values()) this.varAlloc.freeVar(idx) // 回收局部变量索引
   }
   onVisitIfStmt(s) {
     if (s.cond === null) return
     const gotoEndIndices = []
+    let allBranchesTerminate = true
+    let hasElse = false
     this.visit(s.cond)
     this.emitOp(Opcode.If)
     this.stackSizeMgr.dec()
     let lastIfPos = this.emitPlaceholder() // 条件为假时跳到这里
     this.visitBodyAsBlock(s.firstProg)
-    this.emitOp(Opcode.GoTo) // 分支走完，跳出整个 if
-    gotoEndIndices.push(this.emitPlaceholder())
+    let branchTerm = this.stmtTerminates
+    allBranchesTerminate = allBranchesTerminate && branchTerm
+    if (!branchTerm) {
+      // 分支走完会落到这里，需要跳出整个 if；终止则死代码
+      this.emitOp(Opcode.GoTo)
+      gotoEndIndices.push(this.emitPlaceholder())
+    }
     this.patchIndex(lastIfPos, this.codeSize())
     for (const ei of s.elifs) {
       if (ei.cond === null) continue
@@ -398,12 +537,20 @@ class Compiler extends ASTVisitor {
       this.stackSizeMgr.dec()
       lastIfPos = this.emitPlaceholder()
       this.visitBodyAsBlock(ei.prog)
-      this.emitOp(Opcode.GoTo)
-      gotoEndIndices.push(this.emitPlaceholder())
+      branchTerm = this.stmtTerminates
+      allBranchesTerminate = allBranchesTerminate && branchTerm
+      if (!branchTerm) {
+        this.emitOp(Opcode.GoTo)
+        gotoEndIndices.push(this.emitPlaceholder())
+      }
       this.patchIndex(lastIfPos, this.codeSize())
     }
-    if (s.elseProg !== null) this.visitBodyAsBlock(s.elseProg)
+    hasElse = s.elseProg !== null
+    if (hasElse) this.visitBodyAsBlock(s.elseProg)
+    else allBranchesTerminate = false // 无 else：条件全假时落到 if 之后
     for (const pos of gotoEndIndices) this.patchIndex(pos, this.codeSize())
+    // if 语句的终止性：else 存在且所有分支终止（组合式，逐分支局部判断）
+    this.stmtTerminates = hasElse && allBranchesTerminate
   }
   onVisitWhileStmt(s) {
     const ws = this.pushWhileScope()
@@ -416,12 +563,25 @@ class Compiler extends ASTVisitor {
       this.stackSizeMgr.dec()
       caseGotoEndPos = this.emitPlaceholder()
     }
+    // sawBreak 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
+    const savedSawBreak = this.sawBreak
+    this.sawBreak = false
     this.visitBodyAsBlock(s.prog)
-    this.emitOp(Opcode.GoTo)
-    this.emitIndex(ws.startIndex)
+    const bodyTerm = this.stmtTerminates
+    const bodySawBreak = this.sawBreak
+    this.sawBreak = savedSawBreak
+    if (!bodyTerm) {
+      // 体终止（return/break/continue 收尾）则回跳是死代码
+      this.emitOp(Opcode.GoTo)
+      this.emitIndex(ws.startIndex)
+    }
     for (const pos of ws.breakIndices) this.patchIndex(pos, this.codeSize())
     // 条件可省。无条件时必须跳过回填，否则会把第 0 条指令改成跳转目标。
     if (caseGotoEndPos >= 0) this.patchIndex(caseGotoEndPos, this.codeSize())
+    // while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才永不
+    // 退出。`while true { }` 带条件，按可退出处理（用户明确要求），不视同
+    // `while { }`。
+    this.stmtTerminates = s.cond === null && !bodySawBreak
     this.popScope()
   }
   onVisitAssignStmt(s) {
@@ -442,22 +602,66 @@ class Compiler extends ASTVisitor {
     this.stackSizeMgr.dec(2)
   }
   onVisitBreakStmt(s) {
-    const ws = this.topWhileScope()
-    if (ws === null) {
+    // 找最内层 WhileScope。途中先撞到 defer 载荷边界 = 目标循环在载荷外：
+    // 载荷在退出点才执行，break 从收尾代码里跳回主流程是灾难语义，禁。
+    let wi = -1
+    for (let i = this.scopeStack.length - 1; i >= 0; --i) {
+      const sc = this.scopeStack[i]
+      if (sc instanceof WhileScope) {
+        wi = i
+        break
+      }
+      if (sc instanceof BlockScope && sc.isDeferPayload) {
+        this.error(s.line, '"break" cannot cross a defer statement. ')
+        return
+      }
+    }
+    if (wi < 0) {
       this.error(s.line, 'cannot use "break" outside of a loop. ')
       return
     }
+    // 结算 break 越过的所有块：从最内层到循环体块（不含 WhileScope 本身、
+    // 不含循环外的任何 scope）。运行时 break 直接跳循环尾，这些块的正常
+    // 块尾拼接不会执行到，必须在跳转前就地结算。
+    for (let i = this.scopeStack.length - 1; i > wi; --i) {
+      if (this.scopeStack[i] instanceof BlockScope) this.spliceDefers(this.scopeStack[i])
+    }
     this.emitOp(Opcode.GoTo)
-    ws.breakIndices.push(this.emitPlaceholder())
+    this.scopeStack[wi].breakIndices.push(this.emitPlaceholder())
+    this.sawBreak = true // 告知最内层 while：本层有 break（死循环判定用）
+    this.stmtTerminates = true
   }
   onVisitContinueStmt(s) {
-    const ws = this.topWhileScope()
-    if (ws === null) {
+    // 同 break：continue 也退出循环体块，体块的 defer 必须先结算。
+    let wi = -1
+    for (let i = this.scopeStack.length - 1; i >= 0; --i) {
+      const sc = this.scopeStack[i]
+      if (sc instanceof WhileScope) {
+        wi = i
+        break
+      }
+      if (sc instanceof BlockScope && sc.isDeferPayload) {
+        this.error(s.line, '"continue" cannot cross a defer statement. ')
+        return
+      }
+    }
+    if (wi < 0) {
       this.error(s.line, 'cannot use "continue" outside of a loop. ')
       return
     }
+    for (let i = this.scopeStack.length - 1; i > wi; --i) {
+      if (this.scopeStack[i] instanceof BlockScope) this.spliceDefers(this.scopeStack[i])
+    }
     this.emitOp(Opcode.GoTo)
-    this.emitIndex(ws.startIndex)
+    this.emitIndex(this.scopeStack[wi].startIndex)
+    this.stmtTerminates = true
+  }
+  onVisitDeferStmt(s) {
+    const bs = this.topBlockScope()
+    if (bs === null) return // 不可能：FileScope 常驻栈底
+    // 纯编译期登记，defer 语句位置零指令。载荷在退出点才编译（每个退出点
+    // 各编译一次——If/GoTo 操作数是绝对下标，编译一次再拷贝会破坏跳转目标）。
+    bs.defers.push({ stmt: s.stmt, line: s.line, orderBaseline: this.declCounter })
   }
 
   // ---------------- 表达式 ----------------
@@ -612,16 +816,26 @@ class Compiler extends ASTVisitor {
   // ---------------- 小工具 ----------------
   // 标识符 -> 变量槽位索引。没声明过就当作外部变量，登记到文件作用域
   // （名字非空正是 Program.exports 的判据）。PushValue / PushId 共用这一处查找。
+  // defer 载荷编译期（deferOrderFloor >= 0）走冻结名字绑定规则。
   identSlot(name) {
-    const host = this.findIdentHost(name)
+    const host =
+      this.deferOrderFloor >= 0 ? this.resolveAtSplice(name) : this.findIdentHost(name)
     if (host !== null) return host.idMap.get(name)
-    this.declareExported(name, this.varAlloc.newUniqueVar(name))
+    this.declareExported(name, this.varAlloc.newUniqueVar(name), /*implicitExport=*/ true)
     return this.fileScope().idMap.get(name)
   }
   // 登记一个会进 Program.exports 的变量。索引来自 newUniqueVar（不回收）。
-  declareExported(name, idx) {
+  // implicitExport=true（defer 无关的旧调用点传 false）：名字记序号 -1，
+  // 豁免 defer 的冻结绑定检查——它不是本地槽位，是宿主变量。
+  declareExported(name, idx, implicitExport = false) {
     this.fileScope().idMap.set(name, idx)
+    this.fileScope().idOrder.set(name, implicitExport ? -1 : this.declCounter++)
     this.prog.exports.set(name, idx)
+  }
+  // 向 bs 登记一个声明的名字，同时记声明序号。
+  declareLocal(bs, name, idx) {
+    bs.idMap.set(name, idx)
+    bs.idOrder.set(name, this.declCounter++)
   }
   // 预导出：必须在 resetCompile() 之后调用（reset 会重建 varAlloc、清空 out.exports）。
   // 走 newUniqueVar，并且先于源码里任何变量分配 —— 这一步定了整个程序的槽位编号。
@@ -645,6 +859,10 @@ class Compiler extends ASTVisitor {
   visitBodyAsBlock(p) {
     const bs = this.pushBlockScope()
     this.visit(p)
+    // 块尾结算（if 分支 / 循环体同普通块）。体以终止语句结尾时这里不可达，
+    // 跳过——出口结算（return / break / continue）已就地拼过副本。
+    if (!this.stmtTerminates) this.spliceDefers(bs)
+    bs.defers.length = 0 // 最终结算
     this.popScope()
     for (const idx of bs.idMap.values()) this.varAlloc.freeVar(idx)
   }

@@ -47,6 +47,7 @@ enum class TokenType {
   While,     // while
   Break,     // break
   Continue,  // continue
+  Defer,     // defer
 
   Null,    // null
   False,   // false
@@ -55,7 +56,7 @@ enum class TokenType {
   Argc,    // argc
   Export,  // export
   Custom,  // 自定义指令
-};  // 共 47 个
+};  // 共 48 个
 
 union NumberValue {
   long long integer;

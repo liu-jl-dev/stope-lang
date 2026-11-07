@@ -2,6 +2,7 @@
 
 > 面向**第一次写 Stope 的人**。只讲最常用、必须知道的规则，读 10 分钟就能开始写代码。
 >
+> - 想由易到难系统过一遍语法、并看懂每段代码编译成了什么 → [syntax-tutorial.md](syntax-tutorial.md)（示例配反汇编）
 > - 想查完整规则、边界情况 → [syntax-reference.md](syntax-reference.md)（用户详细版）
 > - 想改 Lexer / Parser 实现 → [syntax-impl.md](syntax-impl.md)（开发人员版）
 
@@ -131,6 +132,26 @@ while a < 10 {          // 条件可省略：while { ... } = 无限循环
 - **`{ }` 不能省略**，哪怕只有一条语句。
 - `break;` / `continue;` 必须紧跟分号。
 
+### defer：退出时结算
+
+```stope
+let log = "";
+defer log = log + "a";    // 遇到时不执行，只登记
+defer log = log + "b";
+return log;               // 返回 "ab"：结算先于求值，后登记的先执行
+```
+
+`defer` 把一条语句登记到**当前块**，等块退出时才执行。触发点：块尾、`break`、
+`continue`、`return`、程序结束。
+
+- 同一块内登记多个 defer，退出时**后进先出**；内层块的先于外层块的执行。
+- defer 读的是变量的**当前值**（退出时才去取）——想固定登记那一刻的值，先存进另一个变量。
+- **结算先于返回值求值**：`return x` 会拿到结算后的 x——defer 可以影响返回值
+  （类似 Go 的具名返回值）。
+- 载荷里不能写 `return`；`break` / `continue` 不能跳出载荷。
+
+详见 [syntax-reference.md 的 defer 小节](syntax-reference.md#defer--退出结算)。
+
 ---
 
 ## 7. 入参、返回、导出
@@ -196,6 +217,7 @@ export main;      export a, b;
 if c { } elif c2 { } else { }
 while { }         while c { }
 break;            continue;
+defer a = 1;      defer { cleanup(); }
 return;           return 1;          return 1, 2;
 
 a  null  true  false  1  1.5  "s"  'x 41'  argc

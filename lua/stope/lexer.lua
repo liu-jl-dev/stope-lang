@@ -19,8 +19,9 @@ local KEYWORDS = {
     idiv = T.IDiv, ["not"] = T.Not, ["and"] = T.And, ["or"] = T.Or,
     ["if"] = T.If, elif = T.Elif, ["else"] = T.Else, ["let"] = T.Let,
     ["return"] = T.Return, ["while"] = T.While, ["break"] = T.Break,
-    ["continue"] = T.Continue, ["null"] = T.Null, ["false"] = T.False_,
-    ["true"] = T.True_, args = T.Args, argc = T.Argc, export = T.Export,
+    ["continue"] = T.Continue, defer = T.Defer, ["null"] = T.Null,
+    ["false"] = T.False_, ["true"] = T.True_, args = T.Args, argc = T.Argc,
+    export = T.Export,
 }
 
 local TWO_CHAR_OPS = {

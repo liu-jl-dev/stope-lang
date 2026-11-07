@@ -27,6 +27,7 @@ const std::unordered_map<AST::NodeType, ASTVisitor::VisitNodeFunc>
         {AST::NodeType::AssignStmt, visitAssignStmt},
         {AST::NodeType::BreakStmt, visitBreakStmt},
         {AST::NodeType::ContinueStmt, visitContinueStmt},
+        {AST::NodeType::DeferStmt, visitDeferStmt},
 
         {AST::NodeType::NullExpr, visitNullExpr},
         {AST::NodeType::BoolExpr, visitBoolExpr},
@@ -87,6 +88,10 @@ void ASTVisitor::visitBreakStmt(ASTVisitor& visitor, AST::Node* n) {
 
 void ASTVisitor::visitContinueStmt(ASTVisitor& visitor, AST::Node* n) {
   visitor.onVisitContinueStmt((AST::ContinueStmt*)n);
+}
+
+void ASTVisitor::visitDeferStmt(ASTVisitor& visitor, AST::Node* n) {
+  visitor.onVisitDeferStmt((AST::DeferStmt*)n);
 }
 
 void ASTVisitor::visitNullExpr(ASTVisitor& visitor, AST::Node* n) {

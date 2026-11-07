@@ -63,6 +63,12 @@ struct Parser {
   AST::WhileStmt* parseWhileStmt(int depth);
   AST::BreakStmt* parseBreakStmt(int depth);
   AST::ContinueStmt* parseContinueStmt(int depth);
+  // "defer" stmt —— 载荷是一条完整语句。直接嵌套（defer defer X）合法：
+  // 内层 defer 的触发点 = 外层载荷 scope 的结束 = 同一退出点（见
+  // syntax-reference §3.2 defer 一节）。载荷缺语句时报错但不推进。
+  AST::DeferStmt* parseDeferStmt(int depth);
+  // parseProg 循环体里的语句分发，defer 载荷复用同一条分派链。
+  AST::Stmt* parseStmtDispatch(int depth);
 
   AST::Stmt* parseExprOrAssignStmt(int depth);
   OpPrecedence curPrecedence();

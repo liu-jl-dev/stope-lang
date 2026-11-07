@@ -1,6 +1,6 @@
 //! 词法单元类型与 `Token` —— 对齐 `python/stope/token.py`。
 //!
-//! 编号与 C++ 的 `stope::TokenType` 逐项相同（0..46），**不要重排**。
+//! 编号与 C++ 的 `stope::TokenType` 逐项相同（0..47），**不要重排**。
 
 /// 词法单元类型（编号与 C++ 逐项相同）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,23 +46,24 @@ pub enum TokenType {
     While = 37,
     Break = 38,
     Continue = 39,
-    Null = 40,
-    False = 41,
-    True = 42,
-    Args = 43,
-    Argc = 44,
-    Export = 45,
-    Custom = 46,
+    Defer = 40,
+    Null = 41,
+    False = 42,
+    True = 43,
+    Args = 44,
+    Argc = 45,
+    Export = 46,
+    Custom = 47,
 }
 
 /// 枚举 → golden 里用的名字。
 pub fn type_name(t: TokenType) -> &'static str {
-    const NAMES: [&str; 47] = [
+    const NAMES: [&str; 48] = [
         "Invalid", "Eof", "Ident", "Integer", "Float", "String", "BinArr", "Comma", "Semi",
         "LParen", "RParen", "LBrack", "RBrack", "LBrace", "RBrace", "Assign", "Add", "Sub",
         "Mul", "Div", "IDiv", "Mod", "Pow", "EQ", "NE", "LT", "LE", "GT", "GE", "Not", "And",
-        "Or", "If", "Elif", "Else", "Let", "Return", "While", "Break", "Continue", "Null",
-        "False", "True", "Args", "Argc", "Export", "Custom",
+        "Or", "If", "Elif", "Else", "Let", "Return", "While", "Break", "Continue", "Defer",
+        "Null", "False", "True", "Args", "Argc", "Export", "Custom",
     ];
     NAMES[t as usize]
 }

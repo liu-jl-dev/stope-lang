@@ -321,13 +321,13 @@ void runAstVisitorTests() {
     const Entry all[] = {
         {0,"Node"},{1,"Prog"},{2,"Stmt"},{3,"Expr"},{4,"ExprStmt"},{5,"LetStmt"},
         {6,"ReturnStmt"},{7,"ExportStmt"},{8,"BlockStmt"},{9,"IfStmt"},{10,"WhileStmt"},
-        {11,"AssignStmt"},{12,"BreakStmt"},{13,"ContinueStmt"},{14,"NullExpr"},
-        {15,"BoolExpr"},{16,"IntExpr"},{17,"FloatExpr"},{18,"BinArrExpr"},{19,"StringExpr"},
-        {20,"IdentExpr"},{21,"ArgcExpr"},{22,"ArgsExpr"},{23,"UnaryOpExpr"},
-        {24,"BinaryOpExpr"},{25,"CallExpr"},{26,"AtExpr"},{27,"CustomOpcodeExpr"},
+        {11,"AssignStmt"},{12,"BreakStmt"},{13,"ContinueStmt"},{14,"DeferStmt"},
+        {15,"NullExpr"},{16,"BoolExpr"},{17,"IntExpr"},{18,"FloatExpr"},{19,"BinArrExpr"},
+        {20,"StringExpr"},{21,"IdentExpr"},{22,"ArgcExpr"},{23,"ArgsExpr"},{24,"UnaryOpExpr"},
+        {25,"BinaryOpExpr"},{26,"CallExpr"},{27,"AtExpr"},{28,"CustomOpcodeExpr"},
     };
     const int kLast = static_cast<int>(AST::NodeType::CustomOpcodeExpr);
-    check(kLast == 27, "V-07", "NodeType 最后一项仍是 CustomOpcodeExpr(27)",
+    check(kLast == 28, "V-07", "NodeType 最后一项仍是 CustomOpcodeExpr(28)",
           "got=" + std::to_string(kLast) + " —— NodeType 变了要同步这张表");
     std::string missing, unexpected;
     for (const auto& e : all) {

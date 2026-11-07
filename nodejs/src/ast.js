@@ -24,20 +24,21 @@ NodeType[NodeType['WhileStmt'] = 10] = 'WhileStmt'
 NodeType[NodeType['AssignStmt'] = 11] = 'AssignStmt'
 NodeType[NodeType['BreakStmt'] = 12] = 'BreakStmt'
 NodeType[NodeType['ContinueStmt'] = 13] = 'ContinueStmt'
-NodeType[NodeType['NullExpr'] = 14] = 'NullExpr'
-NodeType[NodeType['BoolExpr'] = 15] = 'BoolExpr'
-NodeType[NodeType['IntExpr'] = 16] = 'IntExpr'
-NodeType[NodeType['FloatExpr'] = 17] = 'FloatExpr'
-NodeType[NodeType['BinArrExpr'] = 18] = 'BinArrExpr'
-NodeType[NodeType['StringExpr'] = 19] = 'StringExpr'
-NodeType[NodeType['IdentExpr'] = 20] = 'IdentExpr'
-NodeType[NodeType['ArgcExpr'] = 21] = 'ArgcExpr'
-NodeType[NodeType['ArgsExpr'] = 22] = 'ArgsExpr'
-NodeType[NodeType['UnaryOpExpr'] = 23] = 'UnaryOpExpr'
-NodeType[NodeType['BinaryOpExpr'] = 24] = 'BinaryOpExpr'
-NodeType[NodeType['CallExpr'] = 25] = 'CallExpr'
-NodeType[NodeType['AtExpr'] = 26] = 'AtExpr'
-NodeType[NodeType['CustomOpcodeExpr'] = 27] = 'CustomOpcodeExpr'
+NodeType[NodeType['DeferStmt'] = 14] = 'DeferStmt'
+NodeType[NodeType['NullExpr'] = 15] = 'NullExpr'
+NodeType[NodeType['BoolExpr'] = 16] = 'BoolExpr'
+NodeType[NodeType['IntExpr'] = 17] = 'IntExpr'
+NodeType[NodeType['FloatExpr'] = 18] = 'FloatExpr'
+NodeType[NodeType['BinArrExpr'] = 19] = 'BinArrExpr'
+NodeType[NodeType['StringExpr'] = 20] = 'StringExpr'
+NodeType[NodeType['IdentExpr'] = 21] = 'IdentExpr'
+NodeType[NodeType['ArgcExpr'] = 22] = 'ArgcExpr'
+NodeType[NodeType['ArgsExpr'] = 23] = 'ArgsExpr'
+NodeType[NodeType['UnaryOpExpr'] = 24] = 'UnaryOpExpr'
+NodeType[NodeType['BinaryOpExpr'] = 25] = 'BinaryOpExpr'
+NodeType[NodeType['CallExpr'] = 26] = 'CallExpr'
+NodeType[NodeType['AtExpr'] = 27] = 'AtExpr'
+NodeType[NodeType['CustomOpcodeExpr'] = 28] = 'CustomOpcodeExpr'
 Object.freeze(NodeType)
 
 // 10 档优先级，与 cpp/include/stope/common.hpp 的 OpPrecedence 同序同值
@@ -390,6 +391,18 @@ export class ContinueStmt extends Stmt {
   }
 }
 
+// defer_stmt : "defer" stmt —— 载荷缺省（defer; 报错路径）时 stmt 为 null
+export class DeferStmt extends Stmt {
+  constructor(line = -1) {
+    super(line)
+    this.nodeType = NodeType.DeferStmt
+    this.stmt = null
+  }
+  toStr(level = 0) {
+    return indent(level) + 'defer ' + e_(this.stmt) + '\n'
+  }
+}
+
 // ================================ 表达式 ================================
 export class NullExpr extends Expr {
   constructor(line = -1) {
@@ -570,7 +583,7 @@ export class CustomOpcodeExpr extends Expr {
 //   Call(f; Int(1)) / At(a; Int(1)) / Custom(myop; Int(1)) / Err(L-1)
 //   ExprStmt(..) / Let[a,b]=Int(1) / Return(Int(1), Int(2)) / Export[a] /
 //   Block{..} / If(c){..}Elif(c){..}Else{..} / While(c){..} /
-//   Assign(l, r) / Break / Continue
+//   Assign(l, r) / Break / Continue / Defer(..)
 // prog：语句按 " ; " 连接，无外层包装；空 prog -> ""
 export function shapeProg(p) {
   if (p === null || p === undefined) return 'null'
@@ -607,6 +620,8 @@ export function shapeStmt(s) {
       return 'Break'
     case NodeType.ContinueStmt:
       return 'Continue'
+    case NodeType.DeferStmt:
+      return `Defer(${shapeStmt(s.stmt)})`
     default:
       return '?' + nodeTypeName(s.nodeType)
   }

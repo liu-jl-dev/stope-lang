@@ -105,7 +105,7 @@ If  Elif  Else  Let  Return  While  Break  Continue
 Null  False  True  Args  Argc  Export  Custom
 ```
 
-关键字：`idiv if not and or elif else let return while break continue
+关键字：`idiv if not and or elif else let return while break continue defer
 null false true args argc export`。大小写敏感，且**关键字 > 自定义指令 > 标识符**。
 （`idiv` 在语法上写作运算符，词法上仍是关键字；旧文档按「17 个关键字 + `idiv`」计数，
 实际词法表是这 18 项。）
@@ -261,7 +261,7 @@ null false true args argc export`。大小写敏感，且**关键字 > 自定义
 
 | ID | 输入 | 期望 |
 | --- | --- | --- |
-| LEX-K-01 | 17 个关键字逐个 | 各自的关键字 kind，非 `Ident` |
+| LEX-K-01 | 18 个关键字逐个（含 `defer`，不含 `idiv`） | 各自的关键字 kind，非 `Ident` |
 | LEX-K-02 | `IF` / `If` / `iff` / `if2` | 全部 `Ident`（大小写敏感、须整词匹配） |
 | LEX-K-03 | 注册名为 `if` 的自定义指令 | 被关键字压住，仍是 `If` |
 

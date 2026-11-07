@@ -1,6 +1,6 @@
-// parser 语句层用例（测试计划 §5.1，S-01…S-45）
+// parser 语句层用例（测试计划 §5.1，S-01…S-50）
 // 覆盖：let / export / return / block / if / while / break / continue /
-//       表达式语句 / 赋值语句 + 空语句，共 11 类语句节点。
+//       defer / 表达式语句 / 赋值语句 + 空语句，共 12 类语句节点。
 #include "test_common.hpp"
 
 namespace Stope {
@@ -337,6 +337,36 @@ void runStmtTests() {
     auto r = parseAll(u"return; break; continue;");
     EXPECT_PSTMTS(r, 3, "S-45");
     EXPECT_PERR_COUNT(r, 0, "S-45");
+  }
+  // ---- S-46…S-50 defer ----
+  {  // S-46 载荷是赋值语句
+    auto r = parseAll(u"defer x = 1;");
+    EXPECT_PSTMT_SHAPE(r, 0, "Defer(Assign(Ident(x), Int(1)))", "S-46");
+    EXPECT_PERR_COUNT(r, 0, "S-46");
+  }
+  {  // S-47 载荷是块；块内含 if
+    auto r = parseAll(u"defer { if n == 0 { order = 1; } n = n + 1; }");
+    EXPECT_PSTMT_SHAPE(
+        r, 0,
+        "Defer(Block{If(Bin(EQ, Ident(n), Int(0))){Assign(Ident(order), "
+        "Int(1))} ; Assign(Ident(n), Bin(Add, Ident(n), Int(1)))})",
+        "S-47");
+    EXPECT_PERR_COUNT(r, 0, "S-47");
+  }
+  {  // S-48 直接嵌套合法：内层 defer 的触发点 = 外层载荷 scope 的结束
+    auto r = parseAll(u"defer defer x = 1;");
+    EXPECT_PSTMT_SHAPE(r, 0, "Defer(Defer(Assign(Ident(x), Int(1))))", "S-48");
+    EXPECT_PERR_COUNT(r, 0, "S-48");
+  }
+  {  // S-49 缺载荷：报错不推进，";" 交给外层循环
+    auto r = parseAll(u"defer;");
+    EXPECT_PSTMTS(r, 1, "S-49");
+    EXPECT_PERR_HAS(r, "expected statement after \"defer\". ", "S-49");
+  }
+  {  // S-50 缺载荷遇 "}":同样报错不推进，"}" 归外层块
+    auto r = parseAll(u"{ defer }");
+    EXPECT_PSTMT_SHAPE(r, 0, "Block{Defer(null)}", "S-50");
+    EXPECT_PERR_HAS(r, "expected statement after \"defer\". ", "S-50");
   }
 }
 

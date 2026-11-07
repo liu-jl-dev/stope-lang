@@ -151,6 +151,9 @@ pub enum Stmt {
     Assign { line: i32, left: Box<Expr>, right: Box<Expr> },
     Break(i32),
     Continue(i32),
+    /// `defer <语句|块>`：载荷缺语句（`defer;` / `defer }` / `defer Eof`）时为
+    /// `None` —— 照抄 C++ 的 `DeferStmt::stmt == nullptr`。
+    Defer { line: i32, stmt: Option<Box<Stmt>> },
 }
 
 impl Stmt {
@@ -166,6 +169,7 @@ impl Stmt {
             Stmt::Assign { line, .. } => *line,
             Stmt::Break(l) => *l,
             Stmt::Continue(l) => *l,
+            Stmt::Defer { line, .. } => *line,
         }
     }
 }
@@ -225,6 +229,13 @@ pub fn shape_stmt(s: &Stmt) -> String {
         }
         Stmt::Break(_) => "Break".to_string(),
         Stmt::Continue(_) => "Continue".to_string(),
+        Stmt::Defer { stmt, .. } => {
+            let inner = match stmt {
+                None => "null".to_string(),
+                Some(s) => shape_stmt(s),
+            };
+            format!("Defer({})", inner)
+        }
     }
 }
 

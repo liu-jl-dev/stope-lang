@@ -36,20 +36,21 @@ class NodeType(IntEnum):
     AssignStmt = 11
     BreakStmt = 12
     ContinueStmt = 13
-    NullExpr = 14
-    BoolExpr = 15
-    IntExpr = 16
-    FloatExpr = 17
-    BinArrExpr = 18
-    StringExpr = 19
-    IdentExpr = 20
-    ArgcExpr = 21
-    ArgsExpr = 22
-    UnaryOpExpr = 23
-    BinaryOpExpr = 24
-    CallExpr = 25
-    AtExpr = 26
-    CustomOpcodeExpr = 27
+    DeferStmt = 14
+    NullExpr = 15
+    BoolExpr = 16
+    IntExpr = 17
+    FloatExpr = 18
+    BinArrExpr = 19
+    StringExpr = 20
+    IdentExpr = 21
+    ArgcExpr = 22
+    ArgsExpr = 23
+    UnaryOpExpr = 24
+    BinaryOpExpr = 25
+    CallExpr = 26
+    AtExpr = 27
+    CustomOpcodeExpr = 28
 
 
 class Precedence:
@@ -362,6 +363,21 @@ class ContinueStmt(Stmt):
         return _indent(level) + "continue;\n"
 
 
+# defer_stmt : "defer" stmt —— 载荷缺省（defer; 报错路径）时 stmt 为 None
+
+
+class DeferStmt(Stmt):
+    __slots__ = ("stmt",)
+
+    def __init__(self, line: int = -1):
+        super().__init__(line)
+        self.node_type = NodeType.DeferStmt
+        self.stmt = None
+
+    def to_str(self, level: int = 0) -> str:
+        return _indent(level) + "defer " + _e(self.stmt) + "\n"
+
+
 # ================================ 表达式 ================================
 
 
@@ -568,7 +584,7 @@ class CustomOpcodeExpr(Expr):
 #   Call(f; Int(1)) / At(a; Int(1)) / Custom(myop; Int(1)) / Err(L-1)
 #   ExprStmt(..) / Let[a,b]=Int(1) / Return(Int(1), Int(2)) / Export[a] /
 #   Block{..} / If(c){..}Elif(c){..}Else{..} / While(c){..} /
-#   Assign(l, r) / Break / Continue
+#   Assign(l, r) / Break / Continue / Defer(..)
 # prog：语句按 " ; " 连接，无外层包装；空 prog -> ""
 
 
@@ -610,6 +626,8 @@ def shape_stmt(s) -> str:
         return "Break"
     if t == NodeType.ContinueStmt:
         return "Continue"
+    if t == NodeType.DeferStmt:
+        return "Defer(" + shape_stmt(s.stmt) + ")"
     return "?" + node_type_name(t)
 
 

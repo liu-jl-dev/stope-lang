@@ -41,6 +41,7 @@ public class AstVisitor
             case AstNodeType.AssignStmt: OnVisitAssignStmt((AssignStmt)n); break;
             case AstNodeType.BreakStmt: OnVisitBreakStmt((BreakStmt)n); break;
             case AstNodeType.ContinueStmt: OnVisitContinueStmt((ContinueStmt)n); break;
+            case AstNodeType.DeferStmt: OnVisitDeferStmt((DeferStmt)n); break;
 
             // ---------------- 表达式 ----------------
             case AstNodeType.NullExpr: OnVisitNullExpr((NullExpr)n); break;
@@ -114,6 +115,8 @@ public class AstVisitor
     public virtual void OnVisitBreakStmt(BreakStmt s) { }
 
     public virtual void OnVisitContinueStmt(ContinueStmt s) { }
+
+    public virtual void OnVisitDeferStmt(DeferStmt s) => Visit(s.Stmt);
 
     // ---------------- 表达式 ----------------
     public virtual void OnVisitNullExpr(NullExpr n) { }

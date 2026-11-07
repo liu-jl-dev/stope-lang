@@ -106,21 +106,55 @@ impl Parser {
                 self.next_token();
                 continue;
             }
-            let stmt = match t {
-                TokenType::Let => self.parse_let_stmt(depth),
-                TokenType::Export => self.parse_export_stmt(),
-                TokenType::Return => self.parse_return_stmt(depth),
-                TokenType::LBrace => self.parse_block_stmt(depth),
-                TokenType::If => self.parse_if_stmt(depth),
-                TokenType::While => self.parse_while_stmt(depth),
-                TokenType::Break => self.parse_break_stmt(),
-                TokenType::Continue => self.parse_continue_stmt(),
-                _ => self.parse_expr_or_assign_stmt(depth), // 表达式语句或赋值语句
-            };
+            let stmt = self.parse_stmt_dispatch(depth);
             // 超限中止时子函数返回 None：不追加、不再往下解析
             let Some(stmt) = stmt else { break };
             prog.stmts.push(stmt);
         }
+    }
+
+    /// 语句分派：`parse_prog` 循环体与 defer 载荷共用同一条链。
+    /// `"{" / ";" / "}"` 等结构性 token 由调用方（`parse_prog` 循环或
+    /// `parse_defer_stmt`）处理。
+    fn parse_stmt_dispatch(&mut self, depth: i32) -> Option<Stmt> {
+        match self.cur_token.type_ {
+            TokenType::Let => self.parse_let_stmt(depth),
+            TokenType::Export => self.parse_export_stmt(),
+            TokenType::Return => self.parse_return_stmt(depth),
+            TokenType::LBrace => self.parse_block_stmt(depth),
+            TokenType::If => self.parse_if_stmt(depth),
+            TokenType::While => self.parse_while_stmt(depth),
+            TokenType::Break => self.parse_break_stmt(),
+            TokenType::Continue => self.parse_continue_stmt(),
+            TokenType::Defer => self.parse_defer_stmt(depth),
+            _ => self.parse_expr_or_assign_stmt(depth), // 表达式语句或赋值语句
+        }
+    }
+
+    /// `defer_stmt : "defer" stmt` —— 载荷是一条完整语句。
+    ///
+    /// 直接嵌套（`defer defer X`）合法：内层 defer 的触发点 = 外层载荷 scope
+    /// 的结束 = 同一退出点。载荷缺语句（`defer;` / `defer }` / `defer Eof`）
+    /// 报错但**不推进**：`";"` 与 `"}"` 交给外层 `parse_prog` 循环，否则死循环
+    /// 或吞掉外层的 `"}"`。
+    fn parse_defer_stmt(&mut self, depth: i32) -> Option<Stmt> {
+        if self.aborted {
+            return None;
+        }
+        let line = self.cur_token.line;
+        self.next_token(); // 跳过 defer
+        if self.cur_token.type_ == TokenType::Semi
+            || self.cur_token.type_ == TokenType::RBrace
+            || self.cur_token.type_ == TokenType::Eof
+        {
+            let l = self.cur_token.line;
+            self.error(l, "expected statement after \"defer\". ");
+            return Some(Stmt::Defer { line, stmt: None });
+        }
+        // 载荷 +1：defer 可经「载荷 → 分派 → parse_defer_stmt」递归（defer
+        // defer defer …），深度上限必须能数到这种嵌套。abort 时载荷为 None。
+        let stmt = self.parse_stmt_dispatch(depth + 1);
+        Some(Stmt::Defer { line, stmt: stmt.map(Box::new) })
     }
 
     fn parse_let_stmt(&mut self, depth: i32) -> Option<Stmt> {

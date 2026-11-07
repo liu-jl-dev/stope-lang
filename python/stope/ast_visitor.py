@@ -25,6 +25,7 @@ VISIT_MAP = {
     NodeType.AssignStmt: "on_visit_assign_stmt",
     NodeType.BreakStmt: "on_visit_break_stmt",
     NodeType.ContinueStmt: "on_visit_continue_stmt",
+    NodeType.DeferStmt: "on_visit_defer_stmt",
 
     NodeType.NullExpr: "on_visit_null_expr",
     NodeType.BoolExpr: "on_visit_bool_expr",
@@ -113,6 +114,9 @@ class ASTVisitor:
 
     def on_visit_continue_stmt(self, _s) -> None:
         pass
+
+    def on_visit_defer_stmt(self, s) -> None:
+        self.visit(s.stmt)  # 载荷缺省（defer; 报错路径）时为 None，visit 自会返回
 
     # ---------------- 表达式 ----------------
     def on_visit_null_expr(self, _n=None) -> None:

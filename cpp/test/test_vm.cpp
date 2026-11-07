@@ -352,6 +352,76 @@ void runStepCases() {
   }
 }
 
+// ==================== V-35…V-40 defer ====================
+// defer 的语义权威在 syntax-reference §3.2：块作用域触发、编译期拼接
+// （零新指令）、LIFO、载荷在退出点读变量当前值、名字绑定冻结在 defer
+// 语句处、结算先于返回值求值（defer 可以影响返回值）。这组用例逐条锁
+// 行为，不做编译期断言（那些在 test_compiler）。
+void runDeferCases() {
+  section("V-35…V-40 defer");
+
+  {  // V-35 当前值：退出时读 x 的最终值，不是 defer 处的快照
+    VmResult r;
+    runSrc(u"let x = 1; let got = 0; defer got = x; x = 2; return got;", r);
+    if (healthy(r, "V-35"))
+      check(r.retInt == 2, "V-35", "defer reads x at exit -> 2", vmDetail(r));
+  }
+  {  // V-36 LIFO：后登记的先执行。两个载荷都读 n==0 并自增——
+     //   后登记的看到 n==0 置 order=2；先登记的看到 n 已是 1 跳过。
+    VmResult r;
+    runSrc(u"let n = 0; let order = 0;"
+           u"defer { if n == 0 { order = 1; } n = n + 1; };"
+           u"defer { if n == 0 { order = 2; } n = n + 1; };"
+           u"return order;",
+           r);
+    if (healthy(r, "V-36"))
+      check(r.retInt == 2, "V-36", "LIFO: later-registered runs first",
+            vmDetail(r));
+  }
+  {  // V-37 循环体块的 defer 每轮块尾执行一次，读当轮的 i（自增后的值）
+    VmResult r;
+    runSrc(u"let sum = 0; let i = 0;"
+           u"while i < 3 { defer sum = sum + i; i = i + 1; }"
+           u"return sum;",
+           r);
+    if (healthy(r, "V-37"))
+      check(r.retInt == 6, "V-37", "per-iteration exit, current i -> 1+2+3",
+            vmDetail(r));
+  }
+  {  // V-38 冻结名字绑定：载荷绑定 defer 处可见的外层 msg（值 1），
+     //   不是块内后来遮蔽的同名变量（值 3）
+    VmResult r;
+    runSrc(u"let msg = 1; let got = 0;"
+           u"{ defer got = msg; let msg = 2; msg = 3; }"
+           u"return got;",
+           r);
+    if (healthy(r, "V-38"))
+      check(r.retInt == 1, "V-38",
+            "frozen binding: payload reads outer msg", vmDetail(r));
+  }
+  {  // V-39 结算先于返回值求值（与块退出同序：先结算、再做退出动作）——
+     //   defer 可以影响返回值，类似 Go 的具名返回值
+    VmResult r;
+    runSrc(u"let x = 0; defer x = 5; return x;", r);
+    if (healthy(r, "V-39"))
+      check(r.retInt == 5, "V-39",
+            "defer settlement runs before return value evaluation",
+            vmDetail(r));
+  }
+  {  // V-40 break 结算循环体块的 defer：第 1 轮正常块尾 +1，第 2 轮
+     //   break 时再 +1，然后才跳循环尾
+    VmResult r;
+    runSrc(u"let ran = 0; let i = 0;"
+           u"while i < 5 { defer ran = ran + 1; i = i + 1;"
+           u"  if i == 2 { break; } }"
+           u"return ran;",
+           r);
+    if (healthy(r, "V-40"))
+      check(r.retInt == 2, "V-40", "break settles body defers before jump",
+            vmDetail(r));
+  }
+}
+
 void runVmTests() {
   runReturnCases();
   runAtCases();
@@ -359,6 +429,7 @@ void runVmTests() {
   runControlFlow();
   runNoIdentifierLeft();
   runStepCases();
+  runDeferCases();
 }
 
 }  // namespace Test

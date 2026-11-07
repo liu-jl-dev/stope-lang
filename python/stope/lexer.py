@@ -54,6 +54,7 @@ _KEYWORDS = {
     "else": TokenType.Else, "let": TokenType.Let,
     "return": TokenType.Return, "while": TokenType.While,
     "break": TokenType.Break, "continue": TokenType.Continue,
+    "defer": TokenType.Defer,
     "null": TokenType.Null, "false": TokenType.False_,
     "true": TokenType.True_, "args": TokenType.Args,
     "argc": TokenType.Argc, "export": TokenType.Export,

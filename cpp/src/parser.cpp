@@ -40,32 +40,61 @@ void Parser::parseProg(AST::Prog& prog, bool isTopLevel, int depth) {
       nextToken();
       continue;
     }
-    AST::Stmt* stmt = nullptr;
-    if (curToken().type == TokenType::Let) {  // let
-      stmt = parseLetStmt(depth);
-    } else if (curToken().type == TokenType::Export) {  // export
-      stmt = parseExportStmt(depth);
-    } else if (curToken().type == TokenType::Return) {  // return
-      stmt = parseReturnStmt(depth);
-    } else if (curToken().type == TokenType::LBrace) {  // { ... }
-      stmt = parseBlockStmt(depth);
-    } else if (curToken().type == TokenType::If) {  // if
-      stmt = parseIfStmt(depth);
-    } else if (curToken().type == TokenType::While) {  // while
-      stmt = parseWhileStmt(depth);
-    } else if (curToken().type == TokenType::Break) {  // break
-      stmt = parseBreakStmt(depth);
-    } else if (curToken().type == TokenType::Continue) {  // continue
-      stmt = parseContinueStmt(depth);
-    } else {  // 表达式语句或赋值语句
-      stmt = parseExprOrAssignStmt(depth);
-    }
+    AST::Stmt* stmt = parseStmtDispatch(depth);
     // 超限中止时子函数返回空：不追加、不再往下解析（否则拿着同一个 token
     // 反复调用会死循环）。
     if (stmt == nullptr)
       break;
     prog.stmts.emplace_back(std::unique_ptr<AST::Stmt>(stmt));
   }
+}
+
+// 语句分派：parseProg 循环体与 defer 载荷共用同一条链。"{" / ";" / "}"
+// 等结构性 token 由调用方（parseProg 循环或 parseDeferStmt）处理。
+AST::Stmt* Parser::parseStmtDispatch(int depth) {
+  AST::Stmt* stmt = nullptr;
+  if (curToken().type == TokenType::Let) {  // let
+    stmt = parseLetStmt(depth);
+  } else if (curToken().type == TokenType::Export) {  // export
+    stmt = parseExportStmt(depth);
+  } else if (curToken().type == TokenType::Return) {  // return
+    stmt = parseReturnStmt(depth);
+  } else if (curToken().type == TokenType::LBrace) {  // { ... }
+    stmt = parseBlockStmt(depth);
+  } else if (curToken().type == TokenType::If) {  // if
+    stmt = parseIfStmt(depth);
+  } else if (curToken().type == TokenType::While) {  // while
+    stmt = parseWhileStmt(depth);
+  } else if (curToken().type == TokenType::Break) {  // break
+    stmt = parseBreakStmt(depth);
+  } else if (curToken().type == TokenType::Continue) {  // continue
+    stmt = parseContinueStmt(depth);
+  } else if (curToken().type == TokenType::Defer) {  // defer
+    stmt = parseDeferStmt(depth);
+  } else {  // 表达式语句或赋值语句
+    stmt = parseExprOrAssignStmt(depth);
+  }
+  return stmt;
+}
+
+AST::DeferStmt* Parser::parseDeferStmt(int depth) {
+  if (aborted)
+    return nullptr;
+  AST::DeferStmt* stmt = new AST::DeferStmt();
+  stmt->line = curToken().line;
+  nextToken();  // 跳过 defer
+  if (curToken().type == TokenType::Semi ||
+      curToken().type == TokenType::RBrace ||
+      curToken().type == TokenType::Eof) {
+    // 缺载荷。不推进（同 parseLetStmt 缺 ";" 的纪律）：";" 与 "}" 交给
+    // 外层 parseProg 循环，否则死循环或吞掉外层的 "}"。
+    error(curToken().line, "expected statement after \"defer\". ");
+    return stmt;
+  }
+  // 载荷 +1：defer 可经「载荷 → 分派 → parseDeferStmt」递归（defer defer
+  // defer …），深度上限必须能数到这种嵌套。
+  stmt->stmt.reset(parseStmtDispatch(depth + 1));
+  return stmt;
 }
 
 AST::LetStmt* Parser::parseLetStmt(int depth) {

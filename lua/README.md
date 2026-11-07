@@ -85,8 +85,8 @@ lua/
 ```
 [1/8] 词法（golden_lex.txt）                        588 条（147 条用例）
 [2/8] 二进制数组 + 常量折叠（golden_binarr.txt）       87 条（86 条用例）
-[3/8] 语法（golden.txt）                           1207 条（201 条用例）
-[4/8] 编译器（golden.txt）                          603 条（201 条用例）
+[3/8] 语法（golden.txt）                           1291 条（215 条用例）
+[4/8] 编译器（golden.txt）                          645 条（215 条用例）
 [5/8] 嵌套深度上限                                    21 条
 [6/8] 反汇编（golden_disasm.txt）                     17 条（12 条用例）
 [7/8] STML（stml_cases.txt + golden_stml.txt）      634 条（126 条用例）

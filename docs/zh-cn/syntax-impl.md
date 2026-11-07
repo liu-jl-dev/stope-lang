@@ -320,7 +320,7 @@ void nextToken() { curTokenIdx = (curTokenIdx + 1) % 2;
 | 分组 | 成员 |
 | --- | --- |
 | 基类 | `Node` `Prog` `Stmt` `Expr` |
-| 语句 | `ExprStmt` `LetStmt` `ReturnStmt` `ExportStmt` `BlockStmt` `IfStmt` `WhileStmt` `AssignStmt` `BreakStmt` `ContinueStmt` |
+| 语句 | `ExprStmt` `LetStmt` `ReturnStmt` `ExportStmt` `BlockStmt` `IfStmt` `WhileStmt` `AssignStmt` `BreakStmt` `ContinueStmt` `DeferStmt` |
 | 表达式 | `NullExpr` `BoolExpr` `IntExpr` `FloatExpr` `BinArrExpr` `StringExpr` `IdentExpr` `ArgcExpr` `ArgsExpr` `UnaryOpExpr` `BinaryOpExpr` `CallExpr` `AtExpr` `CustomOpcodeExpr` |
 
 约束（写测试或新增节点时必须知道）：
@@ -649,12 +649,14 @@ void error(int line, const char* msg) {
 | PD-16 | `ArgsExpr::line` 恒为 -1 | 2026-10-16 |
 | PD-17 | `x; myop();` 空参数表误报缺 `;` | 2026-10-16 |
 | PD-7 | `^` 结合性 —— 2026-10-16 定夺为左结合，**2026-10-22 改为右结合**（`2^3^2` ≡ `2^(3^2)`），机制见 §5.3 | 2026-10-22 |
+| PD-13 / PD-13b | 递归无深度上限，解析/析构真崩 —— 加 `Parser::maxDepth`（默认 256），超限报 `nesting too deep (max 256). ` 并停止递归；AST 深度有界后析构链自然安全，详见 [parser-test-plan.md PD-13](../../cpp/docs/parser-test-plan.md) | 2026-10-30 |
 ### 10.2 未修 / 待定
+
+> 设计取舍类的待定夺问题（非缺陷）统一登记在 [open-questions.md](open-questions.md)。
 
 | 编号 | 现象 | 建议 |
 | --- | --- | --- |
 | **PD-8** | 解析失败处返回裸 `AST::Expr`（`line == -1`），无 panic-mode | 引入错误节点或跳到下一个 `;` / `}`；与 §2.3 契约 5 一起设计 |
-| **PD-13 / PD-13b** | 递归无深度上限，会**真崩**（解析阶段 / 析构阶段） | 给 `parseExpr` 与 `parseProg` 加 RAII 深度守卫（建议上限 1000），并在 `error()` 开头加 `if (depthAborted) return;` 防错误洪水 |
 | **PD-12** | `error()` 里 `stringstream` 使内存计量不配平 | 换成 `std::to_string` 拼接 |
 | **PD-14** | `lexer.errors` 与 `parser.errors` 不合并 | 调用方查两处，或提供合并接口 |
 | **PD-15** | `std::array<Token,2> tokens` 未零初始化 | 加 `{}` 初始化 |

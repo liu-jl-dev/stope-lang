@@ -27,6 +27,7 @@ const (
 	NAssignStmt
 	NBreakStmt
 	NContinueStmt
+	NDeferStmt
 	NNullExpr
 	NBoolExpr
 	NIntExpr
@@ -161,6 +162,12 @@ type BreakStmt struct{ NodeBase }
 
 // ContinueStmt continue 语句。
 type ContinueStmt struct{ NodeBase }
+
+// DeferStmt defer_stmt : "defer" stmt —— 载荷缺省（defer; 报错路径）时 Stmt 为 nil。
+type DeferStmt struct {
+	NodeBase
+	Stmt Node
+}
 
 // ================================ 表达式 ================================
 
@@ -327,6 +334,8 @@ func ShapeStmt(s Node) string {
 		return "Break"
 	case *ContinueStmt:
 		return "Continue"
+	case *DeferStmt:
+		return "Defer(" + ShapeStmt(n.Stmt) + ")"
 	}
 	return "?" + nodeTypeName(s)
 }
@@ -413,6 +422,8 @@ func nodeTypeName(n Node) string {
 		return "BreakStmt"
 	case *ContinueStmt:
 		return "ContinueStmt"
+	case *DeferStmt:
+		return "DeferStmt"
 	case *NullExpr:
 		return "NullExpr"
 	case *BoolExpr:

@@ -71,21 +71,49 @@ class Parser {
         this.nextToken()
         continue
       }
-      let stmt
-      if (this.curToken.type === TokenType.Let) stmt = this.parseLetStmt(depth)
-      else if (this.curToken.type === TokenType.Export) stmt = this.parseExportStmt(depth)
-      else if (this.curToken.type === TokenType.Return) stmt = this.parseReturnStmt(depth)
-      else if (this.curToken.type === TokenType.LBrace) stmt = this.parseBlockStmt(depth)
-      else if (this.curToken.type === TokenType.If) stmt = this.parseIfStmt(depth)
-      else if (this.curToken.type === TokenType.While) stmt = this.parseWhileStmt(depth)
-      else if (this.curToken.type === TokenType.Break) stmt = this.parseBreakStmt(depth)
-      else if (this.curToken.type === TokenType.Continue) stmt = this.parseContinueStmt(depth)
-      else stmt = this.parseExprOrAssignStmt(depth) // 表达式语句或赋值语句
+      // 语句分派：parseProg 循环体与 defer 载荷共用同一条链（parseStmtDispatch）。
+      // "{" / ";" / "}" 等结构性 token 由 parseProg 循环或 parseDeferStmt 处理。
+      let stmt = this.parseStmtDispatch(depth)
       // 超限中止时子函数返回 null：不追加、不再往下解析（否则拿着同一个
       // token 反复调用会死循环）。
       if (stmt === null) break
       prog.stmts.push(stmt)
     }
+  }
+
+  // 语句分派：parseProg 循环体与 defer 载荷共用同一条链。
+  parseStmtDispatch(depth) {
+    if (this.curToken.type === TokenType.Let) return this.parseLetStmt(depth)
+    if (this.curToken.type === TokenType.Export) return this.parseExportStmt(depth)
+    if (this.curToken.type === TokenType.Return) return this.parseReturnStmt(depth)
+    if (this.curToken.type === TokenType.LBrace) return this.parseBlockStmt(depth)
+    if (this.curToken.type === TokenType.If) return this.parseIfStmt(depth)
+    if (this.curToken.type === TokenType.While) return this.parseWhileStmt(depth)
+    if (this.curToken.type === TokenType.Break) return this.parseBreakStmt(depth)
+    if (this.curToken.type === TokenType.Continue) return this.parseContinueStmt(depth)
+    if (this.curToken.type === TokenType.Defer) return this.parseDeferStmt(depth)
+    return this.parseExprOrAssignStmt(depth) // 表达式语句或赋值语句
+  }
+
+  // defer_stmt : "defer" stmt
+  parseDeferStmt(depth) {
+    if (this.aborted) return null // 已超限：不再解析
+    const stmt = new A.DeferStmt(this.curToken.line)
+    this.nextToken() // 跳过 defer
+    if (
+      this.curToken.type === TokenType.Semi ||
+      this.curToken.type === TokenType.RBrace ||
+      this.curToken.type === TokenType.Eof
+    ) {
+      // 缺载荷。不推进（同 parseLetStmt 缺 ";" 的纪律）：";" 与 "}" 交给
+      // 外层 parseProg 循环，否则死循环或吞掉外层的 "}"。
+      this.error(this.curToken.line, 'expected statement after "defer". ')
+      return stmt
+    }
+    // 载荷 +1：defer 可经「载荷 → 分派 → parseDeferStmt」递归（defer defer
+    // defer …），深度上限必须能数到这种嵌套。
+    stmt.stmt = this.parseStmtDispatch(depth + 1)
+    return stmt
   }
 
   parseLetStmt(depth) {

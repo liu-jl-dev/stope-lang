@@ -49,14 +49,15 @@ public enum TokenType
     While = 37,     // while
     Break = 38,     // break
     Continue = 39,  // continue
+    Defer = 40,     // defer
 
-    Null = 40,      // null
-    False = 41,     // false
-    True = 42,      // true
-    Args = 43,      // args
-    Argc = 44,      // argc
-    Export = 45,    // export
-    Custom = 46,    // 自定义指令
+    Null = 41,      // null
+    False = 42,     // false
+    True = 43,      // true
+    Args = 44,      // args
+    Argc = 45,      // argc
+    Export = 46,    // export
+    Custom = 47,    // 自定义指令
 }
 
 /// <summary>

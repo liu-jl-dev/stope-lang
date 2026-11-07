@@ -34,6 +34,7 @@ struct ASTVisitor {
   static void visitAssignStmt(ASTVisitor& visitor, AST::Node* n);
   static void visitBreakStmt(ASTVisitor& visitor, AST::Node* n);
   static void visitContinueStmt(ASTVisitor& visitor, AST::Node* n);
+  static void visitDeferStmt(ASTVisitor& visitor, AST::Node* n);
   static void visitNullExpr(ASTVisitor& visitor, AST::Node* n);
   static void visitBoolExpr(ASTVisitor& visitor, AST::Node* n);
   static void visitIntExpr(ASTVisitor& visitor, AST::Node* n);
@@ -95,6 +96,8 @@ struct ASTVisitor {
   }
   virtual void onVisitBreakStmt(AST::BreakStmt* s) { (void)s; }
   virtual void onVisitContinueStmt(AST::ContinueStmt* s) { (void)s; }
+  // 默认遍历载荷（编译器覆写后不遍历：载荷在退出点才编译）。
+  virtual void onVisitDeferStmt(AST::DeferStmt* s) { Visit(s->stmt.get()); }
 
   // ---------------- 表达式 ----------------
   // 叶子：没有子节点

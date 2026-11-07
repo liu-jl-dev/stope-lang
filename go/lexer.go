@@ -16,7 +16,8 @@ var keywords = map[string]TokenType{
 	"else": TElse, "let": TLet,
 	"return": TReturn, "while": TWhile,
 	"break": TBreak, "continue": TContinue,
-	"null": TNull, "false": TFalse,
+	"defer": TDefer,
+	"null":  TNull, "false": TFalse,
 	"true": TTrue, "args": TArgs,
 	"argc": TArgc, "export": TExport,
 }

@@ -7,11 +7,36 @@
 local scope_context = {}
 
 function scope_context.BlockScope()
-    return { type = "block", id_map = {} }
+    return {
+        type = "block",
+        id_map = {},
+        -- 名字 → 声明序号（Compiler.decl_counter 的全局值，跨 scope 可比）。
+        -- defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于
+        -- defer 语句处的基线，报 "declared after the defer statement."。
+        -- 隐式导出（从未声明的宿主变量）记 -1，豁免检查。
+        id_order = {},
+        -- defer 语句在本 scope 的登记：{ stmt = 载荷节点, line = defer 行号,
+        -- order_baseline = 登记时的声明序号基线 }。退出点（块尾 / break /
+        -- continue / return）由 Compiler 逆序拼接 —— 运行时没有 defer 栈，
+        -- 顺序在编译期物化。
+        defers = {},
+        -- 该 scope 是否为 defer 载荷的隐式作用域：break / continue / return
+        -- 不得跨越它（break/continue 的目标循环在载荷外 → 报错；return 在
+        -- 载荷内一律报错）。
+        is_defer_payload = false,
+    }
 end
 
 function scope_context.FileScope()
-    return { type = "file", id_map = {}, is_file = true }
+    -- 与 BlockScope 同构（对照 C++：FileScope 继承 BlockScope），仅 type 不同。
+    return {
+        type = "file",
+        id_map = {},
+        id_order = {},
+        defers = {},
+        is_defer_payload = false,
+        is_file = true,
+    }
 end
 
 function scope_context.WhileScope()

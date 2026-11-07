@@ -25,6 +25,7 @@ enum class NodeType {
   AssignStmt,
   BreakStmt,
   ContinueStmt,
+  DeferStmt,
 
   NullExpr,
   BoolExpr,
@@ -127,6 +128,11 @@ struct BreakStmt : Stmt {
 // continue_stmt : "continue" ";"
 struct ContinueStmt : Stmt {
   ContinueStmt() { type = NodeType::ContinueStmt; }
+};
+// defer_stmt : "defer" stmt
+struct DeferStmt : Stmt {
+  std::unique_ptr<Stmt> stmt;
+  DeferStmt() { type = NodeType::DeferStmt; }
 };
 
 struct NullExpr : Expr {

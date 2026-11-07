@@ -18,11 +18,11 @@ class_name StopeAst
 
 const TokenType = StopeLexer.Token.Type
 
-# 与 AST::NodeType 同序同值，共 28 项
+# 与 AST::NodeType 同序同值，共 29 项
 enum NodeType {
 	Node, Prog, Stmt, Expr,
 	ExprStmt, LetStmt, ReturnStmt, ExportStmt, BlockStmt, IfStmt, WhileStmt, AssignStmt,
-	BreakStmt, ContinueStmt,
+	BreakStmt, ContinueStmt, DeferStmt,
 	NullExpr, BoolExpr, IntExpr, FloatExpr, BinArrExpr, StringExpr, IdentExpr,
 	ArgcExpr, ArgsExpr, UnaryOpExpr, BinaryOpExpr, CallExpr, AtExpr, CustomOpcodeExpr
 }
@@ -296,6 +296,14 @@ class ContinueStmt extends Stmt:
 		node_type = NodeType.ContinueStmt; line = line_
 	func to_str(level:int = 0) -> String: return StopeAst.indent(level) + "continue;\n"
 
+# defer_stmt : "defer" stmt —— 载荷缺省（defer; 报错路径）时 stmt 为 null
+class DeferStmt extends Stmt:
+	var stmt:Stmt = null
+	func _init(line_:int = -1) -> void:
+		node_type = NodeType.DeferStmt; line = line_
+	func to_str(level:int = 0) -> String:
+		return str(StopeAst.indent(level), 'defer ', StopeAst._e(stmt), '\n')
+
 # ================================ 表达式 ================================
 class NullExpr extends Expr:
 	func _init(line_:int = -1) -> void:
@@ -412,7 +420,7 @@ class CustomOpcodeExpr extends Expr:
 # 语句写法：
 #   ExprStmt(..) / Let[a,b]=Int(1) / Return(Int(1), Int(2)) / Export[a] /
 #   Block{..} / If(c){..}Elif(c){..}Else{..} / While(c){..} /
-#   Assign(l, r) / Break / Continue
+#   Assign(l, r) / Break / Continue / Defer(..)
 # prog：语句按 " ; " 连接，无外层包装；空 prog -> ""
 
 static func shape_prog(p) -> String:
@@ -464,6 +472,8 @@ static func shape_stmt(s) -> String:
 		return "Break"
 	elif t == NodeType.ContinueStmt:
 		return "Continue"
+	elif t == NodeType.DeferStmt:
+		return "Defer(" + shape_stmt(s.stmt) + ")"
 	return "?" + node_type_name(t)
 
 static func shape_expr(e) -> String:

@@ -317,10 +317,12 @@ Python 侧另有几处宿主语言语义要兜（`1.0 / 0` 抛异常、`-7 // 2`
 | 想看             | 去哪                                                               |
 | -------------- | ---------------------------------------------------------------- |
 | 语法入门           | [docs/zh-cn/syntax-intro.md](docs/zh-cn/syntax-intro.md)         |
+| 语法教程（由易到难，示例配反汇编） | [docs/zh-cn/syntax-tutorial.md](docs/zh-cn/syntax-tutorial.md) |
 | 完整语法规则与错误文案    | [docs/zh-cn/syntax-reference.md](docs/zh-cn/syntax-reference.md) |
 | 常量折叠规则         | [docs/zh-cn/constant-folding.md](docs/zh-cn/constant-folding.md) |
 | 各模块对外契约        | [docs/zh-cn/syntax-impl.md](docs/zh-cn/syntax-impl.md)           |
 | 四份跨实现行为契约      | [docs/zh-cn/](docs/zh-cn/) 下的 `*-test-plan.md`                   |
+| 待定夺与决定记录       | [docs/zh-cn/open-questions.md](docs/zh-cn/open-questions.md)     |
 | C++ 实现总览（入口）    | [cpp/docs/README.md](cpp/docs/README.md)                         |
 | 嵌入 C++ 程序（四步）  | [cpp/docs/quick-start.md](cpp/docs/quick-start.md)               |
 | 解析 STML 文档（上手） | [C++](cpp/docs/stml.md) · [GDScript](gdscript/docs/stml.md) · [Node.js](nodejs/docs/stml.md) · [C#](csharp/docs/stml.md) · [Python](python/docs/stml.md) · [Lua](lua/docs/stml.md) · [Go](go/docs/stml.md) · [Rust](rust/docs/stml.md) |

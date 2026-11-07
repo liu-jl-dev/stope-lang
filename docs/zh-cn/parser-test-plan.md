@@ -170,6 +170,11 @@
 | S-33 | `a = 1` | `Assign(Ident(a), Int(1))` | 1 | `expected ";" at end of assign statement.` |
 | S-34 | `a b;` | `ExprStmt(Ident(a)) ; ExprStmt(Ident(b))` | 1 | `expected ";" or "=". ` |
 | S-35 | `a[0] = 1;` | `Assign(At(Ident(a); Int(0)), Int(1))` | 0 | |
+| S-46 | `defer x = 1;` | `Defer(Assign(Ident(x), Int(1)))` | 0 | 载荷是一条完整语句 |
+| S-47 | `defer { if n == 0 { order = 1; } n = n + 1; }` | `Defer(Block{…})` | 0 | 块载荷 |
+| S-48 | `defer defer x = 1;` | `Defer(Defer(Assign(Ident(x), Int(1))))` | 0 | 直接嵌套合法：内层触发点 = 外层载荷 scope 结束 |
+| S-49 | `defer;` | `Defer(null)` | 1 | `expected statement after "defer".` |
+| S-50 | `{ defer }` | `Block{Defer(null)}` | 1 | 同上；`}` 归外层块 |
 
 ### 4.2 X 表达式与字面量
 

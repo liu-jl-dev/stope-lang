@@ -13,7 +13,7 @@ namespace Stope;
 /// Call(f; Int(1)) / At(a; Int(1)) / Custom(myop; Int(1)) / Err(L-1)
 /// ExprStmt(..) / Let[a,b]=Int(1) / Return(Int(1), Int(2)) / Export[a] /
 /// Block{..} / If(c){..}Elif(c){..}Else{..} / While(c){..} /
-/// Assign(l, r) / Break / Continue
+/// Assign(l, r) / Break / Continue / Defer(..)
 /// </code>
 /// prog：语句按 <c>" ; "</c> 连接，无外层包装；空 prog 给空串。
 /// <para>
@@ -97,6 +97,8 @@ public static class Shape
                 return "Break";
             case AstNodeType.ContinueStmt:
                 return "Continue";
+            case AstNodeType.DeferStmt:
+                return "Defer(" + Stmt(((DeferStmt)s).Stmt) + ")";
             default:
                 return "?" + s.NodeType;
         }

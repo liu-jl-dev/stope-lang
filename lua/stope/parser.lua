@@ -70,43 +70,72 @@ function Parser:parse_prog(prog, is_top_level, depth)
     if self.aborted then return end
     while (not self.aborted) and self.cur_token.type ~= T.Eof do
         local t = self.cur_token.type
-        local stmt = nil
         if t == T.RBrace then
             if not is_top_level then
                 break -- 块内：正常结束，不跳过，交给外层处理
             end
             self:error(self.cur_token.line, 'unexpected "}" at top level. ')
             self:next_token()
-            goto continue
         elseif t == T.Semi then -- 空语句
             self:next_token()
-            goto continue
-        elseif t == T.Let then
-            stmt = self:parse_let_stmt(depth)
-        elseif t == T.Export then
-            stmt = self:parse_export_stmt(depth)
-        elseif t == T.Return then
-            stmt = self:parse_return_stmt(depth)
-        elseif t == T.LBrace then
-            stmt = self:parse_block_stmt(depth)
-        elseif t == T.If then
-            stmt = self:parse_if_stmt(depth)
-        elseif t == T.While then
-            stmt = self:parse_while_stmt(depth)
-        elseif t == T.Break then
-            stmt = self:parse_break_stmt(depth)
-        elseif t == T.Continue then
-            stmt = self:parse_continue_stmt(depth)
         else
-            stmt = self:parse_expr_or_assign_stmt(depth) -- 表达式语句或赋值语句
+            -- 语句分派：循环体与 defer 载荷共用同一条链
+            local stmt = self:parse_stmt_dispatch(depth)
+            -- 超限中止时子函数返回 nil：不追加、不再往下解析
+            if stmt == nil then
+                break
+            end
+            prog.stmts[#prog.stmts + 1] = stmt
         end
-        -- 超限中止时子函数返回 nil：不追加、不再往下解析
-        if stmt == nil then
-            break
-        end
-        prog.stmts[#prog.stmts + 1] = stmt
-        ::continue::
     end
+end
+
+--- 语句分派：parse_prog 循环体与 defer 载荷共用同一条链。
+--- "{" / ";" / "}" 等结构性 token 由调用方（parse_prog 循环或 parse_defer_stmt）
+--- 处理。超限中止时返回 nil。
+function Parser:parse_stmt_dispatch(depth)
+    if self.aborted then return nil end
+    local t = self.cur_token.type
+    if t == T.Let then
+        return self:parse_let_stmt(depth)
+    elseif t == T.Export then
+        return self:parse_export_stmt(depth)
+    elseif t == T.Return then
+        return self:parse_return_stmt(depth)
+    elseif t == T.LBrace then
+        return self:parse_block_stmt(depth)
+    elseif t == T.If then
+        return self:parse_if_stmt(depth)
+    elseif t == T.While then
+        return self:parse_while_stmt(depth)
+    elseif t == T.Break then
+        return self:parse_break_stmt(depth)
+    elseif t == T.Continue then
+        return self:parse_continue_stmt(depth)
+    elseif t == T.Defer then
+        return self:parse_defer_stmt(depth)
+    else
+        return self:parse_expr_or_assign_stmt(depth) -- 表达式语句或赋值语句
+    end
+end
+
+--- defer_stmt : "defer" stmt —— 载荷是一条完整语句。
+--- 直接嵌套（defer defer X）合法：内层 defer 的触发点 = 外层载荷 scope 的结束
+--- = 同一退出点。载荷缺语句（defer; / defer } / defer Eof）时报错但**不推进**：
+--- ";" 与 "}" 交给外层 parse_prog 循环，否则死循环或吞掉外层块的 "}"。
+function Parser:parse_defer_stmt(depth)
+    if self.aborted then return nil end
+    local stmt = ast.DeferStmt(self.cur_token.line)
+    self:next_token() -- 跳过 defer
+    if self.cur_token.type == T.Semi or self.cur_token.type == T.RBrace
+        or self.cur_token.type == T.Eof then
+        self:error(self.cur_token.line, 'expected statement after "defer". ')
+        return stmt
+    end
+    -- 载荷 +1：defer 可经「载荷 → 分派 → parse_defer_stmt」递归（defer defer
+    -- defer …），深度上限必须能数到这种嵌套。
+    stmt.stmt = self:parse_stmt_dispatch(depth + 1)
+    return stmt
 end
 
 function Parser:parse_let_stmt(depth)

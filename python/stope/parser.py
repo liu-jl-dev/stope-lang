@@ -81,24 +81,7 @@ class Parser:
             if t == TokenType.Semi:  # 空语句
                 self.next_token()
                 continue
-            if t == TokenType.Let:
-                stmt = self.parse_let_stmt(depth)
-            elif t == TokenType.Export:
-                stmt = self.parse_export_stmt(depth)
-            elif t == TokenType.Return:
-                stmt = self.parse_return_stmt(depth)
-            elif t == TokenType.LBrace:
-                stmt = self.parse_block_stmt(depth)
-            elif t == TokenType.If:
-                stmt = self.parse_if_stmt(depth)
-            elif t == TokenType.While:
-                stmt = self.parse_while_stmt(depth)
-            elif t == TokenType.Break:
-                stmt = self.parse_break_stmt(depth)
-            elif t == TokenType.Continue:
-                stmt = self.parse_continue_stmt(depth)
-            else:
-                stmt = self.parse_expr_or_assign_stmt(depth)  # 表达式语句或赋值语句
+            stmt = self.parse_stmt_dispatch(depth)
             # 超限中止时子函数返回 None：不追加、不再往下解析（否则拿着同一个
             # token 反复调用会死循环）。
             if stmt is None:
@@ -307,6 +290,55 @@ class Parser:
         else:
             self.next_token()
         return stmt
+
+    def parse_defer_stmt(self, depth: int):
+        """``defer_stmt : "defer" stmt`` —— 载荷是一条完整语句。
+
+        直接嵌套（``defer defer X``）合法：内层 defer 的触发点 = 外层载荷 scope
+        的结束 = 同一退出点。载荷缺语句（``defer;`` / ``defer }`` / ``defer Eof``）
+        时报错但**不推进**：``;`` 与 ``}`` 交给外层 ``parse_prog`` 循环，否则死循环
+        或吞掉外层块的 ``}``。
+        """
+        if self.aborted:
+            return None
+        stmt = A.DeferStmt(self.cur_token.line)
+        self.next_token()  # 跳过 defer
+        if self.cur_token.type in (TokenType.Semi, TokenType.RBrace, TokenType.Eof):
+            self.error(self.cur_token.line, 'expected statement after "defer". ')
+            return stmt
+        # 载荷 +1：defer 可经「载荷 → 分派 → parse_defer_stmt」递归（defer defer
+        # defer …），深度上限必须能数到这种嵌套。
+        stmt.stmt = self.parse_stmt_dispatch(depth + 1)
+        return stmt
+
+    def parse_stmt_dispatch(self, depth: int):
+        """语句分派：``parse_prog`` 循环体与 defer 载荷共用同一条链。
+
+        ``{`` / ``;`` / ``}`` 等结构性 token 由调用方（``parse_prog`` 循环或
+        ``parse_defer_stmt``）处理。超限中止时返回 ``None``。
+        """
+        if self.aborted:
+            return None
+        t = self.cur_token.type
+        if t == TokenType.Let:
+            return self.parse_let_stmt(depth)
+        if t == TokenType.Export:
+            return self.parse_export_stmt(depth)
+        if t == TokenType.Return:
+            return self.parse_return_stmt(depth)
+        if t == TokenType.LBrace:
+            return self.parse_block_stmt(depth)
+        if t == TokenType.If:
+            return self.parse_if_stmt(depth)
+        if t == TokenType.While:
+            return self.parse_while_stmt(depth)
+        if t == TokenType.Break:
+            return self.parse_break_stmt(depth)
+        if t == TokenType.Continue:
+            return self.parse_continue_stmt(depth)
+        if t == TokenType.Defer:
+            return self.parse_defer_stmt(depth)
+        return self.parse_expr_or_assign_stmt(depth)  # 表达式语句或赋值语句
 
     def parse_expr_or_assign_stmt(self, depth: int):
         left_expr = self.parse_expr(A.Precedence.Lowest, depth)

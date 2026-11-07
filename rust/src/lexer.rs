@@ -436,6 +436,7 @@ impl Lexer {
             "while" => TokenType::While,
             "break" => TokenType::Break,
             "continue" => TokenType::Continue,
+            "defer" => TokenType::Defer,
             "null" => TokenType::Null,
             "false" => TokenType::False,
             "true" => TokenType::True,

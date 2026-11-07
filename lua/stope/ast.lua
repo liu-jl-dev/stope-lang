@@ -14,10 +14,11 @@ local ast = {}
 ast.NodeType = {
     Node = 0, Prog = 1, Stmt = 2, Expr = 3, ExprStmt = 4, LetStmt = 5,
     ReturnStmt = 6, ExportStmt = 7, BlockStmt = 8, IfStmt = 9, WhileStmt = 10,
-    AssignStmt = 11, BreakStmt = 12, ContinueStmt = 13, NullExpr = 14,
-    BoolExpr = 15, IntExpr = 16, FloatExpr = 17, BinArrExpr = 18, StringExpr = 19,
-    IdentExpr = 20, ArgcExpr = 21, ArgsExpr = 22, UnaryOpExpr = 23,
-    BinaryOpExpr = 24, CallExpr = 25, AtExpr = 26, CustomOpcodeExpr = 27,
+    AssignStmt = 11, BreakStmt = 12, ContinueStmt = 13, DeferStmt = 14,
+    NullExpr = 15, BoolExpr = 16, IntExpr = 17, FloatExpr = 18, BinArrExpr = 19,
+    StringExpr = 20, IdentExpr = 21, ArgcExpr = 22, ArgsExpr = 23,
+    UnaryOpExpr = 24, BinaryOpExpr = 25, CallExpr = 26, AtExpr = 27,
+    CustomOpcodeExpr = 28,
 }
 local NT = ast.NodeType
 
@@ -99,6 +100,11 @@ end
 
 function ast.ContinueStmt(line)
     return { line = line or -1, nt = NT.ContinueStmt }
+end
+
+--- defer_stmt : "defer" stmt —— 载荷缺省（defer; 报错路径）时 stmt 为 nil。
+function ast.DeferStmt(line)
+    return { line = line or -1, nt = NT.DeferStmt, stmt = nil }
 end
 
 function ast.NullExpr(line)
@@ -256,6 +262,8 @@ function ast.shape_stmt(s)
         return "Break"
     elseif t == NT.ContinueStmt then
         return "Continue"
+    elseif t == NT.DeferStmt then
+        return "Defer(" .. ast.shape_stmt(s.stmt) .. ")"
     end
     return "?" .. ast.node_type_name(t)
 end
@@ -308,10 +316,10 @@ end
 local NODE_TYPE_NAMES = {
     "Node", "Prog", "Stmt", "Expr", "ExprStmt", "LetStmt", "ReturnStmt",
     "ExportStmt", "BlockStmt", "IfStmt", "WhileStmt", "AssignStmt",
-    "BreakStmt", "ContinueStmt", "NullExpr", "BoolExpr", "IntExpr",
-    "FloatExpr", "BinArrExpr", "StringExpr", "IdentExpr", "ArgcExpr",
-    "ArgsExpr", "UnaryOpExpr", "BinaryOpExpr", "CallExpr", "AtExpr",
-    "CustomOpcodeExpr",
+    "BreakStmt", "ContinueStmt", "DeferStmt", "NullExpr", "BoolExpr",
+    "IntExpr", "FloatExpr", "BinArrExpr", "StringExpr", "IdentExpr",
+    "ArgcExpr", "ArgsExpr", "UnaryOpExpr", "BinaryOpExpr", "CallExpr",
+    "AtExpr", "CustomOpcodeExpr",
 }
 
 function ast.node_type_name(t)

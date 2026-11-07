@@ -1,4 +1,4 @@
-//! 编译器：`golden.txt` 的 `CMP` / `OUT` / `CERRS` 三个字段（201 条）。
+//! 编译器：`golden.txt` 的 `CMP` / `OUT` / `CERRS` 三个字段（215 条）。
 
 use common::{check, dump_program, join_esc, main_cfg, read_golden, unescape};
 use stope::{Compiler, Parser, Prog, Program, Result as StopeResult};
@@ -8,7 +8,7 @@ mod common;
 #[test]
 fn golden_compiler() {
     let cases = read_golden("golden.txt", true);
-    assert_eq!(201, cases.len(), "golden.txt 应为 201 条");
+    assert_eq!(215, cases.len(), "golden.txt 应为 215 条");
     let cfg = main_cfg();
     let mut n = 0;
     for rec in &cases {
@@ -38,5 +38,5 @@ fn golden_compiler() {
         check(cid, "CERRS", rec.get("CERRS").map(String::as_str).unwrap_or(""), &join_esc(&c.errors));
         n += 3;
     }
-    assert_eq!(201 * 3, n, "编译器断言总数");
+    assert_eq!(215 * 3, n, "编译器断言总数");
 }

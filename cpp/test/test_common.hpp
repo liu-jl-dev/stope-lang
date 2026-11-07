@@ -198,6 +198,7 @@ inline const char* nodeName(AST::NodeType t) {
     case AST::NodeType::AssignStmt:         return "AssignStmt";
     case AST::NodeType::BreakStmt:          return "BreakStmt";
     case AST::NodeType::ContinueStmt:       return "ContinueStmt";
+    case AST::NodeType::DeferStmt:          return "DeferStmt";
     case AST::NodeType::NullExpr:           return "NullExpr";
     case AST::NodeType::BoolExpr:           return "BoolExpr";
     case AST::NodeType::IntExpr:            return "IntExpr";
@@ -364,6 +365,8 @@ inline std::string shapeStmt(const AST::Stmt* s) {
     }
     case NodeType::BreakStmt:    return "Break";
     case NodeType::ContinueStmt: return "Continue";
+    case NodeType::DeferStmt:
+      return "Defer(" + shapeStmt(static_cast<const AST::DeferStmt*>(s)->stmt.get()) + ")";
     default:
       return std::string("?") + nodeName(s->type);
   }

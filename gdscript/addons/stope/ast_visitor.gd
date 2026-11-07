@@ -33,6 +33,7 @@ class ASTVisitor:
 		NodeType.AssignStmt: 'on_visit_assign_stmt',
 		NodeType.BreakStmt: 'on_visit_break_stmt',
 		NodeType.ContinueStmt: 'on_visit_continue_stmt',
+		NodeType.DeferStmt: 'on_visit_defer_stmt',
 
 		NodeType.NullExpr: 'on_visit_null_expr',
 		NodeType.BoolExpr: 'on_visit_bool_expr',
@@ -94,6 +95,9 @@ class ASTVisitor:
 		pass
 	func on_visit_continue_stmt(_s:StopeAst.ContinueStmt) -> void:
 		pass
+	# 载荷缺省（defer; 报错路径）时为 null，visit(null) 自己会返回
+	func on_visit_defer_stmt(s:StopeAst.DeferStmt) -> void:
+		visit(s.stmt)
 
 	# ---------------- 表达式 ----------------
 	# 叶子：没有子节点

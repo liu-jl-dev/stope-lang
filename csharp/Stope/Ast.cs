@@ -24,20 +24,21 @@ public enum AstNodeType
     AssignStmt = 11,
     BreakStmt = 12,
     ContinueStmt = 13,
-    NullExpr = 14,
-    BoolExpr = 15,
-    IntExpr = 16,
-    FloatExpr = 17,
-    BinArrExpr = 18,
-    StringExpr = 19,
-    IdentExpr = 20,
-    ArgcExpr = 21,
-    ArgsExpr = 22,
-    UnaryOpExpr = 23,
-    BinaryOpExpr = 24,
-    CallExpr = 25,
-    AtExpr = 26,
-    CustomOpcodeExpr = 27,
+    DeferStmt = 14,
+    NullExpr = 15,
+    BoolExpr = 16,
+    IntExpr = 17,
+    FloatExpr = 18,
+    BinArrExpr = 19,
+    StringExpr = 20,
+    IdentExpr = 21,
+    ArgcExpr = 22,
+    ArgsExpr = 23,
+    UnaryOpExpr = 24,
+    BinaryOpExpr = 25,
+    CallExpr = 26,
+    AtExpr = 27,
+    CustomOpcodeExpr = 28,
 }
 
 /// <summary>10 档优先级，与 <c>cpp/include/stope/common.hpp</c> 的 <c>OpPrecedence</c> 同序同值。</summary>
@@ -266,6 +267,17 @@ public sealed class ContinueStmt : Stmt
     public override string ToStr(int level = 0) => Shape.Indent(level) + "continue;\n";
 }
 
+/// <summary><c>defer_stmt : "defer" stmt</c> —— 载荷缺省（缺载荷报错）时 <see cref="Stmt"/> 为 null。</summary>
+public sealed class DeferStmt : Stmt
+{
+    public Stmt? Stmt;
+
+    public DeferStmt(int line = -1) : base(AstNodeType.DeferStmt, line) { }
+
+    public override string ToStr(int level = 0) =>
+        Shape.Indent(level) + "defer " + Text.Of(Stmt) + "\n";
+}
+
 // ================================ 表达式 ================================
 public sealed class NullExpr : Expr
 {
@@ -470,4 +482,6 @@ public static class TokenText
 internal static class Text
 {
     public static string Of(Expr? e) => e is null ? "<null>" : e.ToStr();
+
+    public static string Of(Stmt? s) => s is null ? "<null>" : s.ToStr();
 }

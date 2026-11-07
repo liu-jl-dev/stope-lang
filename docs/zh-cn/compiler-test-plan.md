@@ -308,6 +308,28 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 | CM-77 | `a` | `let b = 1;` | `code[PushId(1) PushInt(0) Assign]` | `vars=2 exports=[a:0]`，**槽位后移**：b 是 1 而不是 0 |
 | CM-78 | `a` | `let a = 1;` | 失败，`line 1: duplicate declaration of 'a'.` | 顶层 let 同名 —— 预导出的变量只能赋值 |
 
+### 4.10 DF-01…DF-14 defer（2026-11-07 新增）
+
+语义权威：[syntax-reference.md 的 defer 小节](syntax-reference.md)。零新指令，编译期拼接；
+出口次序「**结算 → PushValue → Return**」；块尾 / 程序尾最终结算在体终止时跳过。
+
+| ID | 输入 | 锁什么 |
+| --- | --- | --- |
+| DF-01 | `let log = ""; defer log = log + "a"; return log;` | return 出口：结算 → 求值 → `Return(1)`；以 return 结尾无程序尾副本 |
+| DF-02 | `let a = 0; defer a = 1; defer a = 2;` | 程序尾结算，LIFO（`ints=[0,2,1]`：2 的赋值先发） |
+| DF-03 | `let n = 0; while x { defer n = 1; break; }` | break 出口各拼一份；体以 break 结尾 → 回跳与块尾副本省略（DCE） |
+| DF-04 | `let s = 0; let i = 0; while i < 3 { defer s = s + i; i = i + 1; }` | 循环体块每轮块尾结算一次 |
+| DF-05 | `let msg = 1; { defer got = msg; let msg = 2; }` | 冻结绑定：got 绑定 defer 处可见的外层 msg（槽 0） |
+| DF-06 | `defer print(msg); let msg = 1;` | 前向引用：`"msg" is declared after the defer statement.` 行号归 defer |
+| DF-07 | `while a { defer { break; } }` | `"break" cannot cross a defer statement.` |
+| DF-08 | `defer { return 1; }` | `"return" cannot be used in a defer statement.` |
+| DF-09 | `defer defer a = 1;` | 直接嵌套合法（载荷隐式 scope 统一规则） |
+| DF-10 | `defer a = 1;` | 未声明名字：隐式导出 `exports=[a:0]` + 结算 |
+| DF-11 | `{ return 1; } defer a = 1;` | 死代码里的 defer 不登记、不编译（产物只剩 return 1） |
+| DF-12 | `defer;` | 缺载荷：`expected statement after "defer". ` 报错不推进 |
+| DF-13 | `let x = 0; defer x = 5; return x;` | 出口次序硬锁：结算（`x=5`）在 `PushValue`（求值）之前 |
+| DF-14 | `defer { defer a = 1; }` | 载荷内再登记：内层在载荷 scope 结束时就地结算 |
+
 ---
 
 ## 5. 验收标准

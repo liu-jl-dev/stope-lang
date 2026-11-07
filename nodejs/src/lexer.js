@@ -372,6 +372,7 @@ const keywords = new Map([
   ['null', TokenType.Null], ['false', TokenType.False],
   ['true', TokenType.True], ['args', TokenType.Args],
   ['argc', TokenType.Argc], ['export', TokenType.Export],
+  ['defer', TokenType.Defer],
 ])
 
 const twoCharOps = new Map([

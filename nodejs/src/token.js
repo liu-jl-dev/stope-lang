@@ -50,6 +50,7 @@ TokenType[TokenType["Args"] = 43] = "Args"         // args
 TokenType[TokenType["Argc"] = 44] = "Argc"         // argc
 TokenType[TokenType["Export"] = 45] = "Export"     // export
 TokenType[TokenType["Custom"] = 46] = "Custom"     // 自定义指令
+TokenType[TokenType["Defer"] = 47] = "Defer"       // defer
 
 Object.freeze(TokenType)
 

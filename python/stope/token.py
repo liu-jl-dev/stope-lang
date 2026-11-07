@@ -1,6 +1,6 @@
 """词法单元类型与 ``Token``。
 
-编号与 C++ 的 ``stope::TokenType`` 逐项相同（0..46），**不要重排**：golden_lex.txt 里
+编号与 C++ 的 ``stope::TokenType`` 逐项相同（0..47），**不要重排**：golden_lex.txt 里
 落的是 ``Name(line)`` 形态的名字，编号本身不进数据，但反查名必须一一对应。
 
 ⚠ 两个成员带下划线：``True_`` / ``False_`` —— ``True`` 与 ``False`` 是 Python 关键字，
@@ -54,14 +54,15 @@ class TokenType(IntEnum):
     While = 37
     Break = 38
     Continue = 39
+    Defer = 40
 
-    Null = 40
-    False_ = 41
-    True_ = 42
-    Args = 43
-    Argc = 44
-    Export = 45
-    Custom = 46
+    Null = 41
+    False_ = 42
+    True_ = 43
+    Args = 44
+    Argc = 45
+    Export = 46
+    Custom = 47
 
 
 # 关键字名 → TokenType。Lexer 扫完标识符后查这张表（自定义指令优先于关键字？
@@ -70,8 +71,8 @@ TOKEN_TYPE_NAMES = ["Invalid", "Eof", "Ident", "Integer", "Float", "String", "Bi
                     "Comma", "Semi", "LParen", "RParen", "LBrack", "RBrack", "LBrace",
                     "RBrace", "Assign", "Add", "Sub", "Mul", "Div", "IDiv", "Mod", "Pow",
                     "EQ", "NE", "LT", "LE", "GT", "GE", "Not", "And", "Or", "If", "Elif",
-                    "Else", "Let", "Return", "While", "Break", "Continue", "Null", "False",
-                    "True", "Args", "Argc", "Export", "Custom"]
+                    "Else", "Let", "Return", "While", "Break", "Continue", "Defer",
+                    "Null", "False", "True", "Args", "Argc", "Export", "Custom"]
 
 
 def type_name(t: TokenType) -> str:

@@ -1,6 +1,6 @@
 -- token.lua —— 词法单元类型与 Token。
 --
--- 编号与 C++ 的 stope::TokenType 逐项相同（0..46），不要重排。
+-- 编号与 C++ 的 stope::TokenType 逐项相同（0..47），不要重排。
 
 local token = {}
 
@@ -10,8 +10,8 @@ token.TokenType = {
     RBrace = 14, Assign = 15, Add = 16, Sub = 17, Mul = 18, Div = 19, IDiv = 20,
     Mod = 21, Pow = 22, EQ = 23, NE = 24, LT = 25, LE = 26, GT = 27, GE = 28,
     Not = 29, And = 30, Or = 31, If = 32, Elif = 33, Else = 34, Let = 35,
-    Return = 36, While = 37, Break = 38, Continue = 39, Null = 40, False_ = 41,
-    True_ = 42, Args = 43, Argc = 44, Export = 45, Custom = 46,
+    Return = 36, While = 37, Break = 38, Continue = 39, Defer = 40, Null = 41,
+    False_ = 42, True_ = 43, Args = 44, Argc = 45, Export = 46, Custom = 47,
 }
 local T = token.TokenType
 
@@ -21,8 +21,8 @@ token.TOKEN_TYPE_NAMES = {
     "Comma", "Semi", "LParen", "RParen", "LBrack", "RBrack", "LBrace",
     "RBrace", "Assign", "Add", "Sub", "Mul", "Div", "IDiv", "Mod", "Pow",
     "EQ", "NE", "LT", "LE", "GT", "GE", "Not", "And", "Or", "If", "Elif",
-    "Else", "Let", "Return", "While", "Break", "Continue", "Null", "False",
-    "True", "Args", "Argc", "Export", "Custom",
+    "Else", "Let", "Return", "While", "Break", "Continue", "Defer", "Null",
+    "False", "True", "Args", "Argc", "Export", "Custom",
 }
 
 function token.type_name(t)

@@ -1,4 +1,4 @@
--- test_parser.lua —— 语法：golden.txt（201 条）+ 嵌套深度上限。
+-- test_parser.lua —— 语法：golden.txt（215 条）+ 嵌套深度上限。
 -- 每条用例断言六件事：AST 形状串、语句行号序列、语法 / 词法错误条数与文案。
 
 local stope = require("stope")
@@ -46,7 +46,7 @@ local function run(rep)
         return
     end
     rep.case_count = #cases
-    rep:check_int("golden.txt", "用例数", 201, #cases)
+    rep:check_int("golden.txt", "用例数", 215, #cases)
     for _, rec in ipairs(cases) do
         local cid = rec.ID or ""
         local got = run_case(rec)

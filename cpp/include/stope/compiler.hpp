@@ -109,6 +109,27 @@ struct Compiler : public ASTVisitor {
   VariableAllocator varAlloc;
   StackSizeManager stackSize;
 
+  // 名字声明序号的全局计数器（跨 scope 可比）。每次向任何 BlockScope 的
+  // idMap 登记一个「声明」（let / export）时递增；隐式导出不递增、记 -1。
+  int declCounter = 0;
+  // 正在拼接的 defer 载荷的声明序号基线；-1 = 不在拼接中。
+  // 载荷解析本地名字时，命中条目的序号大于它 → "declared after the defer
+  // statement."（冻结名字绑定：名字→槽位按 defer 语句位置定，值退出时读）。
+  int deferOrderFloor = -1;
+  // 当前拼接的 defer 语句行号（冻结绑定报错归到 defer 那一行）。
+  int deferErrLine = -1;
+  // 语句终止性（组合式、逐语句局部计算，无 CFG）：return / break /
+  // continue 为 true；块 = 最后一条语句终止；if = else 存在且所有分支终止；
+  // 无条件 while 且体不含本层 break（死循环）= true；其余语句 false。
+  // 消费点：①语句序列里终止语句之后的语句不再发射（死代码消除）；
+  // ②while 体终止则省回跳 GoTo；③if 分支体终止则省分支尾 GoTo；
+  // ④程序尾 / 块尾 defer 结算同理跳过（终止后无可达路径）。
+  // 注意 `while true { }` 带条件，按可退出处理，不视同 `while { }`。
+  bool stmtTerminates = false;
+  // 当前（最内层）while 的循环体里是否出现过绑定到它的 break。进入循环
+  // 前保存并清零、结束后恢复——嵌套循环各算各的，只服务死循环判定。
+  bool sawBreak = false;
+
   std::vector<std::unique_ptr<Scope>> ownedScopes;  // 持有作用域对象
   std::vector<Scope*> scopeStack;                   // 从外到内
   // 注：curLine 在基类 ASTVisitor 里，由 visit()
@@ -145,11 +166,13 @@ struct Compiler : public ASTVisitor {
   void popScope();
   // 从内向外找最近的块作用域
   BlockScope* topBlockScope();
-  WhileScope* topWhileScope();
   BlockScope* findIdentHost(const std::u16string& name);
   FileScope* fileScope();
 
   // ---------------- 分发 ----------------
+  // 语句序列：终止语句之后的语句不再发射（死代码消除），序列的终止性 =
+  // 最后一条已发射语句。顶层 Prog 与块体都走这里。
+  void onVisitProg(AST::Prog* prog) override;
   void onVisitExprStmt(AST::ExprStmt* s) override;
   void onVisitLetStmt(AST::LetStmt* s) override;
   void onVisitReturnStmt(AST::ReturnStmt* s) override;
@@ -160,6 +183,7 @@ struct Compiler : public ASTVisitor {
   void onVisitAssignStmt(AST::AssignStmt* s) override;
   void onVisitBreakStmt(AST::BreakStmt* s) override;
   void onVisitContinueStmt(AST::ContinueStmt* s) override;
+  void onVisitDeferStmt(AST::DeferStmt* s) override;
 
   // ---------------- 表达式 ----------------
   void onVisitNullExpr() override;
@@ -184,7 +208,28 @@ struct Compiler : public ASTVisitor {
 
   // ---------------- 小工具 ----------------
   // 登记一个会进 Program.exports 的变量。索引来自 newUniqueVar（不回收）。
-  void declareExported(const std::u16string& name, int idx);
+  // implicitExport=true（defer 无关的旧调用点传 false）：名字记序号 -1，
+  // 豁免 defer 的冻结绑定检查——它不是本地槽位，是宿主变量。
+  void declareExported(const std::u16string& name, int idx,
+                       bool implicitExport = false);
+  // 向 bs 登记一个声明的名字，同时记声明序号。
+  void declareLocal(BlockScope* bs, const std::u16string& name, int idx);
+  // 拼接期间的名字解析（冻结绑定）：名字→槽位按 defer 语句位置的词法
+  // 作用域定——
+  //   * defer 处可见的名字（含被后文遮蔽的外层同名变量）→ 绑定它；
+  //   * 仅在 defer 之后才声明的名字 → 报错（行号归 defer 语句），按当前
+  //     绑定继续（编译已失败）；
+  //   * 从未声明 → 走调用方的隐式导出路径。
+  // 载荷 scope 之内（含载荷自己）的名字不受基线约束——那是载荷的内部
+  // 作用域，不是「defer 之后」。
+  BlockScope* resolveAtSplice(const std::u16string& name);
+  // 带声明序号基线的 findIdentHost：跳过序号晚于基线的条目（遮蔽情形），
+  // 让解析落到 defer 处可见的外层名字上。载荷 scope 内不过滤。
+  BlockScope* findIdentHostFrozen(const std::u16string& name, int floor);
+  // 退出点结算：逆序拼接 bs 登记的 defer 载荷（LIFO），每个载荷包一层
+  // isDeferPayload 的隐式作用域，载荷 scope 自己的 defers 就地递归拼接。
+  // errors 非空时直接返回（错误去重：载荷在每个退出点重编译，报一次就够）。
+  void spliceDefers(BlockScope* bs);
   // 块 / if 分支 / 循环体在 AST 里都是裸 Prog（没有 BlockStmt 包着），
   // 这里补一层 BlockScope，让内部 let 的变量在离开时被回收。
   void visitBodyAsBlock(AST::Prog& prog);
