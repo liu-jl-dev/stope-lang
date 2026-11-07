@@ -48,8 +48,8 @@ class BlockScope(Scope):
 
     ``id_order``：名字 → 声明序号（``Compiler.decl_counter`` 的全局值，跨 scope 可比）。
     defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于 defer 语句处
-    的基线，报 ``"declared after the defer statement."``。隐式导出（从未声明的宿主
-    变量）记 -1，豁免检查。
+    的基线，视为不可见——不被捕获，按隐式导出宿主变量处理（OQ-8）。隐式导出
+    （从未声明的宿主变量）记 -1，豁免检查。
 
     ``defers``：defer 语句在本 scope 的登记（载荷节点、defer 行号、登记时的声明序号
     基线）。退出点（块尾 / break / continue / return）由 Compiler 逆序拼接 —— 运行时
@@ -213,10 +213,9 @@ class Compiler(ASTVisitor):
         # 全局声明序号：declare_local / declare_exported（非隐式）时递增。
         # defer 的冻结名字绑定靠它判定「在 defer 之后才声明」。
         self.decl_counter = 0
-        # 正在拼接的 defer 载荷的声明序号基线；-1 = 不在拼接中。载荷解析本地名字
-        # 时，命中条目的序号 >= 它 → "declared after the defer statement."
+        # defer 载荷编译期状态：当前生效的声明序号基线（-1 = 不在拼接中）与
+        # 载荷编译期报错（duplicate export）的归责行号（defer 语句行）。
         self.defer_order_floor = -1
-        # 当前拼接的 defer 语句行号（冻结绑定报错归到 defer 那一行）。
         self.defer_err_line = -1
         # 刚访问完的语句是否终止控制流（return / break / continue / 真死循环）。
         # 死代码消除：终止语句之后的语句不再发射，defer 也不再登记。
@@ -379,17 +378,24 @@ class Compiler(ASTVisitor):
         return None
 
     def resolve_at_splice(self, name: str):
-        """拼接期间的名字解析（冻结绑定）。defer 处不可见、现在可见 = 后文声明
-        → 报错（行号归 defer 语句），报错后按当前绑定继续（编译已失败）；都空
-        → 返回 None 走隐式导出路径。"""
-        now = self.find_ident_host(name)
+        """拼接期间的名字解析（冻结绑定）。冻结查找命中 → 用冻结规则（名字→槽位
+        按 defer 语句位置定）。未命中 → 不再查 now、不再报 declared after
+        （OQ-8，2026-11-08 定夺：后文声明的本地名不被捕获，按隐式导出宿主变量
+        处理，同未声明名字的路径）。FileScope 已有同名（后文顶层 let / export
+        声明的文件级变量）时无法再建同名宿主变量，报重复——行号归 defer 语句
+        （冲突在 defer 绑定符号时就已注定；若 defer 先于顶层声明结算，则由后文
+        :meth:`declare_local` 报 duplicate declaration，两处报错互斥）。返回
+        FileScope：编译已失败，避免连锁隐式导出。都空 → 返回 None，调用方走
+        隐式导出路径（新建宿主变量）。与 cpp/src/compiler.cpp 的
+        ``resolveAtSplice`` 一致。"""
         frozen = self.find_ident_host_frozen(name, self.defer_order_floor)
         if frozen is not None:
             return frozen
-        if now is not None:
-            self.error(self.defer_err_line,
-                       '"%s" is declared after the defer statement. ' % name)
-        return now
+        fs = self.file_scope()
+        if name in fs.id_map:
+            self.error(self.defer_err_line, 'duplicate export of "%s". ' % name)
+            return fs
+        return None
 
     def splice_defers(self, bs: BlockScope) -> None:
         """退出点结算：逆序拼接 bs 登记的 defer 载荷（LIFO，后登记先执行）。

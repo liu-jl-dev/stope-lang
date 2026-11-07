@@ -631,15 +631,24 @@ void runCompilerTests() {
     check(withDefer.prog.opcodes == without.prog.opcodes, "C-57",
           "defer compiles to the same layout as the bare assignment", "");
   }
-  {  // C-58 前向引用：载荷引用 defer 之后才声明的本地名字 → 报错，
-     //   行号归 defer 语句（第 1 行），不是载荷编译处的程序尾
+  {  // C-58 前向引用（OQ-8 新语义）：后文本地名不再被捕获——msg 绑定隐式
+     // 导出宿主变量；后文顶层 let msg 与它重名 → duplicate export，
+     // 行号归 defer 语句（冲突在 defer 绑定符号时已注定）
     auto r = compileSrc(u"defer print(msg); let msg = 1;");
     expectErrCount(r, 1, "C-58");
     check(r.errors.size() == 1 &&
-              r.errors[0] ==
-                  "line 1: \"msg\" is declared after the defer statement. ",
-          "C-58", "error attributed to the defer line",
+              r.errors[0] == "line 1: duplicate export of \"msg\". ",
+          "C-58", "forward reference binds its own export; later top-level "
+                  "let collides",
           r.errors.empty() ? "" : r.errors[0]);
+  }
+  {  // C-68 前向引用不冲突时完全合法（OQ-8）：got / msg 绑定隐式导出
+     // 宿主变量（槽 1 / 2）；块内 let msg 是槽 0——两个 msg 互不相干
+    auto r = compileSrc(u"defer got = msg; { let msg = 1; }");
+    expectCode(r, "PushId(0) PushInt(0) Assign PushId(1) PushValue(2) Assign",
+               "C-68");
+    check(r.prog.exports.size() == 2, "C-68", "got and msg both exported",
+          "exports=" + std::to_string(r.prog.exports.size()));
   }
   {  // C-59 break 越过 defer 边界（目标循环在载荷外）→ 报错
     auto r = compileSrc(u"while a { defer { break; } }");

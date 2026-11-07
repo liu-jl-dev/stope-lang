@@ -1,7 +1,7 @@
-"""编译器：``golden.txt`` 的 ``CMP`` / ``OUT`` / ``CERRS`` 三个字段（215 条）。
+"""编译器：``golden.txt`` 的 ``CMP`` / ``OUT`` / ``CERRS`` 三个字段（216 条）。
 
 ``golden.txt`` 被语法组与编译器组共用：:func:`test_parser.run_case` 一次跑完
-词法 → 语法 → 编译，两边各取自己那几个字段。215 条 × 3 个字段 = 645 条断言。
+词法 → 语法 → 编译，两边各取自己那几个字段。216 条 × 3 个字段 = 648 条断言。
 """
 
 from stope.common import Result

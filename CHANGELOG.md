@@ -73,6 +73,11 @@ python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 
 ### 变更
 
+- **defer 前向引用改为绑定宿主变量（八份，OQ-8）**：载荷引用的名字按
+  `defer` 语句位置的可见性解析；不可见的名字（含后文声明的本地名）不再
+  报错（原 `"X" is declared after the defer statement.`）、也不被捕获，
+  按隐式导出宿主变量处理。后文块内声明的同名本地变量与载荷互不相干；
+  后文顶层 `let` / `export` 同名则报 `duplicate export`（重名冲突）。
 - **编译产物死代码消除（八份）**：语句终止标志局部判定（无 CFG）——`return`
   / `break` / `continue` 之后的语句、体终止的 while 回跳、体终止的 if 分支尾
   `GoTo`、以 return 结尾时 Return 之后的 defer 程序尾副本不再发射。运行结果

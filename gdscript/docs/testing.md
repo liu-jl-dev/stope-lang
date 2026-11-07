@@ -76,7 +76,7 @@ gdscript/test/
   test_vm.gd          StopeTestVM       —— 执行器（**没有** golden 数据，见 §3.4）
   data/
     golden_lex.txt      147 条 · 词法
-    golden.txt          215 条 · 语法 + 编译器共用
+    golden.txt          216 条 · 语法 + 编译器共用
     golden_binarr.txt    86 条 · 二进制数组 + 常量折叠
     stml_cases.txt      126 条 · STML **用例清单**（两侧共用）
     golden_stml.txt     126 条 · STML 期望值（由清单 dump）

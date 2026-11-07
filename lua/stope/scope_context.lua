@@ -11,8 +11,8 @@ function scope_context.BlockScope()
         type = "block",
         id_map = {},
         -- 名字 → 声明序号（Compiler.decl_counter 的全局值，跨 scope 可比）。
-        -- defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于
-        -- defer 语句处的基线，报 "declared after the defer statement."。
+        -- defer 的「冻结名字绑定」靠它判定：序号 >= defer 语句处基线的本地名
+        -- 对载荷不可见（不捕获，按隐式导出宿主变量处理；OQ-8，2026-11-08）。
         -- 隐式导出（从未声明的宿主变量）记 -1，豁免检查。
         id_order = {},
         -- defer 语句在本 scope 的登记：{ stmt = 载荷节点, line = defer 行号,

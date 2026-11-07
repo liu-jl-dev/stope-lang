@@ -354,9 +354,14 @@ defer stmt;         // 载荷是一条完整语句（赋值 / 块 / if / while �
 - **`return` 的返回值在 defer 结算之后求值**（出口次序：结算 → 求值 → Return）
   ——defer 可以影响返回值（结算先于退出动作，与块退出一致）。程序以 `return`
   结尾时，产物里没有 Return 之后的结算副本（那段路径不可达）。
-- **引用后文声明的本地名字报错**：`defer print(msg); let msg = 1;` 报
-  `"msg" is declared after the defer statement.`（行号归 defer 语句）。
-  从未声明的名字（隐式导出，如 `fmt:println`）不受限。
+- **defer 绑定语句及其符号**（OQ-8，2026-11-08 定夺）：载荷引用的名字按
+  `defer` 语句位置的可见性解析；不可见的名字（包括后文才声明的本地名）
+  不报错、也不被捕获，按**隐式导出宿主变量**处理（同 `defer a = 1;`）。
+  因此后文块内声明的同名本地变量与载荷互不相干；但若后文在**顶层** `let`
+  / `export` 同名，会与 defer 绑定的宿主变量重名——报
+  `duplicate export of "msg".`（行号归 defer 语句；若结算先于顶层声明，
+  则由后文声明报 `duplicate declaration`）。从未声明的名字（如
+  `fmt:println`）本就走这条路。
 - **载荷是一条控制流边界**：载荷内的 `break` / `continue` 不得越出载荷命中
   外层循环（`"break" cannot cross a defer statement.`）；`return` 在载荷内
   一律报错（`"return" cannot be used in a defer statement.`——它的终点是

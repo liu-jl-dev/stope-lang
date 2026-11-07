@@ -35,10 +35,11 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 
 	# 全局声明序号：declare_local 与 declare_exported（非隐式导出）时递增。
 	# defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于 defer
-	# 语句处的基线，报 "declared after the defer statement."。隐式导出记 -1 豁免。
+	# 语句处的基线，视为不可见——不被捕获，按隐式导出宿主变量处理（OQ-8）。
+	# 隐式导出记 -1 豁免。
 	var decl_counter:int = 0
 	# defer 载荷编译期状态：当前生效的声明序号基线（< 0 = 不在载荷里）与
-	# 「declared after」错误的归责行号（defer 语句行）。
+	# 载荷编译期报错（duplicate export）的归责行号（defer 语句行）。
 	var defer_order_floor:int = -1
 	var defer_err_line:int = -1
 	# 死代码消除：每条语句 visitor 维护的终止标志；进入语句前由语句序列循环清零。
@@ -182,16 +183,22 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 					if o >= 0 and o >= floor: continue
 			return s
 		return null
-	# defer 载荷编译期的名字解析：冻结规则优先；冻结找不到但当前找得到 =
-	# 后文声明 → 报错（行号归 defer 语句），按当前绑定继续。都空 → 返回 null
-	# 走隐式导出路径。与 cpp/src/compiler.cpp 的 resolveAtSplice 一致。
+	# defer 载荷编译期的名字解析：冻结规则优先。未命中 → 不再查 now、不再报
+	# declared after（OQ-8，2026-11-08 定夺：后文声明的本地名不被捕获，按隐式
+	# 导出宿主变量处理，同未声明名字的路径）。FileScope 已有同名（后文顶层
+	# let / export 声明的文件级变量）时无法再建同名宿主变量，报重复——行号归
+	# defer 语句（冲突在 defer 绑定符号时就已注定；若 defer 先于顶层声明结算，
+	# 则由后文 declare_local 报 duplicate declaration，两处报错互斥）。返回
+	# FileScope：编译已失败，避免连锁隐式导出。都空 → 返回 null，调用方走
+	# 隐式导出路径（新建宿主变量）。与 cpp/src/compiler.cpp 的 resolveAtSplice 一致。
 	func _resolve_at_splice(name:String) -> BlockScope:
-		var now:BlockScope = _find_ident_host(name)
 		var frozen:BlockScope = _find_ident_host_frozen(name, defer_order_floor)
 		if frozen != null: return frozen
-		if now != null:
-			error(defer_err_line, str('"', name, '" is declared after the defer statement. '))
-		return now
+		var fs:FileScope = _file_scope()
+		if name in fs.id_map:
+			error(defer_err_line, str('duplicate export of "', name, '". '))
+			return fs	# 编译已失败；返回宿主避免连锁隐式导出
+		return null
 	func _file_scope() -> FileScope: return scope_stack.front()
 
 	# ---------------- 语句 ----------------
@@ -601,7 +608,8 @@ class BlockScope extends Scope:
 	var id_map:Dictionary[String,int]
 	# 名字 -> 声明序号（decl_counter 的全局值，跨 scope 可比）。defer 的
 	# 「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于 defer 语句处
-	# 的基线，报 "declared after the defer statement."。隐式导出记 -1 豁免。
+	# 的基线，视为不可见——不被捕获，按隐式导出宿主变量处理（OQ-8）。
+	# 隐式导出记 -1 豁免。
 	var id_order:Dictionary[String,int]
 	# defer 语句在本 scope 的登记：载荷（所有权留在 AST）、defer 行号、登记时
 	# 的声明序号基线。退出点（块尾 / break / continue / return）由编译器逆序

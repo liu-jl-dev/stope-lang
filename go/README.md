@@ -29,7 +29,7 @@ go vet ./...      # 应当零输出
 ```
 
 golden 数据真源在 `../gdscript/test/data/`，测试以绝对路径读取并断言条数：
-`golden_lex.txt` 147 条、`golden.txt` 215 条、`golden_binarr.txt` 86 条、
+`golden_lex.txt` 147 条、`golden.txt` 216 条、`golden_binarr.txt` 86 条、
 `golden_stml.txt` 126 条、`golden_disasm.txt` 12 条。改了行为需要重新生成 golden
 时，去 C++ 侧跑探针（见 `cpp/` 的说明），**不要**手改数据文件。
 

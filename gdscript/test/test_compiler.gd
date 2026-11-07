@@ -1,7 +1,7 @@
 class_name StopeTestCompiler
 # 编译器测试。契约见 docs/zh-cn/compiler-test-plan.md。
 #
-# 期望值来自 C++ 侧探针 dump 的 test/data/golden.txt（201 条）的
+# 期望值来自 C++ 侧探针 dump 的 test/data/golden.txt（216 条）的
 # CMP / OUT / CERRS 三个字段，走完整 Lexer -> Parser -> Compiler，
 # 比对返回码、Program 序列化串、编译器错误列表。
 

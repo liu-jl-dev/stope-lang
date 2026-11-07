@@ -345,7 +345,7 @@ parser 识别 `myop`（把它变成 `Custom` token），编译器这边查不到
 | C-55 | `a,a` / `a,,b` | `a;` | 名单内重名、空名字各报 1 条；空名字的行号记 **0** |
 | C-56 | `a` | `export a;` / `let a = 1;` / `{ let a = 1; }` | 前两个 duplicate，第三个（块内遮蔽）合法 |
 
-### 5.10 C-57…C-63 defer（2026-11-07 新增）
+### 5.10 C-57…C-63 / C-68 defer（2026-11-07 新增，C-68 为 11-08 OQ-8 落地新增）
 
 defer 的语义权威在 `../../docs/zh-cn/syntax-reference.md` §3.2（defer 小节）。
 编译策略：**零新指令**——`defer` 语句位置零指令，载荷在**每个退出点**重新编译拼接
@@ -357,12 +357,13 @@ defer 的语义权威在 `../../docs/zh-cn/syntax-reference.md` §3.2（defer �
 | ID | 输入 | 锁什么 |
 | --- | --- | --- |
 | C-57 | `defer x = 5;` | defer 语句零指令；产物与裸 `x = 5;` 完全相同（程序尾结算） |
-| C-58 | `defer print(msg); let msg = 1;` | 前向引用报 1 条，行号归 defer 语句（冻结名字绑定） |
+| C-58 | `defer print(msg); let msg = 1;` | 前向引用（OQ-8 新语义）：msg 绑定隐式导出宿主变量，后文顶层 let 与它重名 → `duplicate export of "msg".` 行号归 defer 语句 |
 | C-59 | `while a { defer { break; } }` | 载荷是控制流边界：`break` 不得越界命中外层循环 |
 | C-60 | `defer { return 1; }` | 载荷内 `return` 一律报错（终点是整个程序，必然越界） |
 | C-61 | `let a = 0; let b = 0; defer a = 1; defer b = 2;` | LIFO：同 scope 逆序发射，b=2 先于 a=1 |
 | C-62 | `let msg = 0; let got = 0; { defer got = msg; let msg = 2; }` | 冻结绑定：载荷绑定 defer 处可见的外层 msg（槽 0），不是遮蔽后的槽 2 |
 | C-63 | `let n = 0; while a { defer n = 1; break; }` | 体以 break 结尾：只剩 break 出口一份结算，块尾副本与回跳 GoTo 均省略 |
+| C-68 | `defer got = msg; { let msg = 1; }` | 前向引用不冲突时合法（OQ-8）：got / msg 绑定隐式导出宿主变量（槽 1 / 2）；块内 let msg 是槽 0——两个 msg 互不相干 |
 
 ### 5.11 C-64…C-67 死代码消除（2026-11-07 新增）
 
@@ -391,7 +392,7 @@ Program 编码契约；宿主函数 / 自定义指令不改变控制流是既有
 落地，C-67 重写，并连同 C-64…C-66 与 golden 一并同步。登记处见
 [open-questions.md](../../docs/zh-cn/open-questions.md)。
 
-**golden 已同步（2026-11-07）**：golden.txt 重生成至 215 条——CM-44 / CM-51 /
+**golden 已同步（2026-11-08）**：golden.txt 重生成至 216 条——CM-44 / CM-51 /
 CM-52 / CM-53 的 DCE 差异消除，并新增 **DF-01…DF-14** defer 用例（见
 docs/zh-cn/compiler-test-plan.md §4.10）。八份实现的测试全部消费同一份数据。
 
@@ -401,8 +402,8 @@ docs/zh-cn/compiler-test-plan.md §4.10）。八份实现的测试全部消费�
 
 | 口径 | 当前值 | 验收线 |
 | --- | --- | --- |
-| 用例数 | 68 | — |
-| 断言数 | 121 | 全部通过 |
+| 用例数 | 69 | — |
+| 断言数 | 123 | 全部通过 |
 | `Opcode` 覆盖 | 33/33 | **必须保持 33/33**。测试里统计见过的 opcode，缺哪个会打印名字 |
 | `AST::NodeType` 产生路径 | 26 个可编译节点全覆盖 | — |
 | 错误路径 | 7 类 error + 6 类错误信息全覆盖 | — |

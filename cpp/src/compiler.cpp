@@ -215,14 +215,21 @@ BlockScope* Compiler::findIdentHostFrozen(const std::u16string& name,
 }
 
 BlockScope* Compiler::resolveAtSplice(const std::u16string& name) {
-  BlockScope* now = findIdentHost(name);
   BlockScope* frozen = findIdentHostFrozen(name, deferOrderFloor);
   if (frozen != nullptr)
     return frozen;
-  if (now != nullptr)  // defer 处不可见、现在可见 = 后文声明 → 报错
-    error(deferErrLine, "\"" + narrowAscii(name) +
-                            "\" is declared after the defer statement. ");
-  return now;  // 报错后按当前绑定继续（编译已失败）；都空 → 隐式导出路径
+  // OQ-8（2026-11-08 定夺）：defer 绑定语句及其符号——后文声明的本地名
+  // 不再报错、也不被捕获，按隐式导出宿主变量处理（同未声明名字的路径）。
+  // FileScope 已有同名（后文顶层 let / export 声明的文件级变量）时无法再建
+  // 同名宿主变量，报重复——行号归 defer 语句（冲突在 defer 绑定符号时就
+  // 已注定；若 defer 先于顶层声明结算，则由后文 declareLocal 报 duplicate
+  // declaration，两处报错互斥）。
+  BlockScope* fs = fileScope();
+  if (fs->idMap.find(name) != fs->idMap.end()) {
+    error(deferErrLine, "duplicate export of \"" + narrowAscii(name) + "\". ");
+    return fs;  // 编译已失败；返回宿主避免连锁隐式导出
+  }
+  return nullptr;  // 调用方走隐式导出路径（新建宿主变量）
 }
 
 void Compiler::spliceDefers(BlockScope* bs) {

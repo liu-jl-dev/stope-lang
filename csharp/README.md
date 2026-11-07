@@ -59,7 +59,7 @@ csharp/
 C++ 是**权威实现**，四份出现分歧时以 C++ 的实测行为为准。本实现的做法是：
 
 - **期望值不手写**：全部由 `gdscript/test/data/` 的 golden 数据驱动
-  （`golden_lex.txt` 147 条、`golden.txt` 215 条、`golden_binarr.txt` 86 条、
+  （`golden_lex.txt` 147 条、`golden.txt` 216 条、`golden_binarr.txt` 86 条、
   `golden_disasm.txt` 12 条、`golden_stml.txt` 121 条）。改行为时先重生成数据：
   `cmake --build cpp/build --target gen-golden`。
 - **类型映射**（C# 有静态类型，这份对照值得记住）：

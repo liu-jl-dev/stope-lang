@@ -1,4 +1,4 @@
-// 语法分析：golden.txt（215 条，cpp/tools/golden.cpp dump）+ 嵌套深度上限。
+// 语法分析：golden.txt（216 条，cpp/tools/golden.cpp dump）+ 嵌套深度上限。
 //
 // 每条用例断言四件事：AST 形状串、语句行号序列、语法错误条数与文案、词法错误条数。
 // 形状串格式见 docs/zh-cn/parser-test-plan.md §2（`ExprStmt(..) / Let[a]=Int(1)`）。
@@ -16,7 +16,7 @@ describe('Parser：golden.txt', () => {
   const cases = readGolden('golden.txt')
 
   test('用例数', () => {
-    assert.equal(cases.length, 215, 'golden.txt 条数变了？（生成器与用例表要一起改）')
+    assert.equal(cases.length, 216, 'golden.txt 条数变了？（生成器与用例表要一起改）')
   })
 
   for (const rec of cases) {

@@ -31,8 +31,8 @@ struct Scope {
     /// 名字作用域：标识符 → 变量总表中的索引（While 不参与名字查找）
     id_map: HashMap<String, i32>,
     /// 名字 → 声明序号（`decl_counter` 的全局值，跨 scope 可比）。
-    /// defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于
-    /// defer 语句处的基线，报 "declared after the defer statement."。
+    /// defer 的「冻结名字绑定」靠它判定：本地名字若序号晚于 defer 语句处的
+    /// 基线，则对载荷不可见（OQ-8：不再报错，按隐式导出宿主变量处理）。
     /// 隐式导出（从未声明的宿主变量）记 -1，豁免检查。
     id_order: HashMap<String, i32>,
     /// defer 语句在本 scope 的登记（载荷、defer 行号、登记时的声明序号基线）。
@@ -165,10 +165,11 @@ pub struct Compiler {
     scope_stack: Vec<Scope>,
     cur_line: i32,
     /// 全局声明序号：`declare_local` / `declare_exported`（非隐式）时递增。
-    /// defer 的「冻结名字绑定」靠它判定「在 defer 之后才声明」。
+    /// defer 的「冻结名字绑定」靠它判定「在 defer 之后才声明」（OQ-8：不可见
+    /// 名字不再报错，按隐式导出宿主变量处理）。
     decl_counter: i32,
-    /// 正在拼接的 defer 载荷的声明序号基线；-1 = 不在拼接中。载荷解析本地名字
-    /// 时，命中条目的序号 >= 它 → "declared after the defer statement."
+    /// 正在拼接的 defer 载荷的声明序号基线；-1 = 不在拼接中。载荷解析本地名
+    /// 字时，命中条目的序号 >= 它 → 对载荷不可见。
     defer_order_floor: i32,
     /// 当前拼接的 defer 语句行号（冻结绑定报错归到 defer 那一行）。
     defer_err_line: i32,
@@ -388,21 +389,26 @@ impl Compiler {
         })
     }
 
-    /// 拼接期间的名字解析（冻结绑定）。defer 处不可见、现在可见 = 后文声明
-    /// → 报错（行号归 defer 语句），报错后按当前绑定继续（编译已失败）；都空
-    /// → 返回 None 走隐式导出路径。
+    /// 拼接期间的名字解析（冻结绑定）。冻结查找命中 → 用冻结规则（名字→槽位
+    /// 按 defer 语句位置定）。未命中 → 不再查 now、不再报 declared after
+    /// （OQ-8，2026-11-08 定夺：后文声明的本地名不被捕获，按隐式导出宿主变量
+    /// 处理，同未声明名字的路径）。FileScope 已有同名（后文顶层 let / export
+    /// 声明的文件级变量）时无法再建同名宿主变量，报重复——行号归 defer 语句
+    /// （冲突在 defer 绑定符号时就已注定；若 defer 先于顶层声明结算，则由后文
+    /// `declare_local` 报 duplicate declaration，两处报错互斥）。返回 FileScope：
+    /// 编译已失败，避免连锁隐式导出。都空 → 返回 None，调用方走隐式导出路径
+    /// （新建宿主变量）。与 cpp/src/compiler.cpp 的 resolveAtSplice 一致。
     fn resolve_at_splice(&mut self, name: &str) -> Option<usize> {
-        let now = self.find_ident_host(name);
-        let floor = self.defer_order_floor;
-        let frozen = self.find_ident_host_frozen(name, floor);
+        let frozen = self.find_ident_host_frozen(name, self.defer_order_floor);
         if frozen.is_some() {
             return frozen;
         }
-        if let Some(_) = now {
+        if self.scope_stack[0].id_map.contains_key(name) {
             let line = self.defer_err_line;
-            self.error(line, &format!("\"{}\" is declared after the defer statement. ", name));
+            self.error(line, &format!("duplicate export of \"{}\". ", name));
+            return Some(0); // 编译已失败；返回宿主避免连锁隐式导出
         }
-        now
+        None // 调用方走隐式导出路径（新建宿主变量）
     }
 
     /// 退出点结算：逆序拼接 `bs` 登记的 defer 载荷（LIFO，后登记先执行）。

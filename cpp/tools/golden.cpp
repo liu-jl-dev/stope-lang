@@ -493,6 +493,9 @@ int main() {
       {"DF-13", "let x = 0; defer x = 5; return x;", false},
       // 块载荷内再登记 defer：内层在载荷 scope 结束时就地结算
       {"DF-14", "defer { defer a = 1; }", false},
+      // OQ-8：前向引用不冲突时合法——got / msg 绑定隐式导出宿主变量，
+      // 后文块内 let msg 是另一个变量
+      {"DF-15", "defer got = msg; { let msg = 1; }", false},
   };
   for (auto& c : dfs) one(c.id, c.src, c.fold);
 

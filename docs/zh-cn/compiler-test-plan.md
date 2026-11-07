@@ -320,7 +320,8 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 | DF-03 | `let n = 0; while x { defer n = 1; break; }` | break 出口各拼一份；体以 break 结尾 → 回跳与块尾副本省略（DCE） |
 | DF-04 | `let s = 0; let i = 0; while i < 3 { defer s = s + i; i = i + 1; }` | 循环体块每轮块尾结算一次 |
 | DF-05 | `let msg = 1; { defer got = msg; let msg = 2; }` | 冻结绑定：got 绑定 defer 处可见的外层 msg（槽 0） |
-| DF-06 | `defer print(msg); let msg = 1;` | 前向引用：`"msg" is declared after the defer statement.` 行号归 defer |
+| DF-06 | `defer print(msg); let msg = 1;` | 前向引用（OQ-8）：msg 绑定隐式导出宿主变量；后文顶层 let 与它重名 → `duplicate export of "msg".` 行号归 defer |
+| DF-15 | `defer got = msg; { let msg = 1; }` | 前向引用不冲突时合法：got / msg 绑定隐式导出宿主变量（槽 1 / 2），块内 let msg 是槽 0——两个 msg 互不相干 |
 | DF-07 | `while a { defer { break; } }` | `"break" cannot cross a defer statement.` |
 | DF-08 | `defer { return 1; }` | `"return" cannot be used in a defer statement.` |
 | DF-09 | `defer defer a = 1;` | 直接嵌套合法（载荷隐式 scope 统一规则） |

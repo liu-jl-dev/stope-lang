@@ -45,7 +45,7 @@ public sealed class Compiler : AstVisitor
 
     /// <summary>
     /// defer 载荷编译期状态：当前生效的声明序号基线（&lt; 0 = 不在拼接中）与
-    /// 「declared after」错误的归责行号（defer 语句行）。
+    /// 拼接期报错的归责行号（defer 语句行）。
     /// </summary>
     private int _deferOrderFloor = -1;
     private int _deferErrLine = -1;
@@ -281,18 +281,26 @@ public sealed class Compiler : AstVisitor
     }
 
     /// <summary>
-    /// 拼接期间的名字解析（冻结绑定）：名字→槽位按 defer 语句位置的词法作用域。
-    /// 冻结找不到但当前找得到 = 后文声明 → 报错（行号归 defer 语句），按当前绑定
-    /// 继续（编译已失败）。都空 → 返回 null，走隐式导出路径。
+    /// 拼接期间的名字解析（冻结绑定）：冻结查找未命中 → 不再查 now、不再报
+    /// declared after（OQ-8，2026-11-08 定夺：后文声明的本地名不被捕获，按隐式
+    /// 导出宿主变量处理，同未声明名字的路径）。FileScope 已有同名（后文顶层
+    /// let / export 声明的文件级变量）时无法再建同名宿主变量，报重复——行号归
+    /// defer 语句（冲突在 defer 绑定符号时就已注定；若 defer 先于顶层声明结算，
+    /// 则由后文 declareLocal 报 duplicate declaration，两处报错互斥）。返回
+    /// FileScope：编译已失败，避免连锁隐式导出。都空 → 返回 null，调用方走
+    /// 隐式导出路径（新建宿主变量）。与 cpp/src/compiler.cpp 的 resolveAtSplice 一致。
     /// </summary>
     private BlockScope? ResolveAtSplice(string name)
     {
-        var now = FindIdentHost(name);
         var frozen = FindIdentHostFrozen(name, _deferOrderFloor);
         if (frozen is not null) return frozen;
-        if (now is not null)
-            Error(_deferErrLine, "\"" + name + "\" is declared after the defer statement. ");
-        return now;
+        var fs = FileScope();
+        if (fs.IdMap.ContainsKey(name))
+        {
+            Error(_deferErrLine, "duplicate export of \"" + name + "\". ");
+            return fs; // 编译已失败；返回宿主避免连锁隐式导出
+        }
+        return null;
     }
 
     /// <summary>
@@ -897,9 +905,9 @@ public class BlockScope : Scope
 
     /// <summary>
     /// 名字 → 声明序号（<see cref="Compiler"/> 的全局 declCounter 值，跨 scope 可比）。
-    /// defer 的「冻结名字绑定」靠它判定：载荷解析到的本地名字若序号晚于
-    /// defer 语句处的基线，报 "declared after the defer statement."。
-    /// 隐式导出（从未声明的宿主变量）记 -1，豁免检查。
+    /// defer 的「冻结名字绑定」靠它判定：序号晚于 defer 语句处基线的本地名不被
+    /// 捕获，按隐式导出宿主变量处理（OQ-8）。隐式导出（从未声明的宿主变量）
+    /// 记 -1，豁免检查。
     /// </summary>
     public readonly Dictionary<string, int> IdOrder = new();
 

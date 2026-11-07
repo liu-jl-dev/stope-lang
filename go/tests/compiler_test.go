@@ -6,7 +6,7 @@ import (
 	"stope"
 )
 
-// 编译器：golden.txt 的 CMP / OUT / CERRS 三个字段（215 条）。
+// 编译器：golden.txt 的 CMP / OUT / CERRS 三个字段（216 条）。
 
 func TestGoldenCompiler(t *testing.T) {
 	cases := readGoldenMain(t)
