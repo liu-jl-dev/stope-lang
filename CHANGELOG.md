@@ -56,6 +56,17 @@ python tools/check_version.py          # 全部一致才返回 0
 python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 ```
 
+## [0.3.1] - 2026-11-07
+
+### 修复
+
+- **quick-start 路由补全（七份）**：demo 清单在 0.3.0 长到六个，各实现的
+  quick-start「下一步」未同步——gdscript/nodejs 索引表与「下一步」停留在
+  demo01–03；csharp/python 缺 demo04–06 路由；lua 没有路由节；go 的「更多」
+  指向了 python 的文档（错链）且 STML 指到测试计划而非教程；rust 未提任何
+  配套教程。统一补齐 demo02–06 各自专文的可达路由，并注明完整教程以
+  `cpp/docs/` 为权威。纯文档改动，零代码变更。
+
 ## [0.3.0] - 2026-11-06
 
 ### 新增
