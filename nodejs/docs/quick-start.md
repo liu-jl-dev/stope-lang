@@ -2,7 +2,7 @@
 
 > 目标读者：想在 Node 项目里嵌入 Stope 的人。
 > 本文逐段讲 `nodejs/demo/01-quick-start.js`（可直接运行），最后给出一份可复制的最小骨架。
-> 另外两个 demo 只做索引式介绍 —— 它们的主题各自有专文。
+> 另外 02–06 五个 demo 各有主题专文（下表与文末「下一步」）。
 
 | 想看 | 去哪（相对本文件） |
 | --- | --- |
@@ -10,6 +10,8 @@
 | 每个模块的构造参数、方法、字段、返回码 | [`usage.md`](usage.md) |
 | 解析 STML 文档（教程） | [`stml.md`](stml.md) |
 | 给编译器加自定义指令（教程） | [`custom-opcode.md`](custom-opcode.md) |
+| 宿主侧面向对象（教程） | [`object-oriented.md`](object-oriented.md) |
+| 宿主侧垃圾回收（教程） | [`gc.md`](gc.md) |
 | 词法测试计划与交叉验证做法 | [`lexer-test-plan.md`](lexer-test-plan.md) |
 | Stope 的语法（跨实现） | [`../../docs/zh-cn/syntax-reference.md`](../../docs/zh-cn/syntax-reference.md) |
 | 各模块行为契约（跨实现） | [`../../docs/zh-cn/`](../../docs/zh-cn/) 下的四份 `*-test-plan.md` |
@@ -429,3 +431,8 @@ console.log('return = ' + state.returns[0])
   它讲的是「`Program` 的契约 + 执行器必须实现出哪些语义」，`basic_vm.js` 只是其中一种写法。
 - **想看各模块怎么测的**：[`../README.md`](../README.md) §测试，跨实现的契约在
   [`../../docs/zh-cn/`](../../docs/zh-cn/)。
+
+- **宿主侧面向对象**：看 [`demo/05-object.js`](../demo/05-object.js)（实现拆在 `05-object/`）与
+  [`object-oriented.md`](object-oriented.md)。
+- **宿主侧垃圾回收**：看 [`demo/06-gc.js`](../demo/06-gc.js)（实现拆在 `06-gc/`）与
+  [`gc.md`](gc.md)。

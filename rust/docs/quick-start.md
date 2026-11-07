@@ -86,5 +86,8 @@ assert!(text.contains("PushInt"));
 
 ## 下一步
 
-- 四个完整示例：`cargo run --bin demo01` … `demo04`（见 `../README.md`）；
-- 语义细节以 C++ 为权威：`../cpp/src/`；各测试计划见 `../docs/zh-cn/`。
+- 六个示例：`cargo run --bin demo01` … `demo06`（清单见 [`../README.md`](../README.md)）；
+- 配套教程：STML 见 [`stml.md`](stml.md)，自定义指令见 [`custom-opcode.md`](custom-opcode.md)，
+  宿主侧面向对象见 [`object-oriented.md`](object-oriented.md)，垃圾回收见 [`gc.md`](gc.md)；
+- 预导出（demo04）：[`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md)；
+- 语义细节以 C++ 为权威：[`../cpp/docs/`](../cpp/docs/)；各测试计划见 `../docs/zh-cn/`。

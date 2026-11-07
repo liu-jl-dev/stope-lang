@@ -303,3 +303,8 @@ Console.WriteLine(state.Returns[0]);   // 3
 - **加自己的指令**：看 [`demo/03-custom-opcode/Program.cs`](../demo/03-custom-opcode/Program.cs) 与
   [`custom-opcode.md`](custom-opcode.md)。
 - **每个 API 的签名与返回码**：看 [`usage.md`](usage.md)。
+- **预导出（宿主先塞形参，再编译函数体）**：看 [`demo/04-pre-export/Program.cs`](../demo/04-pre-export/Program.cs)
+  与 [`../../docs/zh-cn/pre-export.md`](../../docs/zh-cn/pre-export.md)。
+- **宿主侧面向对象**：看 [`demo/05-object/`](../demo/05-object/) 与
+  [`object-oriented.md`](object-oriented.md)。
+- **宿主侧垃圾回收**：看 [`demo/06-gc/`](../demo/06-gc/) 与 [`gc.md`](gc.md)。

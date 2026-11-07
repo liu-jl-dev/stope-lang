@@ -138,3 +138,17 @@ end
 | 往变量槽塞了 `nil` | 用 `stope.NULL`；Lua 的 `nil` 不能进栈与槽 |
 | `math.fmod(1.5, 0)` 报错 | 整数 0 会抛错。浮点模走 `common.fmod`（得 nan） |
 | 报错行号与文档对不上 | 从 STML 切出的代码段要把 `lexer.line` 设成 `Element.text_line` |
+
+## 6. 下一步
+
+- **解析 STML 文档**：看 [`demo/02-stml.lua`](../demo/02-stml.lua) 与 [`stml.md`](stml.md)。
+- **加自定义指令**：看 [`demo/03-custom-opcode.lua`](../demo/03-custom-opcode.lua) 与
+  [`custom-opcode.md`](custom-opcode.md)。
+- **预导出（宿主先塞形参，再编译函数体）**：看 [`demo/04-pre-export.lua`](../demo/04-pre-export.lua)
+  与 [`../../docs/zh-cn/pre-export.md`](../../docs/zh-cn/pre-export.md)。
+- **宿主侧面向对象**：看 [`demo/05-object.lua`](../demo/05-object.lua) 与
+  [`object-oriented.md`](object-oriented.md)。
+- **宿主侧垃圾回收**：看 [`demo/06-gc.lua`](../demo/06-gc.lua) 与 [`gc.md`](gc.md)。
+
+本文只讲 Lua 侧的动线与差异；完整教程（机制推导、语法坑全表、常见错误全表）以
+[`cpp/docs/`](../../cpp/docs/) 各篇为权威。

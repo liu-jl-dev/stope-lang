@@ -2,7 +2,7 @@
 
 > 目标读者：想在 Godot 项目里嵌入 Stope 的人。
 > 本文逐段讲 `gdscript/demo/demo_01.gd`（可直接运行），最后给出一份可复制的最小骨架。
-> 另外两个 demo 只做索引式介绍 —— 它们的主题各自有专文。
+> 另外 02–06 五个 demo 各有主题专文（下表与文末「下一步」）。
 
 | 想看 | 去哪（相对本文件） |
 | --- | --- |
@@ -10,6 +10,8 @@
 | 每个 API 的签名、字段、返回码 | [`usage.md`](usage.md) |
 | 解析 STML 文档（教程） | [`stml.md`](stml.md) |
 | 给编译器加自定义指令（教程） | [`custom-opcode.md`](custom-opcode.md) |
+| 宿主侧面向对象（教程） | [`object-oriented.md`](object-oriented.md) |
+| 宿主侧垃圾回收（教程） | [`gc.md`](gc.md) |
 | **报错了**该改哪（按阶段查文案） | [`troubleshooting.md`](troubleshooting.md) |
 | 测试怎么跑、golden 数据怎么重生成 | [`testing.md`](testing.md) |
 | GDScript 语言坑与代码约定 | [`gdscript-notes.md`](gdscript-notes.md) |
@@ -422,3 +424,8 @@ func _ready() -> void:
   写法；你可以只保留本文 §3 的编译环节，执行部分整段自己写。
 - **想看各模块怎么测的**：[`testing.md`](testing.md) 一份覆盖五组，跨实现的契约在
   [`../../docs/zh-cn/`](../../docs/zh-cn/)。
+
+- **宿主侧面向对象**：看 [`demo_05.gd`](../demo/demo_05.gd)（场景 `demo_05.tscn`）与
+  [`object-oriented.md`](object-oriented.md)。
+- **宿主侧垃圾回收**：看 [`demo_06.gd`](../demo/demo_06.gd)（场景 `demo_06.tscn`）与
+  [`gc.md`](gc.md)。

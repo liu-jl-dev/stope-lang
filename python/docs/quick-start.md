@@ -352,3 +352,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyt
   [`custom-opcode.md`](custom-opcode.md)。
 - **每个 API 的签名与返回码**：看 [`usage.md`](usage.md)。
 - **改实现 / 加用例**：看 [`testing.md`](testing.md)。
+- **预导出（宿主先塞形参，再编译函数体）**：看 [`demo/04-pre-export.py`](../demo/04-pre-export.py)
+  与 [`../../docs/zh-cn/pre-export.md`](../../docs/zh-cn/pre-export.md)。
+- **宿主侧面向对象**：看 [`demo/05-object.py`](../demo/05-object.py) 与
+  [`object-oriented.md`](object-oriented.md)。
+- **宿主侧垃圾回收**：看 [`demo/06-gc.py`](../demo/06-gc.py) 与 [`gc.md`](gc.md)。

@@ -108,7 +108,9 @@ state.Variables[idx] = basicvm.HostFunction(func(argv []basicvm.Value) basicvm.V
 
 ## 更多
 
-* STML 标记语言：见 `cmd/demo02` 与 `../docs/zh-cn/stml-test-plan.md`。
-* 自定义指令：见 `cmd/demo03` 与 `../python/docs/custom-opcode.md`。
-* 预导出（preExports）：见 `cmd/demo04`。
-* 语义契约与测试：见 `README.md` 与 `../docs/zh-cn/*.md`。
+* STML 标记语言：见 `cmd/demo02` 与 [`stml.md`](stml.md)。
+* 自定义指令：见 `cmd/demo03` 与 [`custom-opcode.md`](custom-opcode.md)。
+* 预导出（preExports）：见 `cmd/demo04` 与 [`../docs/zh-cn/pre-export.md`](../docs/zh-cn/pre-export.md)。
+* 宿主侧面向对象：见 `cmd/demo05` 与 [`object-oriented.md`](object-oriented.md)。
+* 宿主侧垃圾回收：见 `cmd/demo06` 与 [`gc.md`](gc.md)。
+* 语义细节以 C++ 为权威：[`../cpp/docs/`](../cpp/docs/)；语义契约与测试见 `../docs/zh-cn/`。
