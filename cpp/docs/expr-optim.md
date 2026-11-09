@@ -119,7 +119,10 @@ static AST::Expr* parseBinaryOpExpr(Parser& p, AST::Expr* leftExpr) {
 | `StringExpr` | 非空串 |
 | `BinArrExpr` | 非空数组 |
 
-与参考实现 VM 的 `if not value` 判定一致。
+这张表是语言契约的**编译期镜像**：语言级权威见
+[syntax-reference.md §4.5 条件真值](../../docs/zh-cn/syntax-reference.md#45-条件真值)，
+运行期权威同表（[vm-guide.md §8.2](../../docs/zh-cn/vm-guide.md)）。
+折叠正确性 = 编译期真值 ≡ 运行期真值，两侧任何一侧调整都必须同步另一侧。
 
 ## 4. 完整行为矩阵（总表）
 
