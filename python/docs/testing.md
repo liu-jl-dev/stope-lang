@@ -34,7 +34,7 @@ dotnet run --project csharp/Stope.Tests
 [1/8] 词法（golden_lex.txt）                        588 条
 [2/8] 二进制数组 + 常量折叠（golden_binarr.txt）       87 条
 [3/8] 语法（golden.txt）                           1207 条
-[4/8] 编译器（golden.txt）                          648 条
+[4/8] 编译器（golden.txt）                          672 条
 [5/8] 嵌套深度上限                                    21 条
 [6/8] 反汇编（golden_disasm.txt）                     17 条
 [7/8] STML（stml_cases.txt + golden_stml.txt）      628 条
@@ -49,8 +49,8 @@ dotnet run --project csharp/Stope.Tests
 | --- | --- | --- |
 | 词法 | 588 | 147 条用例 × 4 个字段（`TOKS` / `LEXEMES` / `ERRN` / `ERRS`） |
 | 二进制数组 + 折叠 | 87 | 1 条「行数一致」自检 + 86 行逐行比对 |
-| 语法 | 1297 | 216 条用例 × 6 个字段 + 1 条「用例数」自检 |
-| 编译器 | 648 | 216 条用例 × 3 个字段（`CMP` / `OUT` / `CERRS`） |
+| 语法 | 1345 | 224 条用例 × 6 个字段 + 1 条「用例数」自检 |
+| 编译器 | 672 | 224 条用例 × 3 个字段（`CMP` / `OUT` / `CERRS`） |
 | 嵌套深度 | 21 | 各深度档位 + 默认值 + `max_depth=0` 不检查 |
 | 反汇编 | 17 | 12 条逐字节比对 + 5 条单测（见 §6） |
 | STML | 628 | 62 条词法 × 4 + 63 条语法 × 6 + 2 条完整性自检 |
@@ -200,8 +200,8 @@ rep.add_fail(cid, "为什么")                  # 直接记一条失败（编译
 | --- | --- |
 | 词法 | `golden_lex.txt` 全覆盖（147 条 × 4 字段）。`TokenType` 47 个成员中，`Invalid` / `Eof` / 各类字面量 / 全部标点 / 关键字都有用例 |
 | 常量折叠 | `golden_binarr.txt` 的 `FB` / `FU` 矩阵：每个运算符 × 每个常量类型的「折 / 不折」预期都在数据里 |
-| 语法 | `golden.txt` 216 条，含形状串、语句行号序列、错误文案与条数 |
-| 编译器 | 同一批 216 条的产物（`OUT`）+ 编译状态（`CMP`）+ 编译错误（`CERRS`） |
+| 语法 | `golden.txt` 224 条，含形状串、语句行号序列、错误文案与条数 |
+| 编译器 | 同一批 224 条的产物（`OUT`）+ 编译状态（`CMP`）+ 编译错误（`CERRS`） |
 | 反汇编 | 12 条（`MODE=src` 走「源码→编译→反汇编」，`MODE=raw` 直接给指令流）+ 5 条单测 |
 | STML | 126 条用例（62 词法 + 64 语法），12 个 `TokenType` 全部覆盖 |
 | 执行器 | 33 条内置指令都有用例（`V-06` … `V-15` + `V-21` 的六个程序）。**几处防御性分支没有**：`stack underflow. ` / `no implement for value type. ` / `no implement for key num != 1. ` / `no implement for container type. ` —— 正常编译产物走不到它们（编译器保证 `PushId` 只出现在赋值左端、`At` 的 key 恒为 1） |

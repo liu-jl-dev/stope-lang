@@ -9,12 +9,22 @@
 
 use crate::ast::{Expr, Prog, Stmt};
 use crate::common::Result as StopeResult;
+use crate::expr_optim::{is_const_expr, truthy};
 use crate::opcode::{CustomOpcodeConfig, Opcode};
 use crate::program::Program;
 use crate::token::TokenType;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::rc::Rc;
 
+// OQ-2：条件是否为「解析期折叠后的字面量常量」；是则按语言真值表给出静态真值
+// （Some），否则 None。truthy（expr_optim）是真值表的单一实现，这里只补常量
+// 判断。对齐 cpp/src/compiler.cpp 的 constCondTruth。
+fn const_cond_truth(e: &Expr) -> Option<bool> {
+    if !is_const_expr(e) {
+        return None;
+    }
+    Some(truthy(e))
+}
 // ====================================================================
 // 作用域
 
@@ -571,59 +581,105 @@ impl Compiler {
                 }
             }
             Stmt::If { cond, first_prog, elifs, else_prog, .. } => {
-                self.visit_expr(cond, out);
-                self.emit_op(out, Opcode::If);
-                self.stack_size_mgr.dec(1);
-                let mut last_if_pos = self.emit_placeholder(out); // 条件为假时跳到这里
+                // OQ-2（对齐 cpp/src/compiler.cpp 的 onVisitIfStmt）：字面量条件
+                // 折叠。条件是常量字面量时按真值表静态判定——常量真只发该分支
+                // （零条件、零跳转指令），常量假整支消除（体不访问，其中的
+                // defer 不登记，与死代码消除一致）；链上遇到非常量条件才走普通
+                // 发射路径，其后不再折（非常量打头时保守：嵌套折叠的收益不抵
+                // 多路回填的复杂度）。常量真的分支体是链的最后一段发射——体
+                // 走完就到链尾，不需要出口 GoTo。
                 let mut goto_end_indices: Vec<i32> = Vec::new();
-                let mut all_branches_terminate = true;
-                self.visit_body_as_block(first_prog, out);
-                let mut branch_term = self.stmt_terminates;
-                all_branches_terminate = all_branches_terminate && branch_term;
-                if !branch_term {
-                    // 分支走完会落到这里，需要跳出整个 if；终止则尾跳是死代码
-                    self.emit_op(out, Opcode::GoTo);
-                    goto_end_indices.push(self.emit_placeholder(out));
-                }
-                self.patch_index(out, last_if_pos, self.code_size(out));
-                for ei in elifs {
-                    self.visit_expr(&ei.cond, out);
+                let mut pending_false: i32 = -1; // 上一个「条件为假」占位（-1 = 无）
+                let mut all_bodies_terminate = true;
+                let mut any_body_emitted = false;
+                let mut fallthrough_resolved = false; // 「一路为假」的落空路径被 else / 常量真接住
+                let mut chain_ended = false; // 常量真之后整条链不可达
+
+                if let Some(t) = const_cond_truth(cond) {
+                    if t { // 常量真：整条链只剩这一个分支体
+                        self.visit_if_branch(first_prog, out, &mut all_bodies_terminate, &mut any_body_emitted);
+                        fallthrough_resolved = true;
+                        chain_ended = true;
+                    }
+                    // 常量假：跳过，看 elifs / else
+                } else { // 非常量：普通发射
+                    self.visit_expr(cond, out);
                     self.emit_op(out, Opcode::If);
                     self.stack_size_mgr.dec(1);
-                    last_if_pos = self.emit_placeholder(out);
-                    self.visit_body_as_block(&ei.prog, out);
-                    branch_term = self.stmt_terminates;
-                    all_branches_terminate = all_branches_terminate && branch_term;
-                    if !branch_term {
+                    pending_false = self.emit_placeholder(out); // 条件为假时跳到这里
+                    if !self.visit_if_branch(first_prog, out, &mut all_bodies_terminate, &mut any_body_emitted) {
+                        // 分支走完会落到这里，需要跳出整个 if；终止则尾跳是死代码
                         self.emit_op(out, Opcode::GoTo);
                         goto_end_indices.push(self.emit_placeholder(out));
                     }
-                    self.patch_index(out, last_if_pos, self.code_size(out));
                 }
-                let has_else = else_prog.is_some();
-                if let Some(ep) = else_prog {
-                    // 与 C++/Python 权威实现一致：else 分支自身的终止性不并入判定
-                    self.visit_body_as_block(ep, out);
-                } else {
-                    all_branches_terminate = false; // 无 else：条件全假时落到 if 之后
+                for ei in elifs {
+                    // 常量真之后整条链不可达：跳过，不访问。（Rust AST 的
+                    // elif.cond 非 Option，没有 C++ 的 cond == nullptr 分支。）
+                    if chain_ended {
+                        continue;
+                    }
+                    if let Some(t) = const_cond_truth(&ei.cond) {
+                        if t { // 常量真：之前的假路径在这里进体，链到此为止
+                            self.close_pending_false(out, &mut pending_false);
+                            self.visit_if_branch(&ei.prog, out, &mut all_bodies_terminate, &mut any_body_emitted);
+                            fallthrough_resolved = true;
+                            chain_ended = true; // 其后的 elif / else 不可达
+                        }
+                        // 常量假：跳过该分支（pending_false 留给下一个真分支 / else 回填）
+                        continue;
+                    }
+                    self.close_pending_false(out, &mut pending_false); // 假路径从上一个占位跳到本分支条件处
+                    self.visit_expr(&ei.cond, out);
+                    self.emit_op(out, Opcode::If);
+                    self.stack_size_mgr.dec(1);
+                    pending_false = self.emit_placeholder(out);
+                    if !self.visit_if_branch(&ei.prog, out, &mut all_bodies_terminate, &mut any_body_emitted) {
+                        self.emit_op(out, Opcode::GoTo);
+                        goto_end_indices.push(self.emit_placeholder(out));
+                    }
+                }
+                if !chain_ended {
+                    if let Some(ep) = else_prog {
+                        self.close_pending_false(out, &mut pending_false);
+                        self.visit_if_branch(ep, out, &mut all_bodies_terminate, &mut any_body_emitted);
+                        fallthrough_resolved = true;
+                    }
+                }
+                if pending_false >= 0 { // 链以非常量条件结尾且无 else：假路径跳到链尾
+                    let end = self.code_size(out);
+                    self.patch_index(out, pending_false, end);
                 }
                 let end = self.code_size(out);
                 for pos in goto_end_indices {
                     self.patch_index(out, pos, end);
                 }
-                // if 语句的终止性：else 存在且所有（if/elif）分支终止
-                self.stmt_terminates = has_else && all_branches_terminate;
+                // if 语句的终止性：所有可达分支体终止，且「一路为假」的落空路径
+                // 被 else / 常量真接住——否则那条路径直接落到 if 之后，不算终止。
+                self.stmt_terminates = any_body_emitted && all_bodies_terminate && fallthrough_resolved;
             }
             Stmt::While { cond, prog, .. } => {
+                // OQ-2（对齐 cpp/src/compiler.cpp 的 onVisitWhileStmt）：常量条件
+                // 折叠——常量真折叠为无条件循环（其后语句按真死循环消除），常量
+                // 假整环消除（体不访问，其中的 defer 不登记）。
+                let truth = cond.as_deref().and_then(const_cond_truth);
+                let cond_const = truth.is_some();
+                let eliminate = truth == Some(false);
+
                 let ws = self.push_while_scope();
                 self.scope_stack[ws].start_index = self.code_size(out); // continue 回到这里
                 let mut case_goto_end_pos = -1;
-                if let Some(c) = cond {
-                    // while cond { } —— cond 可省
-                    self.visit_expr(c, out);
+                if cond.is_some() && !cond_const {
+                    // 非常量条件才发射判断（while cond { } —— cond 可省）
+                    self.visit_expr(cond.as_ref().unwrap(), out);
                     self.emit_op(out, Opcode::If);
                     self.stack_size_mgr.dec(1);
                     case_goto_end_pos = self.emit_placeholder(out);
+                }
+                if eliminate { // 常量假：体永不执行，整环消除（break/continue 无可达）
+                    self.stmt_terminates = false;
+                    self.pop_scope();
+                    return;
                 }
                 // saw_break 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
                 let saved_saw_break = self.saw_break;
@@ -642,14 +698,17 @@ impl Compiler {
                 for pos in breaks {
                     self.patch_index(out, pos, self.code_size(out));
                 }
-                // 条件可省。无条件时必须跳过回填，否则会把第 0 条指令改成跳转目标。
+                // [偏离参考实现 4] 条件可省。参考实现这里无条件回填
+                // case_goto_end_pos，无条件 while 时它会写成 code[0] = len(code)，
+                // 把第一条指令改成跳转目标。
                 if case_goto_end_pos >= 0 {
                     let end = self.code_size(out);
                     self.patch_index(out, case_goto_end_pos, end);
                 }
-                // while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才
-                // 永不退出。`while true { }` 带条件，按可退出处理，不做字面量折叠。
-                self.stmt_terminates = cond.is_none() && !body_saw_break;
+                // while 的终止性：无条件（含折叠为真的常量条件，OQ-2）且体不含
+                // 本层 break 的真死循环才永不退出。
+                self.stmt_terminates =
+                    (cond.is_none() || truth == Some(true)) && !body_saw_break;
                 self.pop_scope();
             }
             Stmt::Assign { left, right, .. } => {
@@ -989,6 +1048,32 @@ impl Compiler {
         self.pop_scope();
         for idx in idxs {
             self.var_alloc.free_var(idx);
+        }
+    }
+
+    /// OQ-2 的 if 折叠辅助：访问一个分支体并结算终止性累计量，返回该体是否
+    /// 终止。对齐 C++ onVisitIfStmt 里的 visit_branch lambda。
+    fn visit_if_branch(
+        &mut self,
+        p: &Prog,
+        out: &mut Program,
+        all_bodies_terminate: &mut bool,
+        any_body_emitted: &mut bool,
+    ) -> bool {
+        self.visit_body_as_block(p, out);
+        let t = self.stmt_terminates;
+        *all_bodies_terminate = *all_bodies_terminate && t;
+        *any_body_emitted = true;
+        t
+    }
+
+    /// OQ-2 的 if 折叠辅助：回填上一个「条件为假」占位到当前位置。对齐 C++
+    /// onVisitIfStmt 里的 close_pending_false lambda。
+    fn close_pending_false(&mut self, out: &mut Program, pending_false: &mut i32) {
+        if *pending_false >= 0 {
+            let end = self.code_size(out);
+            self.patch_index(out, *pending_false, end);
+            *pending_false = -1;
         }
     }
 }

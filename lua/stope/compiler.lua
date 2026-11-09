@@ -15,6 +15,7 @@ local common = require("stope.common")
 local token_mod = require("stope.token")
 local opcode_mod = require("stope.opcode")
 local scope_context = require("stope.scope_context")
+local expr_optim = require("stope.expr_optim")
 
 local Compiler = {}
 local MT = { __index = Compiler }
@@ -23,6 +24,16 @@ local NT = ast.NodeType
 local T = token_mod.TokenType
 local Opcode = opcode_mod.Opcode
 local Result = common.Result
+
+--- OQ-2：条件是否为「解析期折叠后的字面量常量」；是则按语言真值表给出静态
+--- 真值，否则返回 nil。truthy（expr_optim）是真值表的单一实现，这里只补
+--- 常量判断。与 cpp/src/compiler.cpp 的 constCondTruth 一致。
+local function const_cond_truth(e)
+    if e == nil or expr_optim.kind_of(e) == expr_optim.NotConst then
+        return nil
+    end
+    return expr_optim.truthy(e)
+end
 
 function Compiler.new(custom)
     local self = setmetatable({}, MT)
@@ -444,59 +455,115 @@ end
 
 function Compiler:visit_if_stmt(s)
     if s.cond == nil then return end
+    -- OQ-2（2026-11-09 落地）：字面量条件折叠。条件是常量字面量时按真值表
+    -- 静态判定——常量真只发该分支（零条件、零跳转指令），常量假整支消除
+    -- （体不访问，其中的 defer 不登记，与死代码消除一致）；链上遇到非常量
+    -- 条件才走普通发射路径，其后不再折（非常量打头时保守：嵌套折叠的收益
+    -- 不抵多路回填的复杂度）。常量真的分支体是链的最后一段发射——体走完
+    -- 就到链尾，不需要出口 GoTo。
     local goto_end_indices = {}
-    local all_branches_terminate = true
-    self:visit(s.cond)
-    self:emit_op(Opcode.If)
-    self.stack_size_mgr:dec()
-    local last_if_pos = self:emit_placeholder() -- 条件为假时跳到这里
-    self:visit_body_as_block(s.first_prog)
-    local branch_term = self.stmt_terminates
-    all_branches_terminate = all_branches_terminate and branch_term
-    if not branch_term then -- 分支走完会落到这里，需要跳出整个 if；终止则死代码
-        self:emit_op(Opcode.GoTo)
-        goto_end_indices[#goto_end_indices + 1] = self:emit_placeholder()
+    local pending_false = -1 -- 上一个「条件为假」占位（-1 = 无）
+    local all_bodies_terminate = true
+    local any_body_emitted = false
+    local fallthrough_resolved = false -- 「一路为假」的落空路径被 else / 常量真接住
+    local chain_ended = false -- 常量真之后整条链不可达
+
+    local function visit_branch(prog)
+        self:visit_body_as_block(prog)
+        local t = self.stmt_terminates
+        all_bodies_terminate = all_bodies_terminate and t
+        any_body_emitted = true
+        return t
     end
-    self:patch_index(last_if_pos, self:code_size())
-    for _, ei in ipairs(s.elifs) do
-        if ei.cond ~= nil then
-            self:visit(ei.cond)
-            self:emit_op(Opcode.If)
-            self.stack_size_mgr:dec()
-            last_if_pos = self:emit_placeholder()
-            self:visit_body_as_block(ei.prog)
-            branch_term = self.stmt_terminates
-            all_branches_terminate = all_branches_terminate and branch_term
-            if not branch_term then
-                self:emit_op(Opcode.GoTo)
-                goto_end_indices[#goto_end_indices + 1] = self:emit_placeholder()
-            end
-            self:patch_index(last_if_pos, self:code_size())
+    local function close_pending_false()
+        if pending_false >= 0 then
+            self:patch_index(pending_false, self:code_size())
+            pending_false = -1
         end
     end
-    local has_else = s.else_prog ~= nil
-    if has_else then
-        self:visit_body_as_block(s.else_prog)
-    else
-        all_branches_terminate = false -- 无 else：条件全假时落到 if 之后
+
+    local truth = const_cond_truth(s.cond)
+    if truth ~= nil then
+        if truth then -- 常量真：整条链只剩这一个分支体
+            visit_branch(s.first_prog)
+            fallthrough_resolved = true
+            chain_ended = true
+        end
+        -- 常量假：跳过，看 elifs / else
+    else -- 非常量：普通发射
+        self:visit(s.cond)
+        self:emit_op(Opcode.If)
+        self.stack_size_mgr:dec()
+        pending_false = self:emit_placeholder()
+        if not visit_branch(s.first_prog) then
+            self:emit_op(Opcode.GoTo)
+            goto_end_indices[#goto_end_indices + 1] = self:emit_placeholder()
+        end
+    end
+    for _, ei in ipairs(s.elifs) do
+        if chain_ended or ei.cond == nil then
+            -- 常量真之后的 elif / else 不可达，跳过
+        else
+            truth = const_cond_truth(ei.cond)
+            if truth ~= nil then
+                if truth then -- 常量真：之前的假路径在这里进体，链到此为止
+                    close_pending_false()
+                    visit_branch(ei.prog)
+                    fallthrough_resolved = true
+                    chain_ended = true -- 其后的 elif / else 不可达
+                end
+                -- 常量假：跳过该分支（pending_false 留给下一个真分支 / else 回填）
+            else
+                close_pending_false() -- 假路径从上一个占位跳到本分支条件处
+                self:visit(ei.cond)
+                self:emit_op(Opcode.If)
+                self.stack_size_mgr:dec()
+                pending_false = self:emit_placeholder()
+                if not visit_branch(ei.prog) then
+                    self:emit_op(Opcode.GoTo)
+                    goto_end_indices[#goto_end_indices + 1] = self:emit_placeholder()
+                end
+            end
+        end
+    end
+    if not chain_ended and s.else_prog ~= nil then
+        close_pending_false()
+        visit_branch(s.else_prog)
+        fallthrough_resolved = true
+    end
+    if pending_false >= 0 then -- 链以非常量条件结尾且无 else：假路径跳到链尾
+        self:patch_index(pending_false, self:code_size())
     end
     for _, pos in ipairs(goto_end_indices) do
         self:patch_index(pos, self:code_size())
     end
-    -- if 语句的终止性：else 存在且所有分支终止（组合式，逐分支局部判断）
-    self.stmt_terminates = has_else and all_branches_terminate
+    -- if 语句的终止性：所有可达分支体终止，且「一路为假」的落空路径被
+    -- else / 常量真接住——否则那条路径直接落到 if 之后，不算终止。
+    self.stmt_terminates = any_body_emitted and all_bodies_terminate and fallthrough_resolved
 end
 
 function Compiler:visit_while_stmt(s)
+    -- OQ-2：常量条件折叠——常量真折叠为无条件循环（其后语句按真死循环
+    -- 消除），常量假整环消除（体不访问，其中的 defer 不登记）。
+    local truth = const_cond_truth(s.cond)
+    local cond_const = truth ~= nil
+    local eliminate = cond_const and not truth
+
     local ws = self:push_while_scope()
     ws.start_index = self:code_size() -- continue 回到这里
     local case_goto_end_pos = -1
-    if s.cond ~= nil then
-        -- while cond { } —— cond 可省
+    if s.cond ~= nil and not cond_const then
+        -- 非常量条件才发射判断（while cond { } —— cond 可省）
         self:visit(s.cond)
         self:emit_op(Opcode.If)
         self.stack_size_mgr:dec()
         case_goto_end_pos = self:emit_placeholder()
+    end
+    if eliminate then
+        -- 常量假：体永不执行，整环消除（break/continue 无可达）
+        self.stmt_terminates = false
+        self:pop_scope()
+        return
     end
     -- saw_break 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
     local saved_saw_break = self.saw_break
@@ -516,10 +583,9 @@ function Compiler:visit_while_stmt(s)
     if case_goto_end_pos >= 0 then
         self:patch_index(case_goto_end_pos, self:code_size())
     end
-    -- while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才永不
-    -- 退出。`while true { }` 带条件，按可退出处理（用户明确要求），不视同
-    -- `while { }`，不做字面量折叠。
-    self.stmt_terminates = (s.cond == nil) and not body_saw_break
+    -- while 的终止性：无条件（含折叠为真的常量条件，OQ-2）且体不含本层
+    -- break 的真死循环才永不退出。
+    self.stmt_terminates = (s.cond == nil or (cond_const and truth)) and not body_saw_break
     self:pop_scope()
 end
 

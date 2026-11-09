@@ -13,7 +13,6 @@
 
 | 编号 | 问题 | 背景与候选 | 倾向 |
 | --- | --- | --- | --- |
-| OQ-2 | **if / elif / else / while 字面量条件折叠** | 条件为字面量时按真值表（已升格为语言契约，syntax-reference §4.5）静态判定：常量真只发该分支，常量假整支（while 则整环）消除；`while true` 折叠为无条件循环、不再豁免（C-67 归入此项）。候选代价：C-67 / golden 同步、八实现移植 | 2026-11-07 倾向：做；`while true` 不豁免。**整体未定夺** |
 | OQ-3 | **`-2 ^ 2` 的一元负号优先级**（PD-18） | 现状 `(-2)^2`（一元高于 `^`）；Python 是 `-(2^2)`，Excel 是 `(-2)^2` | 参考实现与本实现一致，倾向记录为现状 |
 | OQ-4 | **parser 不校验赋值左值**（PD-10，`1 = 2;` 0 errors） | 交给语义分析，或 parser 报错 | 待定 |
 | OQ-5 | **跨类型 `==` / `null` 比较是否折叠**（[expr-optim.md §10](../../cpp/docs/expr-optim.md)） | 需先定夺类型强制规则：`true == 1`、`null == 0`、`null` 参与比较的语义 | 折叠必须与运行期一致，规则未定前不动 |
@@ -32,6 +31,7 @@
 
 | 决定（日期） | 详情在哪 |
 | --- | --- |
+| **OQ-2 字面量条件折叠**（2026-11-09，八份落地）：if / elif / else / while 的条件为字面量常量时按真值表（§4.5）静态判定——常量真只发该分支（零条件零跳转），常量假整支（while 则整环）消除；`while true` 折叠为无条件循环、其后语句按真死循环消除（C-67 豁免就此取消）。判定在编译器层：AST 不变、只有产物字节变；死分支不编译（名字不占槽位、defer 不登记）。C-67 重写、C-69…C-75 新增、golden 新增 CF-01…CF-08（224 条） | [compiler-test-plan.md §4.11](compiler-test-plan.md)、[cpp/docs §5.11](../../cpp/docs/compiler-test-plan.md) |
 | **OQ-1 条件真值表升格为语言契约**（2026-11-09）：表（null 永假；整数/浮点非零真；字符串/二进制数组非空真）写进 syntax-reference **§4.5 条件真值** 作为语言权威——运行期判定与解析期折叠同表；if / while 小节与 §4.4 折叠节补互指；vm-guide §8.2 保留 VM 侧陈述（HostFunction 标注为环境自定、不属于契约）；expr-optim §3.2 注明为编译期镜像 | [syntax-reference.md §4.5](syntax-reference.md)、[expr-optim.md §3.2](../../cpp/docs/expr-optim.md)、[vm-guide.md §8.2](vm-guide.md) |
 | **OQ-8 defer 绑定语句及其符号**（2026-11-08，八份落地）：前向引用不报错、不被捕获，按隐式导出宿主变量处理；FileScope 同名报 `duplicate export`。C-58 重写、C-68 新增、DF-06 更新、DF-15 新增、golden 重生成 216 条 | [syntax-reference.md defer 小节](syntax-reference.md)、[compiler-test-plan.md §4.10](compiler-test-plan.md) |
 | **defer 移植到全部八份实现**（2026-11-07，OQ-7）：golden 加 DF-01…DF-14，七份实现全部逐字节通过 | [compiler-test-plan.md §4.10](compiler-test-plan.md) |

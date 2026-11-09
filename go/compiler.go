@@ -693,64 +693,128 @@ func (c *Compiler) visitBlockStmt(s *BlockStmt) {
 	}
 }
 
+// constCondTruth OQ-2：条件是否为「解析期折叠后的字面量常量」；是则按语言
+// 真值表给出静态真值（第二返回值）。truthy（expr_optim）是真值表的单一实现，
+// 这里只补常量判断。与 cpp/src/compiler.cpp 的 constCondTruth 一致。
+func constCondTruth(e Node) (isConst bool, truth bool) {
+	if kindOf(e) == kNotConst {
+		return false, false
+	}
+	return true, truthy(e)
+}
+
 func (c *Compiler) visitIfStmt(s *IfStmt) {
 	if s.Cond == nil {
 		return
 	}
+	// OQ-2（2026-11-09 落地）：字面量条件折叠。条件是常量字面量时按真值表
+	// 静态判定——常量真只发该分支（零条件、零跳转指令），常量假整支消除
+	// （体不访问，其中的 defer 不登记，与死代码消除一致）；链上遇到非常量
+	// 条件才走普通发射路径，其后不再折（非常量打头时保守：嵌套折叠的收益
+	// 不抵多路回填的复杂度）。常量真的分支体是链的最后一段发射——体走完
+	// 就到链尾，不需要出口 GoTo。
 	var gotoEndIndices []int
-	allBranchesTerminate := true
-	c.visit(s.Cond)
-	c.emitOp(OpIf)
-	c.stackSizeMgr.dec(1)
-	lastIfPos := c.emitPlaceholder() // 条件为假时跳到这里
-	c.visitBodyAsBlock(s.FirstProg)
-	branchTerm := c.stmtTerminates
-	allBranchesTerminate = allBranchesTerminate && branchTerm
-	if !branchTerm { // 分支走完会落到这里，需要跳出整个 if；终止则死代码
-		c.emitOp(OpGoTo)
-		gotoEndIndices = append(gotoEndIndices, c.emitPlaceholder())
+	pendingFalse := -1 // 上一个「条件为假」占位（-1 = 无）
+	allBodiesTerminate := true
+	anyBodyEmitted := false
+	fallthroughResolved := false // 「一路为假」的落空路径被 else / 常量真接住
+	chainEnded := false          // 常量真之后整条链不可达
+
+	visitBranch := func(prog *Prog) bool {
+		c.visitBodyAsBlock(prog)
+		t := c.stmtTerminates
+		allBodiesTerminate = allBodiesTerminate && t
+		anyBodyEmitted = true
+		return t
 	}
-	c.patchIndex(lastIfPos, c.codeSize())
-	for _, ei := range s.Elifs {
-		if ei.Cond == nil {
-			continue
+	closePendingFalse := func() {
+		if pendingFalse >= 0 {
+			c.patchIndex(pendingFalse, c.codeSize())
+			pendingFalse = -1
 		}
-		c.visit(ei.Cond)
+	}
+
+	isConst, truth := constCondTruth(s.Cond)
+	if isConst {
+		if truth { // 常量真：整条链只剩这一个分支体
+			visitBranch(s.FirstProg)
+			fallthroughResolved = true
+			chainEnded = true
+		}
+		// 常量假：跳过，看 elifs / else
+	} else { // 非常量：普通发射
+		c.visit(s.Cond)
 		c.emitOp(OpIf)
 		c.stackSizeMgr.dec(1)
-		lastIfPos = c.emitPlaceholder()
-		c.visitBodyAsBlock(ei.Prog)
-		branchTerm = c.stmtTerminates
-		allBranchesTerminate = allBranchesTerminate && branchTerm
-		if !branchTerm {
+		pendingFalse = c.emitPlaceholder() // 条件为假时跳到这里
+		if !visitBranch(s.FirstProg) {
 			c.emitOp(OpGoTo)
 			gotoEndIndices = append(gotoEndIndices, c.emitPlaceholder())
 		}
-		c.patchIndex(lastIfPos, c.codeSize())
 	}
-	hasElse := s.ElseProg != nil
-	if hasElse {
-		c.visitBodyAsBlock(s.ElseProg)
-	} else {
-		allBranchesTerminate = false // 无 else：条件全假时落到 if 之后
+	for _, ei := range s.Elifs {
+		if chainEnded || ei.Cond == nil {
+			continue
+		}
+		if isConst, truth := constCondTruth(ei.Cond); isConst {
+			if truth { // 常量真：之前的假路径在这里进体，链到此为止
+				closePendingFalse()
+				visitBranch(ei.Prog)
+				fallthroughResolved = true
+				chainEnded = true // 其后的 elif / else 不可达
+			}
+			// 常量假：跳过该分支（pendingFalse 留给下一个真分支 / else 回填）
+			continue
+		}
+		closePendingFalse() // 假路径从上一个占位跳到本分支条件处
+		c.visit(ei.Cond)
+		c.emitOp(OpIf)
+		c.stackSizeMgr.dec(1)
+		pendingFalse = c.emitPlaceholder()
+		if !visitBranch(ei.Prog) {
+			c.emitOp(OpGoTo)
+			gotoEndIndices = append(gotoEndIndices, c.emitPlaceholder())
+		}
+	}
+	if !chainEnded && s.ElseProg != nil {
+		closePendingFalse()
+		visitBranch(s.ElseProg)
+		fallthroughResolved = true
+	}
+	if pendingFalse >= 0 { // 链以非常量条件结尾且无 else：假路径跳到链尾
+		c.patchIndex(pendingFalse, c.codeSize())
 	}
 	for _, pos := range gotoEndIndices {
 		c.patchIndex(pos, c.codeSize())
 	}
-	// if 语句的终止性：else 存在且所有分支终止（组合式，逐分支局部判断）
-	c.stmtTerminates = hasElse && allBranchesTerminate
+	// if 语句的终止性：所有可达分支体终止，且「一路为假」的落空路径被
+	// else / 常量真接住——否则那条路径直接落到 if 之后，不算终止。
+	c.stmtTerminates = anyBodyEmitted && allBodiesTerminate && fallthroughResolved
 }
 
 func (c *Compiler) visitWhileStmt(s *WhileStmt) {
+	// OQ-2：常量条件折叠——常量真折叠为无条件循环（其后语句按真死循环
+	// 消除），常量假整环消除（体不访问，其中的 defer 不登记）。
+	truth := false
+	condConst := false
+	if s.Cond != nil {
+		condConst, truth = constCondTruth(s.Cond)
+	}
+	eliminate := condConst && !truth
+
 	ws := c.pushWhileScope()
 	ws.StartIndex = c.codeSize() // continue 回到这里
 	caseGotoEndPos := -1
-	if s.Cond != nil {
-		// while cond { } —— cond 可省
+	if s.Cond != nil && !condConst { // 非常量条件才发射判断
 		c.visit(s.Cond)
 		c.emitOp(OpIf)
 		c.stackSizeMgr.dec(1)
 		caseGotoEndPos = c.emitPlaceholder()
+	}
+	if eliminate { // 常量假：体永不执行，整环消除（break/continue 无可达）
+		c.stmtTerminates = false
+		c.popScope()
+		return
 	}
 	// sawBreak 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
 	savedSawBreak := c.sawBreak
@@ -770,10 +834,9 @@ func (c *Compiler) visitWhileStmt(s *WhileStmt) {
 	if caseGotoEndPos >= 0 {
 		c.patchIndex(caseGotoEndPos, c.codeSize())
 	}
-	// while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才永不
-	// 退出。`while true { }` 带条件，按可退出处理（用户明确要求），不视同
-	// `while { }`，不做字面量折叠。
-	c.stmtTerminates = s.Cond == nil && !bodySawBreak
+	// while 的终止性：无条件（含折叠为真的常量条件，OQ-2）且体不含本层
+	// break 的真死循环才永不退出。
+	c.stmtTerminates = (s.Cond == nil || (condConst && truth)) && !bodySawBreak
 	c.popScope()
 }
 

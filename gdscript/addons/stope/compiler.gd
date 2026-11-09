@@ -272,47 +272,110 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		bs.defers.clear()	# 最终结算：途中出口（break/return）已各拼过副本
 		_pop_scope()
 		for idx in bs.id_map.values(): var_alloc.free_var(int(idx))	# 回收局部变量索引
+	# OQ-2：条件是否为「解析期折叠后的字面量常量」（Null/Bool/Int/Float/String/
+	# BinArr 六种）。truthy（expr_optim）是真值表的单一实现，这里只补常量判断。
+	# 与 cpp/src/compiler.cpp 的 constCondTruth 一致（GDScript 无出参，拆成判断 +
+	# truthy 两步调用）。
+	func _is_const_cond(e) -> bool:
+		return StopeExprOptim.is_const(StopeExprOptim.kind_of(e))
+
 	func on_visit_if_stmt(s:StopeAst.IfStmt) -> void:
 		if s.cond == null: return
+		# OQ-2（2026-11-09 落地）：字面量条件折叠。条件是常量字面量时按真值表
+		# 静态判定——常量真只发该分支（零条件、零跳转指令），常量假整支消除
+		# （体不访问，其中的 defer 不登记，与死代码消除一致）；链上遇到非常量
+		# 条件才走普通发射路径。常量真的分支体是链的最后一段发射——体走完
+		# 就到链尾，不需要出口 GoTo。
 		var goto_end_indices:Array[int] = []
-		var all_branches_terminate := true
-		var has_else := false
-		visit(s.cond)
-		_emit_op(Opcode.If); stack_size_mgr.dec()
-		var last_if_pos:int = _emit_placeholder()	# 条件为假时跳到这里
-		_visit_body_as_block(s.first_prog)
-		var branch_term:bool = stmt_terminates
-		all_branches_terminate = all_branches_terminate and branch_term
-		if not branch_term:	# 分支走完会落到这里，需要跳出整个 if；终止则死代码
-			_emit_op(Opcode.GoTo)
-			goto_end_indices.append(_emit_placeholder())
-		_patch_index(last_if_pos, _code_size())
+		var pending_false:int = -1	# 上一个「条件为假」占位（-1 = 无）
+		var all_bodies_terminate := true
+		var any_body_emitted := false
+		var fallthrough_resolved := false	# 「一路为假」的落空路径被 else / 常量真接住
+		var chain_ended := false			# 常量真之后整条链不可达
+		var branch_term:bool = false
+
+		if _is_const_cond(s.cond):
+			if StopeExprOptim.truthy(s.cond):	# 常量真：整条链只剩这一个分支体
+				_visit_body_as_block(s.first_prog)
+				all_bodies_terminate = all_bodies_terminate and stmt_terminates
+				any_body_emitted = true
+				fallthrough_resolved = true
+				chain_ended = true
+			# 常量假：跳过，看 elifs / else
+		else:	# 非常量：普通发射
+			visit(s.cond)
+			_emit_op(Opcode.If); stack_size_mgr.dec()
+			pending_false = _emit_placeholder()	# 条件为假时跳到这里
+			_visit_body_as_block(s.first_prog)
+			branch_term = stmt_terminates
+			all_bodies_terminate = all_bodies_terminate and branch_term
+			any_body_emitted = true
+			if not branch_term:	# 分支走完会落到这里，需要跳出整个 if；终止则死代码
+				_emit_op(Opcode.GoTo)
+				goto_end_indices.append(_emit_placeholder())
 		for ei in s.elifs:
-			if ei.cond == null: continue
+			if chain_ended or ei.cond == null: continue
+			if _is_const_cond(ei.cond):
+				if StopeExprOptim.truthy(ei.cond):
+					# 常量真：之前的假路径在这里进体，链到此为止
+					if pending_false >= 0:
+						_patch_index(pending_false, _code_size())
+						pending_false = -1
+					_visit_body_as_block(ei.prog)
+					all_bodies_terminate = all_bodies_terminate and stmt_terminates
+					any_body_emitted = true
+					fallthrough_resolved = true
+					chain_ended = true	# 其后的 elif / else 不可达
+				# 常量假：跳过该分支（pending_false 留给下一个真分支 / else 回填）
+				continue
+			if pending_false >= 0:	# 假路径从上一个占位跳到本分支条件处
+				_patch_index(pending_false, _code_size())
+				pending_false = -1
 			visit(ei.cond)
 			_emit_op(Opcode.If); stack_size_mgr.dec()
-			last_if_pos = _emit_placeholder()
+			pending_false = _emit_placeholder()
 			_visit_body_as_block(ei.prog)
 			branch_term = stmt_terminates
-			all_branches_terminate = all_branches_terminate and branch_term
+			all_bodies_terminate = all_bodies_terminate and branch_term
+			any_body_emitted = true
 			if not branch_term:
 				_emit_op(Opcode.GoTo)
 				goto_end_indices.append(_emit_placeholder())
-			_patch_index(last_if_pos, _code_size())
-		has_else = s.else_prog != null
-		if has_else: _visit_body_as_block(s.else_prog)
-		else: all_branches_terminate = false	# 无 else：条件全假时落到 if 之后
+		if not chain_ended and s.else_prog != null:
+			if pending_false >= 0:
+				_patch_index(pending_false, _code_size())
+				pending_false = -1
+			_visit_body_as_block(s.else_prog)
+			all_bodies_terminate = all_bodies_terminate and stmt_terminates
+			any_body_emitted = true
+			fallthrough_resolved = true
+		if pending_false >= 0:	# 链以非常量条件结尾且无 else：假路径跳到链尾
+			_patch_index(pending_false, _code_size())
 		for pos in goto_end_indices: _patch_index(pos, _code_size())
-		# if 语句的终止性：else 存在且所有分支终止（组合式，逐分支局部判断）
-		stmt_terminates = has_else and all_branches_terminate
+		# if 语句的终止性：所有可达分支体终止，且「一路为假」的落空路径被
+		# else / 常量真接住——否则那条路径直接落到 if 之后，不算终止。
+		stmt_terminates = any_body_emitted and all_bodies_terminate and fallthrough_resolved
 	func on_visit_while_stmt(s:StopeAst.WhileStmt) -> void:
+		# OQ-2：常量条件折叠——常量真折叠为无条件循环（其后语句按真死循环
+		# 消除），常量假整环消除（体不访问，其中的 defer 不登记）。
+		var truth := false
+		var cond_const := false
+		if s.cond != null:
+			cond_const = _is_const_cond(s.cond)
+			if cond_const: truth = StopeExprOptim.truthy(s.cond)
+		var eliminate:bool = cond_const and not truth
+
 		var ws:WhileScope = _push_while_scope()
 		ws.start_index = _code_size()	# continue 回到这里
 		var case_goto_end_pos:int = -1
-		if s.cond != null:				# while cond { } —— cond 可省
+		if s.cond != null and not cond_const:	# 非常量条件才发射判断
 			visit(s.cond)
 			_emit_op(Opcode.If); stack_size_mgr.dec()
 			case_goto_end_pos = _emit_placeholder()
+		if eliminate:	# 常量假：体永不执行，整环消除（break/continue 无可达）
+			stmt_terminates = false
+			_pop_scope()
+			return
 		# saw_break 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
 		var saved_saw_break:bool = saw_break
 		saw_break = false
@@ -323,11 +386,12 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		if not body_term:	# 体终止（return/break/continue 收尾）则回跳是死代码
 			_emit_op(Opcode.GoTo); _emit_index(ws.start_index)
 		for pos in ws.break_indices: _patch_index(pos, _code_size())
-		# [纠正 4] 条件可省。无条件时必须跳过回填，否则会把第 0 条指令改成跳转目标。
+		# [纠正 4] 条件可省。无条件（含折叠为真的常量条件）时必须跳过回填，
+		# 否则会把第 0 条指令改成跳转目标。
 		if case_goto_end_pos >= 0: _patch_index(case_goto_end_pos, _code_size())
-		# while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才永不退出。
-		# `while true { }` 带条件，按可退出处理，不做字面量折叠。
-		stmt_terminates = s.cond == null and not body_saw_break
+		# while 的终止性：无条件（含折叠为真的常量条件，OQ-2）且体不含本层
+		# break 的真死循环才永不退出。
+		stmt_terminates = (s.cond == null or (cond_const and truth)) and not body_saw_break
 		_pop_scope()
 	func on_visit_assign_stmt(s:StopeAst.AssignStmt) -> void:
 		if s.left_expr.node_type == StopeAst.NodeType.IdentExpr:

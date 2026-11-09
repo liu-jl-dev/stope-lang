@@ -499,5 +499,23 @@ int main() {
   };
   for (auto& c : dfs) one(c.id, c.src, c.fold);
 
+  // ==================== OQ-2：字面量条件折叠（CF） ====================
+  // 条件为解析期可折叠的常量时按真值表静态判定：常量真只发该分支，
+  // 常量假整支（while 则整环）消除；while true 折叠为无条件循环，
+  // 其后语句按真死循环消除。死分支不编译——其中的名字不占槽位。
+  struct Case { const char* id; const char* src; bool fold; };
+  std::vector<Case> cfs = {
+      {"CF-01", "if true { a = 1; }", false},
+      {"CF-02", "if false { a = 1; } b = 2;", false},
+      {"CF-03", "if x { a = 1; } elif true { b = 2; } else { c = 3; }", false},
+      {"CF-04", "while true { } a = 1;", false},
+      {"CF-05", "while false { a = 1; } b = 2;", false},
+      {"CF-06", "while true { break; } a = 1;", false},
+      // 解析期折叠出的常量条件同样命中（fold=true）
+      {"CF-07", "if 1 < 2 { a = 1; } b = 2;", true},
+      {"CF-08", "while 0.0 { a = 1; } b = 2;", true},
+  };
+  for (auto& c : cfs) one(c.id, c.src, c.fold);
+
   return 0;
 }

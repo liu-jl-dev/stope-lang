@@ -154,7 +154,7 @@ public static class ExprOptim
     }
 
     /// <summary>真值规则：null → 假；bool → 自身；int/float → 非零；序列 → 非空。</summary>
-    private static bool Truthy(Expr e) => e.NodeType switch
+    public static bool Truthy(Expr e) => e.NodeType switch
     {
         AstNodeType.NullExpr => false,
         AstNodeType.BoolExpr => ((BoolExpr)e).Value,

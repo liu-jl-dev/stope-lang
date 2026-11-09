@@ -8,7 +8,7 @@ import (
 	"stope"
 )
 
-// 语法：golden.txt（216 条）+ 嵌套深度上限。
+// 语法：golden.txt（224 条）+ 嵌套深度上限。
 // 每条用例断言六件事：AST 形状串、语句行号序列、语法 / 词法错误条数与文案。
 //
 // ⚠ SRC 要解两层转义：golden 里存的是 E_(escUtf8(源码))，读文件时已解了外层的 E_，
@@ -50,8 +50,8 @@ func readGoldenMain(t *testing.T) []map[string]string {
 	if len(cases) == 0 {
 		t.Fatal("golden.txt 一条都没读到")
 	}
-	if len(cases) != 216 {
-		t.Errorf("golden.txt 条数 = %d, want 216", len(cases))
+	if len(cases) != 224 {
+		t.Errorf("golden.txt 条数 = %d, want 224", len(cases))
 	}
 	return cases
 }

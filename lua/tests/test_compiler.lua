@@ -1,4 +1,4 @@
--- test_compiler.lua —— 编译器：golden.txt 的 CMP / OUT / CERRS 三个字段（201 条）。
+-- test_compiler.lua —— 编译器：golden.txt 的 CMP / OUT / CERRS 三个字段（224 条）。
 
 local stope = require("stope")
 local golden = require("tests.golden")

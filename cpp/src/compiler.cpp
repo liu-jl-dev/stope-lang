@@ -1,5 +1,7 @@
 #include <stope/compiler.hpp>
 
+#include <stope/expr_optim.hpp>
+
 #include <algorithm>
 #include <cstdint>
 #include <functional>
@@ -371,60 +373,120 @@ void Compiler::onVisitBlockStmt(AST::BlockStmt* s) {
     varAlloc.freeVar(kv.second);
 }
 
+// OQ-2：条件是否为「解析期折叠后的字面量常量」；是则按语言真值表给出
+// 静态真值。truthy（expr_optim）是真值表的单一实现，这里只补常量判断。
+static bool constCondTruth(const AST::Expr* e, bool& truth) {
+  if (!ExpressionOptimizer::isConstExpr(e))
+    return false;
+  truth = ExpressionOptimizer::truthy(e);
+  return true;
+}
+
 void Compiler::onVisitIfStmt(AST::IfStmt* s) {
   if (s->cond == nullptr)
     return;
+  // OQ-2（2026-11-09 落地）：字面量条件折叠。条件是常量字面量时按真值表
+  // 静态判定——常量真只发该分支（零条件、零跳转指令），常量假整支消除
+  // （体不访问，其中的 defer 不登记，与死代码消除一致）；链上遇到非常量
+  // 条件才走普通发射路径，其后不再折（非常量打头时保守：嵌套折叠的收益
+  // 不抵多路回填的复杂度）。常量真的分支体是链的最后一段发射——体走完
+  // 就到链尾，不需要出口 GoTo。
   std::vector<int> gotoEndIndices;
-  bool allBranchesTerminate = true;
-  bool hasElse = false;
-  Visit(s->cond.get());
-  emitOp(Opcode::If);
-  stackSize.dec();
-  int lastIfPos = emitPlaceholder();  // 条件为假时跳到这里
-  visitBodyAsBlock(s->firstProg);
-  bool branchTerm = stmtTerminates;
-  allBranchesTerminate = allBranchesTerminate && branchTerm;
-  if (!branchTerm) {  // 分支走完会落到这里，需要跳出整个 if；终止则死代码
-    emitOp(Opcode::GoTo);
-    gotoEndIndices.push_back(emitPlaceholder());
-  }
-  patchIndex(lastIfPos, codeSize());
-  for (auto& elif : s->elifs) {
-    if (elif.cond == nullptr)
-      continue;
-    Visit(elif.cond.get());
+  int pendingFalse = -1;  // 上一个「条件为假」占位（-1 = 无）
+  bool allBodiesTerminate = true;
+  bool anyBodyEmitted = false;
+  bool fallthroughResolved = false;  // 「一路为假」的落空路径被 else / 常量真接住
+  bool chainEnded = false;           // 常量真之后整条链不可达
+
+  auto visitBranch = [&](AST::Prog& prog) {
+    visitBodyAsBlock(prog);
+    bool t = stmtTerminates;
+    allBodiesTerminate = allBodiesTerminate && t;
+    anyBodyEmitted = true;
+    return t;
+  };
+  auto closePendingFalse = [&]() {
+    if (pendingFalse >= 0) {
+      patchIndex(pendingFalse, codeSize());
+      pendingFalse = -1;
+    }
+  };
+
+  bool truth = false;
+  if (constCondTruth(s->cond.get(), truth)) {
+    if (truth) {  // 常量真：整条链只剩这一个分支体
+      visitBranch(s->firstProg);
+      fallthroughResolved = true;
+      chainEnded = true;
+    }
+    // 常量假：跳过，看 elifs / else
+  } else {  // 非常量：普通发射
+    Visit(s->cond.get());
     emitOp(Opcode::If);
     stackSize.dec();
-    lastIfPos = emitPlaceholder();
-    visitBodyAsBlock(elif.prog);
-    branchTerm = stmtTerminates;
-    allBranchesTerminate = allBranchesTerminate && branchTerm;
-    if (!branchTerm) {
+    pendingFalse = emitPlaceholder();
+    if (!visitBranch(s->firstProg)) {
       emitOp(Opcode::GoTo);
       gotoEndIndices.push_back(emitPlaceholder());
     }
-    patchIndex(lastIfPos, codeSize());
   }
-  hasElse = s->elseProg.has_value();
-  if (hasElse)
-    visitBodyAsBlock(*s->elseProg);
-  else
-    allBranchesTerminate = false;  // 无 else：条件全假时落到 if 之后
+  for (auto& elif : s->elifs) {
+    if (chainEnded || elif.cond == nullptr)
+      continue;
+    if (constCondTruth(elif.cond.get(), truth)) {
+      if (truth) {  // 常量真：之前的假路径在这里进体，链到此为止
+        closePendingFalse();
+        visitBranch(elif.prog);
+        fallthroughResolved = true;
+        chainEnded = true;  // 其后的 elif / else 不可达
+      }
+      // 常量假：跳过该分支（pendingFalse 留给下一个真分支 / else 回填）
+      continue;
+    }
+    closePendingFalse();  // 假路径从上一个占位跳到本分支条件处
+    Visit(elif.cond.get());
+    emitOp(Opcode::If);
+    stackSize.dec();
+    pendingFalse = emitPlaceholder();
+    if (!visitBranch(elif.prog)) {
+      emitOp(Opcode::GoTo);
+      gotoEndIndices.push_back(emitPlaceholder());
+    }
+  }
+  if (!chainEnded && s->elseProg) {
+    closePendingFalse();
+    visitBranch(*s->elseProg);
+    fallthroughResolved = true;
+  }
+  if (pendingFalse >= 0)  // 链以非常量条件结尾且无 else：假路径跳到链尾
+    patchIndex(pendingFalse, codeSize());
   for (int pos : gotoEndIndices)
     patchIndex(pos, codeSize());
-  // if 语句的终止性：else 存在且所有分支终止（组合式，逐分支局部判断）
-  stmtTerminates = hasElse && allBranchesTerminate;
+  // if 语句的终止性：所有可达分支体终止，且「一路为假」的落空路径被
+  // else / 常量真接住——否则那条路径直接落到 if 之后，不算终止。
+  stmtTerminates = anyBodyEmitted && allBodiesTerminate && fallthroughResolved;
 }
 
 void Compiler::onVisitWhileStmt(AST::WhileStmt* s) {
+  // OQ-2：常量条件折叠——常量真折叠为无条件循环（其后语句按真死循环
+  // 消除），常量假整环消除（体不访问，其中的 defer 不登记）。
+  bool truth = false;
+  bool condConst = s->cond != nullptr && constCondTruth(s->cond.get(), truth);
+  bool eliminate = condConst && !truth;
+
   WhileScope* ws = pushScope<WhileScope>();
   ws->startIndex = codeSize();  // continue 回到这里
   int caseGotoEndPos = -1;
-  if (s->cond != nullptr) {  // while cond { } —— cond 可省
+  if (s->cond != nullptr && !condConst) {  // 非常量条件才发射判断
     Visit(s->cond.get());
     emitOp(Opcode::If);
     stackSize.dec();
     caseGotoEndPos = emitPlaceholder();
+  }
+  if (eliminate) {  // 常量假：体永不执行，整环消除（break/continue 无可达）
+    stmtTerminates = false;
+    popScope();
+    return;
   }
   // sawBreak 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
   bool savedSawBreak = sawBreak;
@@ -443,10 +505,10 @@ void Compiler::onVisitWhileStmt(AST::WhileStmt* s) {
   // 无条件 while 时它会写成 code[0] = len(code)，把第一条指令改成跳转目标。
   if (caseGotoEndPos >= 0)
     patchIndex(caseGotoEndPos, codeSize());
-  // while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才永不
-  // 退出。`while true { }` 带条件，按可退出处理（用户明确要求），不视同
-  // `while { }`。
-  stmtTerminates = (s->cond == nullptr) && !bodySawBreak;
+  // while 的终止性：无条件（含折叠为真的常量条件，OQ-2）且体不含本层
+  // break 的真死循环才永不退出。
+  stmtTerminates =
+      (s->cond == nullptr || (condConst && truth)) && !bodySawBreak;
   popScope();
 }
 

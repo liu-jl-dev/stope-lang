@@ -36,6 +36,15 @@ struct ExpressionOptimizer {
   // 原地替换：调用方不可能漏掉返回值。
   void OptimizeInPlace(AST::Expr*& expr);
 
+  // 是否为「字面量常量」（§3.1 的 6 种：Null / Bool / Int / Float / String /
+  // BinArr）。条件折叠（OQ-2）用它判断 if / while 的条件能否静态求值。
+  static bool isConstExpr(const AST::Expr* e);
+
+  // 真值规则（语言契约 syntax-reference §4.5 的唯一实现）：null → 假；
+  // bool → 自身；int/float → 非零；序列 → 非空。非常量节点恒为假——
+  // 调用方必须先用 isConstExpr 判断。
+  static bool truthy(const AST::Expr* e);
+
  private:
   // ==================== 常量分类与取值 ====================
   // 只有这 6 种是「字面量常量」。Ident / Call / At / Args / Argc / Custom 都不是
@@ -72,9 +81,6 @@ struct ExpressionOptimizer {
   static void seqReserve(AST::Expr* e, size_t n);
   // 把 src 的载荷追加到 dst 末尾（两者必须同为 String 或同为 BinArr）
   static void seqAppend(AST::Expr* dst, const AST::Expr* src);
-
-  // 真值规则：null → 假；bool → 自身；int/float → 非零；序列 → 非空。
-  static bool truthy(const AST::Expr* e);
 
   // ==================== 整数运算：不检查溢出，按 64 位补码回绕 ====================
   // 全程用无符号运算（C++20 起 uint64→int64 的转换是取模，不是 UB）。

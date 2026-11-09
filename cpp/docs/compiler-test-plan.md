@@ -365,14 +365,24 @@ defer 的语义权威在 `../../docs/zh-cn/syntax-reference.md` §3.2（defer �
 | C-63 | `let n = 0; while a { defer n = 1; break; }` | 体以 break 结尾：只剩 break 出口一份结算，块尾副本与回跳 GoTo 均省略 |
 | C-68 | `defer got = msg; { let msg = 1; }` | 前向引用不冲突时合法（OQ-8）：got / msg 绑定隐式导出宿主变量（槽 1 / 2）；块内 let msg 是槽 0——两个 msg 互不相干 |
 
-### 5.11 C-64…C-67 死代码消除（2026-11-07 新增）
+### 5.11 C-64…C-75 死代码消除与字面量条件折叠（2026-11-07 新增，C-69…C-75 为 11-09 OQ-2 落地新增）
 
 **机制**：语句终止标志 `stmtTerminates`（组合式、逐语句局部计算，无 CFG）——
-`return` / `break` / `continue` 为 true；块 = 最后一条语句终止；if = else 存在
-且所有分支终止；无条件 while 且体不含本层 break（真死循环）= true；其余 false。
+`return` / `break` / `continue` 为 true；块 = 最后一条语句终止；if = 所有可达
+分支体终止且「一路为假」的落空路径被 else / 常量真接住；while = 无条件
+（含折叠为真的常量条件，OQ-2）且体不含本层 break（真死循环）= true；其余 false。
 四个消费点：①语句序列里终止语句之后的语句不再发射（defer 登记一并跳过）；
 ②while 体终止则省回跳 GoTo；③if 分支体终止则省分支尾 GoTo；
 ④程序尾 / 块尾 defer 结算在体终止时跳过（C-63 同理）。
+
+**字面量条件折叠（OQ-2，2026-11-09 落地）**：if / elif / else / while 的条件
+为字面量常量（解析期折叠后的 6 种字面量节点，`ExpressionOptimizer::isConstExpr`
+判定）时，按语言真值表（`truthy`，syntax-reference §4.5 的唯一实现）静态判定——
+常量真只发该分支（零条件、零跳转），常量假整支（while 则整环）消除；
+`while true` 折叠为无条件循环，其后语句按真死循环消除（C-67 的豁免就此取消）。
+链上遇到非常量条件才走普通发射路径，其后不再折。判定在**编译器层**：
+AST 结构不变（golden 的 SHAPE 不变），只有产物字节变。折叠是纯局部静态判定，
+无数据流——变量条件一律照常发射。
 
 判定依据是**语言语义**（控制流到不了那里），对执行器的唯一要求 = 忠实实现
 Program 编码契约；宿主函数 / 自定义指令不改变控制流是既有前提（defer 拼接
@@ -384,17 +394,20 @@ Program 编码契约；宿主函数 / 自定义指令不改变控制流是既有
 | C-64 | `let n = 0; while a { defer n = 1; if b { break; } }` | 多出口各拼一份（体不终止）：块尾一份（回跳 GoTo 5 前）+ break 出口一份（GoTo 27 前），对应 V-40 的 2 |
 | C-65 | `{ return 1; } return 2;` | 终止语句之后的语句不发射；死代码的常量 2 也不进池 |
 | C-66 | `while { } a = 1;` | 真死循环后的语句不发射，产物只剩 `GoTo(0)` |
-| C-67 | `while true { } a = 1;` | **待重定**：现锁「按可退出处理」的豁免行为；豁免的取消随字面量条件折叠（OQ-2，未定夺）一并定夺，落地时改为锁折叠产物 |
+| C-67 | `while true { } a = 1;` | 折叠为无条件循环（OQ-2）：产物 `GoTo(0)`，其后语句按真死循环消除——与 C-66 同形 |
+| C-69 | `if true { a = 1; }` | 常量真只发分支体，零条件零跳转 |
+| C-70 | `if false { defer a = 1; } b = 2;` | 整支消除：体不编译（a 不占槽位）、defer 不登记；其后的 b 照常发射 |
+| C-71 | `if x { a = 1; } elif true { b = 2; } else { c = 3; }` | 链上折叠：非常量打头照常发射，常量真的 elif 只发体（省第二组 If/GoTo），else 不可达；elif 假路径跳到体开头 |
+| C-72 | `if false { a = 1; } elif false { b = 2; } else { c = 3; }` | 全常量假 + else：只发 else 体 |
+| C-73 | `while false { defer a = 1; } b = 2;` | 整环消除：体不编译（defer 不登记），其后的 b 照常 |
+| C-74 | `if 1 < 2 { a = 1; } b = 2;`（`fold=true`） | 解析期折叠出的常量条件同样命中；挂具默认关折叠（编译器测试要在未折叠 AST 上跑），此用例显式打开 |
+| C-75 | `while true { break; } a = 1;` | 折叠为真但有 break：不算死循环，其后的语句照常；体终止故无回跳 |
 
-**候选优化（未定夺，OQ-2）**：if / elif / else / while 的**字面量条件折叠**——
-条件为字面量时按语言真值表静态判定，常量真只发该分支、常量假整支（while 则
-整环）消除；`while true` 折叠为无条件循环，不再豁免（C-67 归入此项）。若定夺
-落地，C-67 重写，并连同 C-64…C-66 与 golden 一并同步。登记处见
+**golden 已同步（2026-11-09）**：golden.txt 重生成至 224 条——新增 **CF-01…CF-08**
+字面量条件折叠用例（见 docs/zh-cn/compiler-test-plan.md §4.11），SHAPE 保持
+完整 if / while AST（折叠在编译器层，解析器不动）。八份实现的测试全部消费
+同一份数据。跨实现待定夺 / 未落地项的总登记处见
 [open-questions.md](../../docs/zh-cn/open-questions.md)。
-
-**golden 已同步（2026-11-08）**：golden.txt 重生成至 216 条——CM-44 / CM-51 /
-CM-52 / CM-53 的 DCE 差异消除，并新增 **DF-01…DF-14** defer 用例（见
-docs/zh-cn/compiler-test-plan.md §4.10）。八份实现的测试全部消费同一份数据。
 
 ---
 
@@ -402,8 +415,8 @@ docs/zh-cn/compiler-test-plan.md §4.10）。八份实现的测试全部消费�
 
 | 口径 | 当前值 | 验收线 |
 | --- | --- | --- |
-| 用例数 | 69 | — |
-| 断言数 | 123 | 全部通过 |
+| 用例数 | 76 | — |
+| 断言数 | 130 | 全部通过 |
 | `Opcode` 覆盖 | 33/33 | **必须保持 33/33**。测试里统计见过的 opcode，缺哪个会打印名字 |
 | `AST::NodeType` 产生路径 | 26 个可编译节点全覆盖 | — |
 | 错误路径 | 7 类 error + 6 类错误信息全覆盖 | — |

@@ -715,10 +715,50 @@ void runCompilerTests() {
     auto r = compileSrc(u"while { } a = 1;");
     expectCode(r, "GoTo(0)", "C-66");
   }
-  {  // C-67 `while true { }` 带条件，按可退出处理，不视同 `while { }`
-     //   —— 其后的语句照常发射（用户明确要求的豁免）
+  {  // C-67 字面量条件折叠（OQ-2）：while true 折叠为无条件循环，其后
+     //   语句按真死循环消除——产物与 C-66 一致
     auto r = compileSrc(u"while true { } a = 1;");
-    expectCode(r, "PushTrue If(5) GoTo(0) PushId(0) PushInt(0) Assign", "C-67");
+    expectCode(r, "GoTo(0)", "C-67");
+  }
+  {  // C-69 if true：只发该分支，零条件、零跳转指令
+    auto r = compileSrc(u"if true { a = 1; }");
+    expectCode(r, "PushId(0) PushInt(0) Assign", "C-69");
+  }
+  {  // C-70 if false：整支消除，其后的语句照常；分支内的 defer 不登记
+     //   （程序尾没有 defer 结算副本）。死分支从不编译——其中的名字 a
+     //   不占槽位，b 就是 0 号
+    auto r = compileSrc(u"if false { defer a = 1; } b = 2;");
+    expectCode(r, "PushId(0) PushInt(0) Assign", "C-70");
+  }
+  {  // C-71 链上折叠：非常量打头，常量真的 elif 只发体——第二组 If/GoTo
+     //   与 else 都消除；elif 的假路径跳到体开头
+    auto r = compileSrc(
+        u"if x { a = 1; } elif true { b = 2; } else { c = 3; }");
+    expectCode(r,
+               "PushValue(0) If(11) PushId(1) PushInt(0) Assign GoTo(16) "
+               "PushId(2) PushInt(1) Assign",
+               "C-71");
+  }
+  {  // C-72 全常量假 + else：只发 else 体
+    auto r = compileSrc(
+        u"if false { a = 1; } elif false { b = 2; } else { c = 3; }");
+    expectCode(r, "PushId(0) PushInt(0) Assign", "C-72");
+  }
+  {  // C-73 while false：整环消除——体（含 defer）不编译，其后的语句照常
+    auto r = compileSrc(u"while false { defer a = 1; } b = 2;");
+    expectCode(r, "PushId(0) PushInt(0) Assign", "C-73");
+  }
+  {  // C-74 解析期折叠出的常量条件同样命中：fold=true 时 1 < 2 在 AST 里
+     //   已是 Bool(true)。挂具默认关折叠（编译器测试要在未折叠 AST 上跑），
+     //   这里显式打开
+    auto r = compileSrc(u"if 1 < 2 { a = 1; } b = 2;", nullptr, /*fold=*/true);
+    expectCode(r,
+               "PushId(0) PushInt(0) Assign PushId(1) PushInt(1) Assign",
+               "C-74");
+  }
+  {  // C-75 折叠为真但有 break：不算死循环，其后的语句照常；体终止故无回跳
+    auto r = compileSrc(u"while true { break; } a = 1;");
+    expectCode(r, "GoTo(2) PushId(0) PushInt(0) Assign", "C-75");
   }
 }
 

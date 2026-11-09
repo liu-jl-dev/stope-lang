@@ -331,6 +331,26 @@ ints=[1,2]  floats=[1.5]  strs=[s]  binarrs=[[0f]]  exports=[a:0,b:1]
 | DF-13 | `let x = 0; defer x = 5; return x;` | 出口次序硬锁：结算（`x=5`）在 `PushValue`（求值）之前 |
 | DF-14 | `defer { defer a = 1; }` | 载荷内再登记：内层在载荷 scope 结束时就地结算 |
 
+### 4.11 CF-01…CF-08 字面量条件折叠（2026-11-09 新增，OQ-2 落地）
+
+真值权威：[syntax-reference.md §4.5](syntax-reference.md)。条件为字面量常量时按
+真值表静态判定——常量真只发该分支，常量假整支（while 则整环）消除；
+`while true` 折叠为无条件循环，其后语句按真死循环消除。判定在**编译器层**：
+SHAPE 保持完整 if / while AST，只有产物字节变；死分支不编译，其中的名字
+不占槽位、defer 不登记。CF-07 / CF-08 的 `FOLD=1`：解析期折叠出的常量条件
+同样命中。
+
+| ID | 输入 | 锁什么 |
+| --- | --- | --- |
+| CF-01 | `if true { a = 1; }` | 常量真只发分支体，零条件零跳转 |
+| CF-02 | `if false { a = 1; } b = 2;` | 整支消除：a 不占槽位，b 照常发射 |
+| CF-03 | `if x { a = 1; } elif true { b = 2; } else { c = 3; }` | 链上折叠：非常量打头照常发射，常量真的 elif 只发体，else 不可达 |
+| CF-04 | `while true { } a = 1;` | 折叠为无条件循环 `GoTo(0)`，其后语句按真死循环消除 |
+| CF-05 | `while false { a = 1; } b = 2;` | 整环消除，b 照常发射 |
+| CF-06 | `while true { break; } a = 1;` | 折叠为真但有 break：不算死循环，体终止无回跳 |
+| CF-07 | `if 1 < 2 { a = 1; } b = 2;`（`FOLD=1`） | 解析期折叠出的常量条件同样命中 |
+| CF-08 | `while 0.0 { a = 1; } b = 2;`（`FOLD=1`） | 常量假（浮点零）整环消除 |
+
 ---
 
 ## 5. 验收标准

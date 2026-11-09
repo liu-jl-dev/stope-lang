@@ -119,12 +119,14 @@ struct Compiler : public ASTVisitor {
   // 当前拼接的 defer 语句行号（冻结绑定报错归到 defer 那一行）。
   int deferErrLine = -1;
   // 语句终止性（组合式、逐语句局部计算，无 CFG）：return / break /
-  // continue 为 true；块 = 最后一条语句终止；if = else 存在且所有分支终止；
-  // 无条件 while 且体不含本层 break（死循环）= true；其余语句 false。
-  // 消费点：①语句序列里终止语句之后的语句不再发射（死代码消除）；
-  // ②while 体终止则省回跳 GoTo；③if 分支体终止则省分支尾 GoTo；
-  // ④程序尾 / 块尾 defer 结算同理跳过（终止后无可达路径）。
-  // 注意 `while true { }` 带条件，按可退出处理，不视同 `while { }`。
+  // continue 为 true；块 = 最后一条语句终止；if = 所有可达分支体终止且
+  // 「一路为假」的落空路径被 else / 常量真接住（OQ-2 折叠后，被消除的
+  // 分支不可达，不参与判断）；while = 无条件（含折叠为真的常量条件）且
+  // 体不含本层 break（死循环）= true；其余语句 false。
+  // 消费点：①语句序列里终止语句之后的语句不再发射（死代码消除，含折叠
+  // 掉的分支——其中的 defer 不登记）；②while 体终止则省回跳 GoTo；
+  // ③if 分支体终止则省分支尾 GoTo；④程序尾 / 块尾 defer 结算同理跳过
+  // （终止后无可达路径）。
   bool stmtTerminates = false;
   // 当前（最内层）while 的循环体里是否出现过绑定到它的 break。进入循环
   // 前保存并清零、结束后恢复——嵌套循环各算各的，只服务死循环判定。

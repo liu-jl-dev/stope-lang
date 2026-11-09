@@ -5,7 +5,7 @@ using System.Text;
 namespace Stope.Tests;
 
 /// <summary>
-/// 语法 + 编译器：<c>golden.txt</c>（216 条，<c>cpp/tools/golden.cpp</c> dump）+ 嵌套深度上限。
+/// 语法 + 编译器：<c>golden.txt</c>（224 条，<c>cpp/tools/golden.cpp</c> dump）+ 嵌套深度上限。
 /// <para>
 /// 每条用例断言九件事：AST 形状串、语句行号序列、语法 / 词法错误条数与文案、
 /// 单行产物（<see cref="Data.DumpProgram"/>）、编译状态、编译错误。期望值不手写 ——
@@ -24,7 +24,7 @@ public static class ParserTests
             rep.AddFail("语法", "golden.txt 一条都没读到");
             return;
         }
-        rep.CheckInt("golden.txt", "用例数", 216, cases.Count);
+        rep.CheckInt("golden.txt", "用例数", 224, cases.Count);
         foreach (var rec in cases)
         {
             string id = rec.GetValueOrDefault("ID", "");

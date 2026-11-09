@@ -102,6 +102,7 @@ local function truthy(x)
 end
 
 expr_optim.truthy = truthy
+expr_optim.kind_of = kind_of -- 供编译器的常量条件折叠（OQ-2）复用
 
 -- ==================== 造节点 / 取负 / 串重复 ====================
 

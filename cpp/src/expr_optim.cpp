@@ -130,6 +130,10 @@ void ExpressionOptimizer::seqAppend(AST::Expr* dst, const AST::Expr* src) {
   d.insert(d.end(), s.begin(), s.end());
 }
 
+bool ExpressionOptimizer::isConstExpr(const AST::Expr* e) {
+  return isConst(kindOf(e));
+}
+
 bool ExpressionOptimizer::truthy(const AST::Expr* e) {
   if (e->type == AST::NodeType::NullExpr)
     return false;

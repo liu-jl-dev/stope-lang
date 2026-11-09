@@ -26,6 +26,7 @@ import { Result } from './common.js'
 import { ASTVisitor } from './ast_visitor.js'
 import { NodeType } from './ast.js'
 import { clearProgram } from './program.js'
+import { ConstKind, kindOf, truthy } from './expr_optim.js'
 
 // ====================================================================
 // 作用域
@@ -198,6 +199,14 @@ function sameConst(a, b) {
   return a === b
 }
 
+// OQ-2：条件是否为「解析期折叠后的字面量常量」；是则按语言真值表给出
+// 静态真值，否则返回 null。truthy（expr_optim）是真值表的单一实现，
+// 这里只补常量判断。与 cpp/src/compiler.cpp 的 constCondTruth 一致。
+function constCondTruth(e) {
+  if (kindOf(e) === ConstKind.NotConst) return null
+  return truthy(e)
+}
+
 class Compiler extends ASTVisitor {
   constructor(custom = null) {
     super()
@@ -215,12 +224,14 @@ class Compiler extends ASTVisitor {
     this.deferOrderFloor = -1
     this.deferErrLine = -1
     // 语句终止性（组合式、逐语句局部计算，无 CFG）：return / break /
-    // continue 为 true；块 = 最后一条语句终止；if = else 存在且所有分支终止；
-    // 无条件 while 且体不含本层 break（死循环）= true；其余语句 false。
-    // 消费点：①语句序列里终止语句之后的语句不再发射（死代码消除）；
-    // ②while 体终止则省回跳 GoTo；③if 分支体终止则省分支尾 GoTo；
-    // ④程序尾 / 块尾 defer 结算同理跳过（终止后无可达路径）。
-    // 注意 `while true { }` 带条件，按可退出处理，不视同 `while { }`。
+    // continue 为 true；块 = 最后一条语句终止；if = 所有可达分支体终止且
+    // 「一路为假」的落空路径被 else / 常量真接住（OQ-2 折叠后，被消除的
+    // 分支不可达，不参与判断）；while = 无条件（含折叠为真的常量条件）且
+    // 体不含本层 break（死循环）= true；其余语句 false。
+    // 消费点：①语句序列里终止语句之后的语句不再发射（死代码消除，含折叠
+    // 掉的分支——其中的 defer 不登记）；②while 体终止则省回跳 GoTo；
+    // ③if 分支体终止则省分支尾 GoTo；④程序尾 / 块尾 defer 结算同理跳过
+    // （终止后无可达路径）。
     this.stmtTerminates = false
     // 当前（最内层）while 的循环体里是否出现过绑定到它的 break。进入循环
     // 前保存并清零、结束后恢复——嵌套循环各算各的，只服务死循环判定。
@@ -521,54 +532,110 @@ class Compiler extends ASTVisitor {
   }
   onVisitIfStmt(s) {
     if (s.cond === null) return
+    // OQ-2（2026-11-09 落地）：字面量条件折叠。条件是常量字面量时按真值表
+    // 静态判定——常量真只发该分支（零条件、零跳转指令），常量假整支消除
+    // （体不访问，其中的 defer 不登记，与死代码消除一致）；链上遇到非常量
+    // 条件才走普通发射路径，其后不再折（非常量打头时保守：嵌套折叠的收益
+    // 不抵多路回填的复杂度）。常量真的分支体是链的最后一段发射——体走完
+    // 就到链尾，不需要出口 GoTo。
     const gotoEndIndices = []
-    let allBranchesTerminate = true
-    let hasElse = false
-    this.visit(s.cond)
-    this.emitOp(Opcode.If)
-    this.stackSizeMgr.dec()
-    let lastIfPos = this.emitPlaceholder() // 条件为假时跳到这里
-    this.visitBodyAsBlock(s.firstProg)
-    let branchTerm = this.stmtTerminates
-    allBranchesTerminate = allBranchesTerminate && branchTerm
-    if (!branchTerm) {
-      // 分支走完会落到这里，需要跳出整个 if；终止则死代码
-      this.emitOp(Opcode.GoTo)
-      gotoEndIndices.push(this.emitPlaceholder())
+    let pendingFalse = -1 // 上一个「条件为假」占位（-1 = 无）
+    let allBodiesTerminate = true
+    let anyBodyEmitted = false
+    let fallthroughResolved = false // 「一路为假」的落空路径被 else / 常量真接住
+    let chainEnded = false // 常量真之后整条链不可达
+
+    const visitBranch = (prog) => {
+      this.visitBodyAsBlock(prog)
+      const t = this.stmtTerminates
+      allBodiesTerminate = allBodiesTerminate && t
+      anyBodyEmitted = true
+      return t
     }
-    this.patchIndex(lastIfPos, this.codeSize())
-    for (const ei of s.elifs) {
-      if (ei.cond === null) continue
-      this.visit(ei.cond)
+    const closePendingFalse = () => {
+      if (pendingFalse >= 0) {
+        this.patchIndex(pendingFalse, this.codeSize())
+        pendingFalse = -1
+      }
+    }
+
+    let truth = constCondTruth(s.cond)
+    if (truth !== null) {
+      if (truth) {
+        // 常量真：整条链只剩这一个分支体
+        visitBranch(s.firstProg)
+        fallthroughResolved = true
+        chainEnded = true
+      }
+      // 常量假：跳过，看 elifs / else
+    } else {
+      // 非常量：普通发射
+      this.visit(s.cond)
       this.emitOp(Opcode.If)
       this.stackSizeMgr.dec()
-      lastIfPos = this.emitPlaceholder()
-      this.visitBodyAsBlock(ei.prog)
-      branchTerm = this.stmtTerminates
-      allBranchesTerminate = allBranchesTerminate && branchTerm
-      if (!branchTerm) {
+      pendingFalse = this.emitPlaceholder()
+      if (!visitBranch(s.firstProg)) {
         this.emitOp(Opcode.GoTo)
         gotoEndIndices.push(this.emitPlaceholder())
       }
-      this.patchIndex(lastIfPos, this.codeSize())
     }
-    hasElse = s.elseProg !== null
-    if (hasElse) this.visitBodyAsBlock(s.elseProg)
-    else allBranchesTerminate = false // 无 else：条件全假时落到 if 之后
+    for (const ei of s.elifs) {
+      if (chainEnded || ei.cond === null) continue
+      truth = constCondTruth(ei.cond)
+      if (truth !== null) {
+        if (truth) {
+          // 常量真：之前的假路径在这里进体，链到此为止
+          closePendingFalse()
+          visitBranch(ei.prog)
+          fallthroughResolved = true
+          chainEnded = true // 其后的 elif / else 不可达
+        }
+        // 常量假：跳过该分支（pendingFalse 留给下一个真分支 / else 回填）
+        continue
+      }
+      closePendingFalse() // 假路径从上一个占位跳到本分支条件处
+      this.visit(ei.cond)
+      this.emitOp(Opcode.If)
+      this.stackSizeMgr.dec()
+      pendingFalse = this.emitPlaceholder()
+      if (!visitBranch(ei.prog)) {
+        this.emitOp(Opcode.GoTo)
+        gotoEndIndices.push(this.emitPlaceholder())
+      }
+    }
+    if (!chainEnded && s.elseProg) {
+      closePendingFalse()
+      visitBranch(s.elseProg)
+      fallthroughResolved = true
+    }
+    if (pendingFalse >= 0) this.patchIndex(pendingFalse, this.codeSize()) // 链以非常量条件结尾且无 else：假路径跳到链尾
     for (const pos of gotoEndIndices) this.patchIndex(pos, this.codeSize())
-    // if 语句的终止性：else 存在且所有分支终止（组合式，逐分支局部判断）
-    this.stmtTerminates = hasElse && allBranchesTerminate
+    // if 语句的终止性：所有可达分支体终止，且「一路为假」的落空路径被
+    // else / 常量真接住——否则那条路径直接落到 if 之后，不算终止。
+    this.stmtTerminates = anyBodyEmitted && allBodiesTerminate && fallthroughResolved
   }
   onVisitWhileStmt(s) {
+    // OQ-2：常量条件折叠——常量真折叠为无条件循环（其后语句按真死循环
+    // 消除），常量假整环消除（体不访问，其中的 defer 不登记）。
+    const truth = constCondTruth(s.cond)
+    const condConst = truth !== null
+    const eliminate = condConst && !truth
+
     const ws = this.pushWhileScope()
     ws.startIndex = this.codeSize() // continue 回到这里
     let caseGotoEndPos = -1
-    if (s.cond !== null) {
-      // while cond { } —— cond 可省
+    if (s.cond !== null && !condConst) {
+      // 非常量条件才发射判断（while cond { } —— cond 可省）
       this.visit(s.cond)
       this.emitOp(Opcode.If)
       this.stackSizeMgr.dec()
       caseGotoEndPos = this.emitPlaceholder()
+    }
+    if (eliminate) {
+      // 常量假：体永不执行，整环消除（break/continue 无可达）
+      this.stmtTerminates = false
+      this.popScope()
+      return
     }
     // sawBreak 按 while 配对保存/恢复：嵌套循环里的 break 只算最内层的
     const savedSawBreak = this.sawBreak
@@ -583,12 +650,12 @@ class Compiler extends ASTVisitor {
       this.emitIndex(ws.startIndex)
     }
     for (const pos of ws.breakIndices) this.patchIndex(pos, this.codeSize())
-    // 条件可省。无条件时必须跳过回填，否则会把第 0 条指令改成跳转目标。
+    // [偏离参考实现 4] 条件可省。参考实现这里无条件回填 case_goto_end_idx，
+    // 无条件 while 时它会写成 code[0] = len(code)，把第一条指令改成跳转目标。
     if (caseGotoEndPos >= 0) this.patchIndex(caseGotoEndPos, this.codeSize())
-    // while 的终止性：只有「无条件 + 体不含本层 break」的真死循环才永不
-    // 退出。`while true { }` 带条件，按可退出处理（用户明确要求），不视同
-    // `while { }`。
-    this.stmtTerminates = s.cond === null && !bodySawBreak
+    // while 的终止性：无条件（含折叠为真的常量条件，OQ-2）且体不含本层
+    // break 的真死循环才永不退出。
+    this.stmtTerminates = (s.cond === null || (condConst && truth)) && !bodySawBreak
     this.popScope()
   }
   onVisitAssignStmt(s) {

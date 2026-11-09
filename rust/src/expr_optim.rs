@@ -42,6 +42,12 @@ fn kind_of(e: &Expr) -> Kind {
     }
 }
 
+/// OQ-2：条件是否为「解析期折叠后的字面量常量」（Null / Bool / Int / Float /
+/// String / BinArr 六种）。对齐 C++ `ExpressionOptimizer::isConstExpr`。
+pub fn is_const_expr(e: &Expr) -> bool {
+    is_const(kind_of(e))
+}
+
 fn is_const(k: Kind) -> bool {
     k != Kind::NotConst
 }
@@ -105,7 +111,9 @@ fn seq_size(e: &Expr) -> i64 {
     }
 }
 
-fn truthy(e: &Expr) -> bool {
+/// 语言真值表（单一实现）：null 假；整数 / 浮点非零真；字符串 / 二进制数组
+/// 非空真。对齐 C++ `ExpressionOptimizer::truthy`。
+pub fn truthy(e: &Expr) -> bool {
     match e {
         Expr::Null(_) => false,
         Expr::Bool(_, v) => *v,
