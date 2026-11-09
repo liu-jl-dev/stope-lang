@@ -1,6 +1,6 @@
 {
   "name": "@liu-jl-dev/stope",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Stope language implementation for Node.js (zero dependencies)",
   "license": "MIT",
   "type": "module",

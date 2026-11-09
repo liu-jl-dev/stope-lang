@@ -56,7 +56,7 @@ python tools/check_version.py          # 全部一致才返回 0
 python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 ```
 
-## [Unreleased]
+## [0.4.0] - 2026-11-09
 
 ### 新增
 

@@ -6,7 +6,7 @@
 
 local stope = {}
 
-stope.version = "0.2.0" -- 版本落点之一，改这里要一并改其余各处
+stope.version = "0.4.0" -- 版本落点之一，改这里要一并改其余各处
 
 stope.common = require("stope.common")
 stope.utf = require("stope.utf")
