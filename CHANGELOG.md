@@ -64,7 +64,7 @@ python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
   （块尾 / `break` / `continue` / `return` / 程序结束）结算。**零新指令**——
   编译期把载荷拼接到每个出口，次序为「结算 → PushValue → Return」；同块
   后进先出，内层块先于外层块；读变量当前值；名字绑定冻结在 defer 语句处
-  （引用后文声明的名字报错）。语义权威：[syntax-reference.md 的 defer 小节](docs/zh-cn/syntax-reference.md)。
+  （引用后文声明的名字绑定宿主变量，不报错）。语义权威：[syntax-reference.md 的 defer 小节](docs/zh-cn/syntax-reference.md)。
 - **语法教程** [docs/zh-cn/syntax-tutorial.md](docs/zh-cn/syntax-tutorial.md)：
   由易到难九讲，每个示例配真实反汇编并逐行解读（15 个反汇编块由探针真实
   生成并逐块校验，非手写）。
@@ -84,8 +84,8 @@ python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
   零变化，产物更小；死代码里的隐式导出不再登记、编译错误不再上报。
   `while { }`（无条件且无 break）仍是唯一被认定的死循环；字面量条件折叠
   （`if true` / `while 0.0` 等）**未定夺**（OQ-2）。
-- **golden 重生成（201 → 215 条）**：CM-44 / 51 / 52 / 53 随死代码消除更新；
-  新增 DF-01…DF-14 defer 用例。八份实现的测试全部逐字节通过。
+- **golden 重生成（201 → 216 条）**：CM-44 / 51 / 52 / 53 随死代码消除更新；
+  新增 DF-01…DF-15 defer 用例。八份实现的测试全部逐字节通过。
 - `defer` 成为关键字（占用原可用作标识符的名字——0.x 次版本兼容承诺内）。
 
 ## [0.3.1] - 2026-11-07
