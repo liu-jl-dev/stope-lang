@@ -80,6 +80,63 @@ lua/
   词法器在 UTF-8 字节上扫（结构字符都是 ASCII），字符串字面量内容反转义后转成
   UTF-16LE 内部表示；输出时再转回 UTF-8。
 
+## 在 stope 中使用 nevext 的字符串
+
+[nevext](../../nevext)（`E:\lib\nevext`）是与 stope 同作者的解析库，两者的转义表自
+stope **0.5.0** 起完全一致（classic 九项 + `\uXXXX`），但**字符串的表示形态不同**，
+跨界使用时要过一次转换：
+
+| | nevext（Lua 版） | stope（本实现） |
+| --- | --- | --- |
+| 表示 | UTF-8 **裸字节串**（透传，无表示层） | UTF-16LE 字节串，**必须**经 `basic_vm.str_value` 包装 |
+| 转义展开 | 语法层，可替换（`escape_func`） | 词法层，内置不可替换 |
+| 编码假设 | 不校验，字节即字节 | `utf8_to_utf16` 假定 UTF-8，非法字节按 latin-1 兜底 |
+
+### 两个方向的转换
+
+```lua
+local stope = require("stope")
+local vm, utf = stope.basic_vm, stope.utf
+
+-- nevext 字符串（UTF-8 字节串） -> Stope String 值：
+local stope_str = vm.str_value(utf.utf8_to_utf16(nevext_str))
+
+-- Stope String 值（VM 返回值 / exports / 常量）-> UTF-8 字节串：
+local bytes = utf.utf16_to_utf8(vm.str_bytes(stope_str))
+-- 先判断是不是 String 值：vm.is_str_value(v)；BinArr 是裸 Lua string，不走这里。
+```
+
+### 完整例子（nevext 解析 → 作为 Stope 值使用 → 取回）
+
+```lua
+local nevext = require("nevext")           -- E:\lib\nevext\lua\nevext\nevext.lua
+local stope  = require("stope")
+
+-- 1) nevext 侧：解析出 UTF-8 字节串
+local lx = nevext.Lexer.new('greet "hello"')
+local res = nevext.Parser.new(lx):parse_program()
+local text = res.val[1].strings[2]         -- "hello"（UTF-8 字节串）
+
+-- 2) 转成 Stope String 值：塞给宿主函数参数 / exports 都行
+local s = stope.basic_vm.str_value(stope.utf.utf8_to_utf16(text))
+
+-- 3) VM 里跑完后取回，转回 UTF-8 交还给 nevext 或宿主
+local back = stope.utf.utf16_to_utf8(stope.basic_vm.str_bytes(s))
+```
+
+### 注意点
+
+- **不要直接把 nevext 的字符串当 Stope 值用**：裸字节串在本实现的 VM 里是
+  BinArr 的表示（At 按字节、与 String 跨类型相等恒为假），少了 `str_value`
+  包装会把语义悄悄变成二进制数组。
+- **编码必须真是 UTF-8**：nevext 不校验字节，`utf8_to_utf16` 对非法序列按
+  latin-1 逐字节兜底（一个坏字节变成一个码元），不会报错但内容已变形。
+- **代理区码点**（`\uD800`–`\uDFFF`）：stope 原样落成 lone surrogate 码元；
+  跨库往返走 `utf8_to_utf16` / `utf16_to_utf8`（CESU-8 / WTF-8 形态）是保值的，
+  但 nevext 各语言版对代理区码点的接受口径不一，跨实现搬运前先看对方文档。
+- **开销**：转换是 O(n) 一次性分配，VM 内部全程不再转换；只有同一份串反复
+  跨界才值得缓存转换结果，一次性使用可忽略。
+
 ## 测试
 
 ```
