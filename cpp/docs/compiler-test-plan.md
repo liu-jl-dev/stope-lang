@@ -83,7 +83,7 @@ struct Compiler : public ASTVisitor {            // 基类见 ast_visitor.hpp
 | `Return` | 是 | 返回值个数 |
 | 自定义指令 | 仅变长时有 | 参数个数 |
 
-判断依据是 `gdscript/addons/stope/opcode.gd` 的 `StopeOpcode.has_a_param`；C++ 多出的 `PushBinArr`
+判断依据是 `gdscript/addons/stope/opcode.gd` 的 `Stope.Opcode.has_a_param`（`Stope` 为门面 preload，见 api-reference §0）；C++ 多出的 `PushBinArr`
 让后面所有阈值整体后移一位（见测试里的 `opHasParam`）。
 
 #### `PushId` 与 `PushValue` 的分工（2026-10-22 起）

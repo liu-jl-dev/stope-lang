@@ -91,7 +91,7 @@ isStringLiteral(t)    isBinArrLiteral(t)
 ```
 
 C++ 侧直接用 `TokenType::Integer/Float/String/BinArr`；
-GDScript 侧由 `StopeLexer.Token.Type.Integer/Float/String/BinArr` 提供（2026-10-18 整改新增，见 §7 GD-L-01）。
+GDScript 侧由 `Stope.Lexer.Token.Type.Integer/Float/String/BinArr` 提供（2026-10-18 整改新增，见 §7 GD-L-01；`Stope` 为门面 preload，见 api-reference §0）。
 
 ### 2.3 Token 种类清单（47 项，顺序不重要，集合必须一致）
 
@@ -114,9 +114,9 @@ null false true args argc export`。大小写敏感，且**关键字 > 自定义
 
 | 抽象 | C++ | GDScript |
 | --- | --- | --- |
-| 取下一个 token | `Lexer::NextToken(Token&, const CustomOpcodeConfig*)` | `StopeLexer.Lexer.next_token(custom) -> StopeLexer.Token` |
-| 错误列表 | `Lexer::errors : vector<string>` | `StopeLexer.Lexer.errors : Array[String]` |
-| 当前行号 | `Lexer::line : int` | `StopeLexer.Lexer.line : int` |
+| 取下一个 token | `Lexer::NextToken(Token&, const CustomOpcodeConfig*)` | `Stope.Lexer.Lexer.next_token(custom) -> Stope.Lexer.Token` |
+| 错误列表 | `Lexer::errors : vector<string>` | `Stope.Lexer.Lexer.errors : Array[String]` |
+| 当前行号 | `Lexer::line : int` | `Stope.Lexer.Lexer.line : int` |
 | Token 字段 | `type / line / lexeme / parsed / numberValue` | `type / line / literal / parsed / int_value / float_value`（`literal` 对应 `lexeme`，数值按整 / 浮分两个字段） |
 
 ---

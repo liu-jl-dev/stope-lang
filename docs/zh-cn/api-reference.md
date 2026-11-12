@@ -12,7 +12,7 @@
 | 实现 | 语言核心 | STML | BasicVM |
 | --- | --- | --- | --- |
 | C++ | 命名空间 `Stope::`（声明在 `include/stope/`、实现编译为静态库；仅 `basic_vm.hpp` / `debug.hpp` 带内联函数体） | `Stope::STML::` | `Stope::BasicVM::` |
-| GDScript | `StopeLexer` / `StopeParser` / `StopeCompiler` / `StopeProgram`…（全局类，插件 `addons/stope/`） | `STMLLexer` / `STMLParser` / `STML` | `StopeBasicVM` |
+| GDScript | 门面 `Stope = preload("res://addons/stope/stope.gd")`：`Stope.Lexer` / `Stope.Parser` / `Stope.Compiler` / `Stope.Program`…（**不注册全局类**，插件 `addons/stope/`） | `Stope.STMLLexer` / `Stope.STMLParser` / `Stope.STML` | `Stope.BasicVM` |
 | Node.js | `src/*.js` ESM 具名导出 | `stml_lexer.js` / `stml_parser.js` / `stml.js` | `basic_vm.js`（`BasicVM.State` / `Api` / `Arguments`） |
 | C# | `namespace Stope` | `namespace Stope.Stml`（`Stml.Lexer` / `Stml.Parser` / `Stml.Element`） | `namespace Stope`（`State` / `Api` / `Arguments`） |
 | Python | `stope.lexer` / `stope.parser` / …（`stope` 聚合导出） | `stope.stml_lexer` / `stope.stml_parser` / `stope.stml` | `stope.basic_vm` |
@@ -24,7 +24,7 @@
 
 | 成员 | 对照 |
 | --- | --- |
-| 类型 | `Stope::Lexer` · `StopeLexer.Lexer` · `Lexer` · `Stope.Lexer` · `stope.lexer.Lexer` · `stope.lexer.Lexer` · `stope.Lexer` · `stope::lexer::Lexer` |
+| 类型 | `Stope::Lexer` · `Stope.Lexer.Lexer` · `Lexer` · `Stope.Lexer` · `stope.lexer.Lexer` · `stope.lexer.Lexer` · `stope.Lexer` · `stope::lexer::Lexer` |
 | 构造 | 全部收源码字符串：`new Lexer(src)` |
 | 取下一 token | `NextToken(token, custom)`（C++ / Node.js / Go，token 与自定义指令配置作参）· `next_token(...)`（GDScript / Python / Lua / Rust / C#，返回或填充，见各自 usage） |
 | 起始行号 | 公有字段 `line`（C++ / GDScript / Node.js / Python / Lua / Go）· C# 属性 `Line`（可写）· Rust `set_line()` |
@@ -35,7 +35,7 @@
 
 | 成员 | 对照 |
 | --- | --- |
-| 类型 | `Stope::Parser` · `StopeParser.Parser` · `Parser` · `Stope.Parser` · `stope.parser.Parser` · `stope.parser.Parser` · `stope.Parser` · `stope::parser::Parser` |
+| 类型 | `Stope::Parser` · `Stope.Parser.Parser` · `Parser` · `Stope.Parser` · `stope.parser.Parser` · `stope.parser.Parser` · `stope.Parser` · `stope::parser::Parser` |
 | 解析整棵树 | `ParseProgram(tree)`（snake 组 `parse_program(tree)`），tree 是 `AST::Prog` / `AST.Prog` / `Prog` |
 | 嵌套深度上限 | 公有字段 `maxDepth` / `max_depth` / `MaxDepth`（默认 256，0 = 不限；Node.js 另有常量 `kDefaultMaxDepth`，C# 为 `DefaultMaxDepth`） |
 | 语法错误 | `errors` 列表，`line N: msg`；**深度超限只报一条**且中止（不级联） |
@@ -45,7 +45,7 @@
 
 | 成员 | 对照 |
 | --- | --- |
-| 类型 | `Stope::Compiler` · `StopeCompiler.Compiler` · `Compiler` · `Stope.Compiler` · `stope.compiler.Compiler` · `stope.compiler.Compiler` · `stope.Compiler` · `stope::compiler::Compiler` |
+| 类型 | `Stope::Compiler` · `Stope.Compiler.Compiler` · `Compiler` · `Stope.Compiler` · `stope.compiler.Compiler` · `stope.compiler.Compiler` · `stope.Compiler` · `stope::compiler::Compiler` |
 | 编译 | `Compile(tree, out, preExports)`（第三参可空；空名 / 重名报 `line 0`，详见 [pre-export.md](pre-export.md)） |
 | 自定义指令登记 | `CustomOpcodeConfig` 上的 `AddCustomOpcode(name, opcode, argc)`（snake 组 `add_custom_opcode`）；重名返回 `DuplicateWithBuiltinOpcode` 且不插入 |
 | 编译错误 | `errors` 列表 |
@@ -63,7 +63,7 @@ JS `Map` / Go `[]ExportEntry` / Rust `BTreeMap`…），遍历顺序不保证 �
 
 | 成员 | 对照 |
 | --- | --- |
-| 类型 | `Stope::BasicVM::State` · `StopeBasicVM.State` · `BasicVM.State` · `State` · `stope.basic_vm.State` · `stope.basic_vm.State` · `basicvm.State` · `stope::basic_vm::State` |
+| 类型 | `Stope::BasicVM::State` · `Stope.BasicVM.State` · `BasicVM.State` · `State` · `stope.basic_vm.State` · `stope.basic_vm.State` · `basicvm.State` · `stope::basic_vm::State` |
 | 绑定指令表 | `SetAPI(api)` / `set_api(api)`（GDScript / Python / Lua / Rust 为 snake） |
 | 绑定程序 | `SetProgram(program)` / `set_program(program)` —— **按 `variableNum` 开好 `variables` 槽位、`i` 归零、清 `returns` / `stack` / `errors`**（C++ 例外：宿主自己 `variables.resize(...)`，且额外要 `SetAllocator` / `SetProgramConstants`） |
 | 实参表 | `SetArguments(args)` / `set_arguments(args)` —— **可选依赖**，需要 `argc` / `args[i]` 才给 |

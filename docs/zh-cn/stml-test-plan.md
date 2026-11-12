@@ -227,7 +227,7 @@ Elem( <tag>, L<line>[, /][, @<k>[="<v>"]]...[, T="<text>"][, C=[<child> <child> 
 | 内容状态决策 | `LexerStateFunc(tag, attrs)` 回调 | 宿主 `Callable(tag, attrs) -> int`；传 `Callable()` 等价于 `nullptr` |
 | 错误 | `lx.errors` / `p.errors`，**两者不合并** | `lx.errors` / `p.errors`，同样不合并 |
 | 深度上限 | `p.maxDepth : int`（默认 256，0=不限） | `p.max_depth : int`（默认 256，0=不限） |
-| 结果枚举 | `Stope::Result::Success / Error` | `StopeResult.Success / Error`（与编译器共用同一份，见 gdscript/docs/usage.md 开头） |
+| 结果枚举 | `Stope::Result::Success / Error` | `Stope.Result.Success / Error`（与编译器共用同一份，见 gdscript/docs/usage.md 开头） |
 
 ---
 
