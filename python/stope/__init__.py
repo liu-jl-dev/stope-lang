@@ -15,7 +15,7 @@
 虚拟机只是参考实现，换一个执行器这些名字可能一个都不存在。
 """
 
-__version__ = "0.5.0"  # 版本落点之一，改这里要一并改其余各处（tools/check_version.py 负责校验）
+__version__ = "0.5.1"  # 版本落点之一，改这里要一并改其余各处（tools/check_version.py 负责校验）
 
 from . import ast as AST
 from .ast_visitor import ASTVisitor

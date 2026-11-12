@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 # 版本号共八处落点，改这里要一并改其余各处；一致性由 tools/check_version.py 校验，
 # 各落点清单与「什么时候升哪一位」见 CHANGELOG.md 的「版本规则」一节。
-project(Stope VERSION 0.5.0)
+project(Stope VERSION 0.5.1)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

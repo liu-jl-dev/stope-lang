@@ -56,6 +56,21 @@ python tools/check_version.py          # 全部一致才返回 0
 python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 ```
 
+## [0.5.1] - 2026-11-12
+
+### 修复
+
+- **GDScript 门面引用的文档同步**：57e0459 去掉全部 `class_name`、改
+  `stope.gd` 门面后，api-reference（§0 入口表与 §1/§2/§3/§5.1 类型行）、
+  lexer-test-plan（§7 与 C++↔GDScript 对照表）、stml-test-plan（结果枚举行）、
+  compiler-test-plan（`has_a_param` 判定）仍按旧全局类名（`StopeLexer` /
+  `StopeResult` 等）引用，统一改为门面 preload 访问（`Stope.Lexer.Lexer` /
+  `Stope.Result.Success` 等）。纯文档改动，零代码变更。
+- **lua/README 补「在 stope 中使用 nevext 的字符串」**：nevext 字符串是
+  UTF-8 裸字节串、stope（Lua 版）是 UTF-16LE + `str_value` 包装，补形态对照、
+  两个方向的 `stope.utf` 转换公式、nevext 解析 → Stope 值 → 取回的完整示例
+  与编码 / 代理区 / 开销注意点。
+
 ## [0.5.0] - 2026-11-12
 
 ### 新增
