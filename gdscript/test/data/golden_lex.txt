@@ -108,6 +108,12 @@ ID=LEX-S-06q	SRC="a\\'b"	TOKS=String(1)[a'b] Eof(1)	LEXEMES=0:a\\'b	ERRN=0	ERRS=
 ID=LEX-S-07	SRC="a\\qb"	TOKS=String(1)[a] Eof(1)	LEXEMES=0:a\\qb	ERRN=1	ERRS=line 1: invalid escape character. 
 ID=LEX-S-08	SRC="abc	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unclosed string literal. 
 ID=LEX-S-09	SRC="abc\\	TOKS=Invalid(1) Eof(1)	LEXEMES=	ERRN=1	ERRS=line 1: unclosed string literal. 
+ID=LEX-S-10	SRC="a\\u0041b"	TOKS=String(1)[aAb] Eof(1)	LEXEMES=0:a\\u0041b	ERRN=0	ERRS=
+ID=LEX-S-11	SRC="\\u00e9\\u00E9"	TOKS=String(1)[??] Eof(1)	LEXEMES=0:\\u00e9\\u00E9	ERRN=0	ERRS=
+ID=LEX-S-12	SRC="\\u4e2d\\u6587"	TOKS=String(1)[??] Eof(1)	LEXEMES=0:\\u4e2d\\u6587	ERRN=0	ERRS=
+ID=LEX-S-13	SRC="a\\u004"	TOKS=String(1)[a] Eof(1)	LEXEMES=0:a\\u004	ERRN=1	ERRS=line 1: invalid escape character. 
+ID=LEX-S-14	SRC="a\\u004g"	TOKS=String(1)[a] Eof(1)	LEXEMES=0:a\\u004g	ERRN=1	ERRS=line 1: invalid escape character. 
+ID=LEX-S-15	SRC="a\\u"	TOKS=String(1)[a] Eof(1)	LEXEMES=0:a\\u	ERRN=1	ERRS=line 1: invalid escape character. 
 ID=LEX-B-01	SRC=''	TOKS=BinArr(1) Eof(1)	LEXEMES=0:	ERRN=0	ERRS=
 ID=LEX-B-02	SRC='a'	TOKS=BinArr(1) Eof(1)	LEXEMES=0:a	ERRN=0	ERRS=
 ID=LEX-B-03	SRC='a' 'b'	TOKS=BinArr(1) BinArr(1) Eof(1)	LEXEMES=0:a,1:b	ERRN=0	ERRS=

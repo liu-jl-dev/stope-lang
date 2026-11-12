@@ -373,6 +373,39 @@ public sealed class Lexer
                     Error("invalid escape character. ");
                     break;
                 }
+                if (s[i] == 'u')
+                { // \uXXXX：4 位十六进制码点（大小写均可），按 UTF-16 码元原样落盘
+                    if (i + 4 >= s.Length)
+                    {
+                        Error("invalid escape character. ");
+                        break;
+                    }
+                    int cp = 0;
+                    bool hexOk = true;
+                    for (int k = 1; k <= 4; k++)
+                    {
+                        int h = s[i + k];
+                        int v =
+                            (h >= '0' && h <= '9') ? h - '0'
+                            : (h >= 'a' && h <= 'f') ? h - 'a' + 10
+                            : (h >= 'A' && h <= 'F') ? h - 'A' + 10
+                            : -1;
+                        if (v < 0)
+                        {
+                            hexOk = false;
+                            break;
+                        }
+                        cp = cp * 16 + v;
+                    }
+                    if (!hexOk)
+                    {
+                        Error("invalid escape character. ");
+                        break;
+                    }
+                    sb.Append((char)cp);
+                    i += 5;
+                    continue;
+                }
                 char? c = EscapeCharOf(s[i]);
                 if (c is null)
                 {

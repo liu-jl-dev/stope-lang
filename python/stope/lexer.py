@@ -47,6 +47,9 @@ _ESCAPE = {
     "v": "\v", "n": "\n", "f": "\f",
 }
 
+# \uXXXX 的合法十六进制位（不走 int(..., 16)，它会把 "0_41" 这种也收进去）
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+
 _KEYWORDS = {
     "idiv": TokenType.IDiv, "not": TokenType.Not,
     "and": TokenType.And, "or": TokenType.Or,
@@ -282,6 +285,13 @@ class Lexer:
                 if i >= n:  # 末尾一个孤立的 \
                     self.error("invalid escape character. ")
                     break
+                if token.lexeme[i] == "u":  # \uXXXX：4 位十六进制码点（大小写均可），对齐 nevext NevextEscape
+                    if i + 4 >= n or not all(c in _HEX_DIGITS for c in token.lexeme[i + 1 : i + 5]):
+                        self.error("invalid escape character. ")
+                        break
+                    parsed.append(chr(int(token.lexeme[i + 1 : i + 5], 16)))
+                    i += 5
+                    continue
                 c = _ESCAPE.get(token.lexeme[i])
                 if c is None:
                     self.error("invalid escape character. ")

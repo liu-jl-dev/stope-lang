@@ -60,6 +60,29 @@ var escapeMap = map[byte]byte{
 	'v': '\v', 'n': '\n', 'f': '\f',
 }
 
+// hex4Value 解析 4 位十六进制（\uXXXX 的码点部分）；含非十六进制位时 ok 为 false。
+func hex4Value(s string) (cp int, ok bool) {
+	if len(s) != 4 {
+		return 0, false
+	}
+	for i := 0; i < 4; i++ {
+		b := s[i]
+		var v byte
+		switch {
+		case '0' <= b && b <= '9':
+			v = b - '0'
+		case 'a' <= b && b <= 'f':
+			v = b - 'a' + 10
+		case 'A' <= b && b <= 'F':
+			v = b - 'A' + 10
+		default:
+			return 0, false
+		}
+		cp = cp*16 + int(v)
+	}
+	return cp, true
+}
+
 // numberBase 按字面量前缀决定基数，并给出前缀长度。
 func numberBase(s string) (base, prefixLen int) {
 	if len(s) >= 2 && s[0] == '0' {
@@ -398,6 +421,21 @@ func (lx *Lexer) escapeString(token *Token) {
 			if i >= n { // 末尾一个孤立的 \
 				lx.error("invalid escape character. ")
 				break
+			}
+			if body[i] == 'u' { // \uXXXX：4 位十六进制码点（大小写均可）
+				if i+4 >= n {
+					lx.error("invalid escape character. ")
+					break
+				}
+				cp, ok := hex4Value(body[i+1 : i+5])
+				if !ok {
+					lx.error("invalid escape character. ")
+					break
+				}
+				// 代理区码点 string(rune) 落成 U+FFFD（Go 的 rune→string 规则）
+				b.WriteString(string(rune(cp)))
+				i += 5
+				continue
 			}
 			c, ok := escapeMap[body[i]]
 			if !ok {

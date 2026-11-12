@@ -45,11 +45,11 @@ func TestGoldenLexer(t *testing.T) {
 	if len(cases) == 0 {
 		t.Fatal("golden_lex.txt 一条都没读到")
 	}
-	if len(cases) != 147 {
-		t.Errorf("golden_lex.txt 条数 = %d, want 147", len(cases))
+	if len(cases) != 153 {
+		t.Errorf("golden_lex.txt 条数 = %d, want 153", len(cases))
 	}
 	rep := NewReport(t)
-	rep.CheckInt("golden_lex.txt", "用例数", 147, len(cases))
+	rep.CheckInt("golden_lex.txt", "用例数", 153, len(cases))
 	for _, c := range cases {
 		cid := c["ID"]
 		src := unescapeLex(c["SRC"])

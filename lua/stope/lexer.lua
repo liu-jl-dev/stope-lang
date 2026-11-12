@@ -402,6 +402,20 @@ function Lexer:escape_string(tk)
                 break
             end
             local c = string.char(string.byte(lexeme, i))
+            if c == "u" then -- \uXXXX：4 位十六进制码点（大小写均可）
+                if i + 4 > n then
+                    self:error("invalid escape character. ")
+                    break
+                end
+                local hex4 = sub(lexeme, i + 1, i + 4)
+                if not hex4:match("^[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]$") then
+                    self:error("invalid escape character. ")
+                    break
+                end
+                parts[#parts + 1] = utf.utf8_encode_one(tonumber(hex4, 16))
+                i = i + 5
+                goto continue
+            end
             local mapped = ESCAPE[c]
             if mapped == nil then
                 self:error("invalid escape character. ")
@@ -413,6 +427,7 @@ function Lexer:escape_string(tk)
             parts[#parts + 1] = string.char(b)
             i = i + 1
         end
+        ::continue::
     end
     tk.parsed = utf.utf8_to_utf16(table.concat(parts))
 end

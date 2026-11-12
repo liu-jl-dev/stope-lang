@@ -88,8 +88,9 @@ func Esc(s string) string {
 	return escUnits(utf16.Encode([]rune(s)), true, false)
 }
 
-// EscLex 词法比对专用转义：比 Esc 多 \v \f、不转义引号、非 ASCII 原样保留
-//（与 python/tests/golden.py 的 esc_lex 一致）。
+// EscLex 词法比对专用转义：比 Esc 多 \v \f、不转义引号、非 ASCII 变 ?
+//（对应 C++ 侧打印用的 toUtf8 —— 只做打印映射；与 python/tests/golden.py 的
+// esc_lex 一致）。
 func EscLex(s string) string {
 	var b strings.Builder
 	for _, ch := range s {
@@ -107,7 +108,11 @@ func EscLex(s string) string {
 		case '\f':
 			b.WriteString("\\f")
 		default:
-			b.WriteRune(ch)
+			if ch < 128 {
+				b.WriteRune(ch)
+			} else {
+				b.WriteByte('?')
+			}
 		}
 	}
 	return b.String()

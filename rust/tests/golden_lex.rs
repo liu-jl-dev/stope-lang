@@ -45,7 +45,7 @@ fn one(src: &str, cfg: &std::rc::Rc<stope::CustomOpcodeConfig>) -> (String, Stri
 fn golden_lex() {
     let cfg = main_cfg();
     let cases = read_golden("golden_lex.txt", false);
-    assert_eq!(147, cases.len(), "golden_lex.txt 应为 147 条");
+    assert_eq!(153, cases.len(), "golden_lex.txt 应为 153 条");
     let mut n = 0;
     for c in &cases {
         let cid = c.get("ID").map(String::as_str).unwrap_or("");
@@ -57,7 +57,7 @@ fn golden_lex() {
         check(cid, "ERRS", c.get("ERRS").map(String::as_str).unwrap_or(""), &errs);
         n += 4;
     }
-    assert_eq!(588, n, "词法断言总数");
+    assert_eq!(612, n, "词法断言总数");
     // 数据路径存在性：确保读的是原路径而不是复制品
     assert!(data_path("golden_lex.txt").exists());
 }

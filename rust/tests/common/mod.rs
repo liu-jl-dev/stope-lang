@@ -100,7 +100,8 @@ pub fn esc_lex(s: &str) -> String {
             '\t' => out.push_str("\\t"),
             '\u{0b}' => out.push_str("\\v"),
             '\u{0c}' => out.push_str("\\f"),
-            c => out.push(c),
+            c if (c as u32) < 128 => out.push(c),
+            _ => out.push('?'), // 非 ASCII 变 ?：对应 C++ 侧打印用的 toUtf8（只做打印映射）
         }
     }
     out

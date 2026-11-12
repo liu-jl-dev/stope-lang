@@ -365,6 +365,16 @@ void Lexer::scanString(Token& token) {
   }
 }
 
+// 转义语义与 nevext 的 NevextEscape 对齐（v0.4.0）：classic 九项表 + \uXXXX
+// （4 位十六进制码点，大小写均可）。\uXXXX 按 UTF-16 码元原样落盘，不组合
+// 代理对 —— 跨实现对拍只用非代理码点。
+static char16_t escapeHexValue(char16_t c) {
+  if (c >= u'0' && c <= u'9') return c - u'0';
+  if (c >= u'a' && c <= u'f') return c - u'a' + 10;
+  if (c >= u'A' && c <= u'F') return c - u'A' + 10;
+  return 0xFFFF;  // 非法十六进制位
+}
+
 void Lexer::escapeString(Token& token) {
   for (int i = 0; i < token.lexeme.size(); ++i) {
     if (token.lexeme[i] == u'\\') {
@@ -373,7 +383,28 @@ void Lexer::escapeString(Token& token) {
         error("invalid escape character. ");
         break;
       }
-      if (escapeMap.find(token.lexeme[i]) != escapeMap.end()) {
+      if (token.lexeme[i] == u'u') {  // \uXXXX
+        if (i + 4 >= token.lexeme.size()) {
+          error("invalid escape character. ");
+          break;
+        }
+        char16_t cp = 0;
+        bool ok = true;
+        for (int k = 1; k <= 4; ++k) {
+          char16_t h = escapeHexValue(token.lexeme[i + k]);
+          if (h == 0xFFFF) {
+            ok = false;
+            break;
+          }
+          cp = static_cast<char16_t>(cp * 16 + h);
+        }
+        if (!ok) {
+          error("invalid escape character. ");
+          break;
+        }
+        token.parsed.push_back(cp);
+        i += 4;
+      } else if (escapeMap.find(token.lexeme[i]) != escapeMap.end()) {
         token.parsed.push_back(escapeMap.at(token.lexeme[i]));
       } else {
         error("invalid escape character. ");

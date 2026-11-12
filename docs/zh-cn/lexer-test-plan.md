@@ -278,6 +278,12 @@ null false true args argc export`。大小写敏感，且**关键字 > 自定义
 | LEX-S-07 | `"a\qb"` | ✗ `invalid escape character.` |
 | LEX-S-08 | `"abc` | `Invalid` ✗ `unclosed string literal.` |
 | LEX-S-09 | `"abc\` | `Invalid` ✗ `unclosed string literal.` |
+| LEX-S-10 | `"a\u0041b"` | parsed=`aAb`（`\uXXXX` 码点转义） |
+| LEX-S-11 | `"\u00e9\u00E9"` | parsed 为两个 `é`（hex 大小写均可） |
+| LEX-S-12 | `"\u4e2d\u6587"` | parsed=`中文`（BMP 非 ASCII） |
+| LEX-S-13 | `"a\u004b"` | ✗ `invalid escape character.`（不足 4 位） |
+| LEX-S-14 | `"a\u004gb"` | ✗ `invalid escape character.`（非 hex 位） |
+| LEX-S-15 | `"a\u"` | ✗ `invalid escape character.`（`\u` 后无内容） |
 
 > **待定项 D-14**：非法转义时 C++ 侧 `parsed` 会被截断到出错位置且 `kind` 仍是
 > `String`。本文不对此做出要求，两侧保持现状，**自动化测试不要锁这一条**，

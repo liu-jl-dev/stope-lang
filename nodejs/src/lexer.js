@@ -174,6 +174,18 @@ class Lexer {
           this.error('invalid escape character. ')
           break
         }
+        // \uXXXX：4 位十六进制码点（大小写均可），与 nevext 的 NevextEscape 对齐；
+        // 按 UTF-16 码元原样落盘（JS 字符串本身就是 UTF-16），不组合代理对
+        if (token.lexeme[i] == 'u') {
+          if (i + 4 >= token.lexeme.length
+              || !/^[0-9a-fA-F]{4}$/.test(token.lexeme.substr(i + 1, 4))) {
+            this.error('invalid escape character. ')
+            break
+          }
+          parsed += String.fromCharCode(parseInt(token.lexeme.substr(i + 1, 4), 16))
+          i += 5
+          continue
+        }
         const c = escapeMap.get(token.lexeme[i])
         if (c === undefined) {
           this.error('invalid escape character. ')

@@ -169,11 +169,32 @@ function common.esc_u16(s, opts)
     return table.concat(out)
 end
 
---- esc_lex 的**值版**：先转回 UTF-8 再逐字节扫 —— 透传按码点（Python / GDScript
---- 同口径），转义表多认 \v \f、不转义引号。词法的 parsed 值用这个。
+--- esc_lex 的**值版**：先转回 UTF-8 再按码点扫 —— 转义表多认 \v \f、不转义引号，
+--- 非 ASCII 码点变 "?"（对应 C++ 侧打印用的 toUtf8，与 Python / GDScript 同口径）。
+--- 词法的 parsed 值用这个。
 function common.esc_lex_u16(s)
     local utf = require("stope.utf")
-    return common.esc_u8(utf.utf16_to_utf8(s), { vf = true, pass_nonascii = true })
+    local out = {}
+    utf.utf8_for_each(utf.utf16_to_utf8(s), function(cp)
+        if cp == 0x5C then
+            out[#out + 1] = "\\\\"
+        elseif cp == 0x0A then
+            out[#out + 1] = "\\n"
+        elseif cp == 0x0D then
+            out[#out + 1] = "\\r"
+        elseif cp == 0x09 then
+            out[#out + 1] = "\\t"
+        elseif cp == 0x0B then
+            out[#out + 1] = "\\v"
+        elseif cp == 0x0C then
+            out[#out + 1] = "\\f"
+        elseif cp < 128 then
+            out[#out + 1] = string.char(cp)
+        else
+            out[#out + 1] = "?"
+        end
+    end)
+    return table.concat(out)
 end
 
 --- escUtf8（**字节版**）：名字 / 错误串这类 UTF-8 文本用 —— 逐字节扫（这些串都是

@@ -368,6 +368,42 @@ impl Lexer {
                     self.error("invalid escape character. ");
                     break;
                 }
+                if bytes[i] == b'u' {
+                    // \uXXXX：4 位十六进制码点（大小写均可）；代理区码点
+                    // char::from_u32 拒绝，按非法转义处理
+                    if i + 4 >= bytes.len() {
+                        self.error("invalid escape character. ");
+                        break;
+                    }
+                    let mut cp: u32 = 0;
+                    let mut hex_ok = true;
+                    for k in 1..=4 {
+                        let b = bytes[i + k];
+                        let v = match b {
+                            b'0'..=b'9' => (b - b'0') as u32,
+                            b'a'..=b'f' => (b - b'a' + 10) as u32,
+                            b'A'..=b'F' => (b - b'A' + 10) as u32,
+                            _ => {
+                                hex_ok = false;
+                                break;
+                            }
+                        };
+                        cp = cp * 16 + v;
+                    }
+                    if !hex_ok {
+                        self.error("invalid escape character. ");
+                        break;
+                    }
+                    match char::from_u32(cp) {
+                        Some(ch) => parsed.push(ch),
+                        None => {
+                            self.error("invalid escape character. ");
+                            break;
+                        }
+                    }
+                    i += 5;
+                    continue;
+                }
                 match escape_char(bytes[i]) {
                     Some(c) => parsed.push(c),
                     None => {

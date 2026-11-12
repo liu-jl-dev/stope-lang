@@ -55,6 +55,10 @@ local function utf8_encode_one(cp)
     end
 end
 
+--- 导出单码点编码（\uXXXX 反转义用；代理区码点按 CESU-8 三字节编码，
+--- 经 utf8_to_utf16 往返后落成 lone surrogate 码元，与 C++ 的 u16string 对齐）。
+utf.utf8_encode_one = utf8_encode_one
+
 --- UTF-8 字节串 -> UTF-16LE 字节串。非法字节按 latin-1 兜底；lone surrogate 原样编码
 --- （对应 Python encode("utf-16-le", "surrogatepass") 的往返行为）。
 function utf.utf8_to_utf16(s)

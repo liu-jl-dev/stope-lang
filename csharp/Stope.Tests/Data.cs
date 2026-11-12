@@ -147,7 +147,7 @@ public static class Data
                 case '\t': sb.Append("\\t"); break;
                 case '\v': sb.Append("\\v"); break;
                 case '\f': sb.Append("\\f"); break;
-                default: sb.Append(ch); break;
+                default: sb.Append(ch < 128 ? ch : '?'); break; // 非 ASCII 变 ?（对齐 C++ 的 toUtf8）
             }
         }
         return sb.ToString();

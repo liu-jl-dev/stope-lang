@@ -143,7 +143,8 @@ def esc(s: str) -> str:
 
 
 def esc_lex(s: str) -> str:
-    """词法比对专用转义：比 :func:`esc` 多 ``\\v \\f``、不转义引号。"""
+    """词法比对专用转义：比 :func:`esc` 多 ``\\v \\f``、不转义引号。
+    非 ASCII 变 ``?``（对应 C++ 侧打印用的 ``toUtf8`` —— 只做打印映射）。"""
     out = []
     for ch in s:
         if ch == "\\":
@@ -158,8 +159,10 @@ def esc_lex(s: str) -> str:
             out.append("\\v")
         elif ch == "\f":
             out.append("\\f")
-        else:
+        elif ord(ch) < 128:
             out.append(ch)
+        else:
+            out.append("?")
     return "".join(out)
 
 

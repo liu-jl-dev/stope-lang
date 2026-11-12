@@ -52,7 +52,8 @@ static func esc_(s:String) -> String:
 		else: o += ch
 	return o
 
-# golden_lex.cpp 的 E_ 比 golden.cpp 多转义两个竖向空白
+# golden_lex.cpp 的 E_ 比 golden.cpp 多转义两个竖向空白；
+# 非 ASCII 打成 '?'（对应 C++ 侧打印用的 toUtf8 —— 只做打印映射，不动数据本身）。
 static func esc_lex(s:String) -> String:
 	var o := ''
 	for i in range(len(s)):
@@ -63,7 +64,8 @@ static func esc_lex(s:String) -> String:
 		elif ch == '\t': o += '\\t'
 		elif ch == '\v': o += '\\v'
 		elif ch == '\f': o += '\\f'
-		else: o += ch
+		elif ord(ch) < 128: o += ch
+		else: o += '?'
 	return o
 
 # 与 C++ 的 Stope::Test::escUtf8 完全一致：\ " \n \r \t 转义，非 ASCII 一律变 '?'

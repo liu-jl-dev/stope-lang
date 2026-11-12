@@ -56,6 +56,17 @@ python tools/check_version.py          # 全部一致才返回 0
 python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 ```
 
+## [Unreleased]
+
+### 新增
+
+- **`\uXXXX` 转义（八份）**：字符串字面量新增 4 位十六进制码点转义（大小写均可），
+  对齐 [nevext](https://github.com/liu-jl-dev/nevext) 的 NevextEscape。不足 4 位或含
+  非十六进制位报 `invalid escape character.` 并截断已展开前缀。码点按 UTF-16 码元
+  落盘、不组合代理对；代理区码点落盘方式各实现按各自运行时规则（Go 落 U+FFFD、
+  Rust 判非法，其余原样落码元），不建议在脚本里依赖。向后兼容：只有 `\u` 从非法
+  变合法。golden 重生成 147→153 条（新增 LEX-S-10…S-15），八份全部逐字节通过。
+
 ## [0.4.0] - 2026-11-09
 
 ### 新增

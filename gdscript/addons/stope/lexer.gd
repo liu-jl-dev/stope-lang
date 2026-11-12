@@ -280,6 +280,8 @@ class Lexer:
 		if token.type == Token.Type.String: escape_string(token)
 
 	const escape_map := {"'":"'",'"':'"','\\':'\\','b':'\b','f':'\f','n':'\n','r':'\r','t':'\t','v':'\v',}
+	# 转义语义与 nevext 的 NevextEscape 对齐（v0.4.0）：escape_map 九项 + \uXXXX
+	# （4 位十六进制码点，大小写均可；对拍只用非代理码点）。
 	# 注：非法转义时与 cpp/stope/lexer.hpp 的 escapeString() 一致 ——
 	# 报错后【停止收集】，但 type 仍是 String、parsed 被截断到出错位置。
 	# 这条对应词法计划里的待定项 D-14，改之前先看那份文档的说明。
@@ -290,6 +292,13 @@ class Lexer:
 				i += 1
 				if i >= len(token.literal):
 					error("invalid escape character. "); return
+				if token.literal[i] == 'u': # \uXXXX
+					if i + 4 >= len(token.literal) \
+							or not token.literal.substr(i + 1, 4).is_valid_hex_number():
+						error("invalid escape character. "); return
+					token.parsed += String.chr(token.literal.substr(i + 1, 4).hex_to_int())
+					i += 5
+					continue
 				if not (token.literal[i] in escape_map):
 					error("invalid escape character. "); return
 				token.parsed += escape_map[token.literal[i]]
