@@ -2,6 +2,9 @@
 # 脚本自身即 Runtime 类。
 
 extends Object
+
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
 # 继承 Object（手动管理）：Runtime ⇄ ObjectManager 互指，若都继承
 # RefCounted 就构成环引用——Godot 没有循环回收（官方口径见入口文件头），
 # 整个运行时图会在退出时报 ObjectDB leak。Runtime 作为根由 demo 显式
@@ -56,7 +59,7 @@ func add_host_function(nm:String, fn:Callable) -> void:
 # 装配入口函数并压帧：宿主函数、构造器描述符、obj:* 成员描述符绑进导出
 # 槽位。按名只发生在这里（装配期），执行期间零按名查找。
 func push_entry_frame(entry, vm_args = null) -> void:
-	var state := StopeBasicVM.State.new()
+	var state := Stope.BasicVM.State.new()
 	state.set_api(api)
 	state.set_program(entry.program)
 	if vm_args != null:
@@ -69,7 +72,7 @@ func push_entry_frame(entry, vm_args = null) -> void:
 
 # 装配方法 State（push_method_frame / invoke_method 共用）。
 func _setup_method_state(m, obj, args:Array,
-		state:StopeBasicVM.State) -> void:
+		state:Stope.BasicVM.State) -> void:
 	state.set_api(api)
 	state.set_program(m.program)
 	m.initialize_state(state, obj, args)
@@ -78,13 +81,13 @@ func _setup_method_state(m, obj, args:Array,
 	# self:<方法名> 槽位绑 self 的绑定方法描述符——创建即绑定 self，
 	# self:Greet() 无需 [对象]；去重缓存保证递归调用不重复分配。
 	for b in m.self_method_binds:
-		state.variables[b[0]] = obj_mgr.bind(b[1], StopeBasicVM.Handle.new(obj))
+		state.variables[b[0]] = obj_mgr.bind(b[1], Stope.BasicVM.Handle.new(obj))
 
 # 压入方法帧，不执行——run_steps 自然切到栈顶帧。调用方（call 开口的
 # 发起方）停在 Call 的下一条；开口返回的占位 null 会被 op_call 压到调用方
 # 栈顶，弹帧收尾时用真正的返回值覆盖。
 func push_method_frame(m, obj, args:Array, wants_return:bool) -> void:
-	var state := StopeBasicVM.State.new()
+	var state := Stope.BasicVM.State.new()
 	_setup_method_state(m, obj, args, state)
 	frames.append({'state': state, 'method': m, 'self_obj': obj,
 		'wants_return': wants_return})
@@ -93,11 +96,11 @@ func push_method_frame(m, obj, args:Array, wants_return:bool) -> void:
 # 走完 / 出错中止当前函数）不消耗步数。返回 false = 帧栈已空、程序结束。
 func run_steps(max_steps:int) -> bool:
 	while max_steps > 0 and not frames.is_empty():
-		var s:StopeBasicVM.State = frames.back().state
+		var s:Stope.BasicVM.State = frames.back().state
 		if s.i >= s.program.opcodes.size():
 			finish_top_frame()	# Return 已把返回值备好；弹栈不消耗步数
 			continue
-		if s.step() != StopeResult.Success:
+		if s.step() != Stope.Result.Success:
 			finish_top_frame()	# 运行期错误：只中止当前函数，调用方继续
 			continue
 		max_steps -= 1
@@ -116,7 +119,7 @@ func finish_top_frame() -> void:
 # 帧收尾：错误打印、self: 槽位写回字段、返回值回填调用方栈顶（op_call 已
 # 把占位 null 压到那里，覆盖即可）。
 func _finish_frame(f:Dictionary) -> void:
-	var s:StopeBasicVM.State = f.state
+	var s:Stope.BasicVM.State = f.state
 	for e in s.errors:
 		print('  vm: ', e)
 		had_errors = true
@@ -133,7 +136,7 @@ func _finish_frame(f:Dictionary) -> void:
 # 清理序列中间不能让出执行权——析构跑完后还要驱逐描述符、delete 对象。
 # 析构里再调方法也走这条路：压帧没人跑（此刻正停在 step 中间）。
 func invoke_method(m, obj, args:Array) -> Variant:
-	var state := StopeBasicVM.State.new()
+	var state := Stope.BasicVM.State.new()
 	_setup_method_state(m, obj, args, state)
 	state.run()
 	for e in state.errors:
@@ -145,7 +148,7 @@ func invoke_method(m, obj, args:Array) -> Variant:
 
 # 装配入口函数：宿主函数、构造器描述符、obj:* 成员描述符绑进导出槽位。
 # 按名只发生在这里（装配期），state.run() 期间零按名查找。
-func bind_entry(state:StopeBasicVM.State, entry) -> void:
+func bind_entry(state:Stope.BasicVM.State, entry) -> void:
 	for b in entry.host_binds:
 		state.variables[b[0]] = host_funcs[b[1]]
 	for cls in classes:
@@ -164,8 +167,8 @@ func bind_entry(state:StopeBasicVM.State, entry) -> void:
 			_bind_export(state, entry, 'obj:delete',
 				obj_mgr.new_member_desc(new_member_id('delete')))
 
-func _bind_export(state:StopeBasicVM.State, entry, nm:String,
-		handle:StopeBasicVM.Handle) -> void:
+func _bind_export(state:Stope.BasicVM.State, entry, nm:String,
+		handle:Stope.BasicVM.Handle) -> void:
 	if not entry.program.exports.has(nm):
 		return
 	state.variables[entry.program.exports[nm]] = handle

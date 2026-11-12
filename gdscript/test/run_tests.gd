@@ -1,5 +1,13 @@
 extends SceneTree
 
+# 测试脚本不注册 class_name；依赖以 preload 常量引入。
+const TestUtil = preload("res://test/test_util.gd")
+const TestLexer = preload("res://test/test_lexer.gd")
+const TestParser = preload("res://test/test_parser.gd")
+const TestCompiler = preload("res://test/test_compiler.gd")
+const TestSTML = preload("res://test/test_stml.gd")
+const TestVM = preload("res://test/test_vm.gd")
+
 # GDScript 实现的测试入口。
 #
 # 用法（在 gdscript/ 目录下）：
@@ -14,31 +22,31 @@ extends SceneTree
 # （怎么重新生成见 gdscript/docs/testing.md）。
 
 func _init() -> void:
-	var rep := StopeTestUtil.Report.new()
+	var rep := TestUtil.Report.new()
 
 	print('================ Stope GDScript 测试 ================')
 
 	print('[1/5] 词法分析')
-	StopeTestLexer.run(rep)
+	TestLexer.run(rep)
 	print(rep.summary())
 
 	var after_lex:int = rep.total
 	print('[2/5] 语法分析')
-	StopeTestParser.run(rep)
+	TestParser.run(rep)
 	print('  （语法累计）', rep.summary())
 
 	print('[3/5] 编译器')
-	StopeTestCompiler.run(rep)
+	TestCompiler.run(rep)
 	print(rep.summary())
 
 	var after_compile:int = rep.total
 	print('[4/5] STML')
-	StopeTestSTML.run(rep)
+	TestSTML.run(rep)
 	print('  （STML 本组）', rep.summary())
 	var after_stml:int = rep.total
 
 	print('[5/5] 执行器')
-	StopeTestVM.run(rep)
+	TestVM.run(rep)
 	print('  （执行器本组）', rep.summary())
 
 	print('====================================================')

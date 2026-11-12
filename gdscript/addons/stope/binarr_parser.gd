@@ -1,4 +1,3 @@
-class_name StopeBinArrParser
 # 二进制数组字面量【内容】的解析 —— 端口 cpp/stope/parse_binarr.hpp。
 #
 # 规则见 docs/zh-cn/syntax-reference.md §2.6，与 C++ 逐条一致：

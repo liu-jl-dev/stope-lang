@@ -14,6 +14,9 @@
 
 extends RefCounted
 
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
+
 const Objects := preload("res://demo/06-gc/objects.gd")
 
 var anchor = Objects.GcAnchor.new()	# 哨兵：anchor.gc_next = 第一个对象
@@ -90,7 +93,7 @@ func sync_roots() -> void:
 
 # 只有 Handle 且载荷是 MyObject 才是对象引用；描述符（RefCounted）由引擎管。
 func _obj_of(v:Variant) -> Variant:
-	if v is StopeBasicVM.Handle and v.data is Objects.MyObject:
+	if v is Stope.BasicVM.Handle and v.data is Objects.MyObject:
 		return v.data
 	return null
 

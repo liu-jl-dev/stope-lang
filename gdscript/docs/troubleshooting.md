@@ -12,7 +12,7 @@
 | 1 | **不抛异常**，错误只往 `errors` 里追加 | 不看 `errors` 不会崩，但会拿着错结果继续跑 |
 | 2 | **五个阶段各记各的账** | 只看 `compiler.errors` 会漏掉词法 / 语法错 |
 | 3 | **两种格式** | 前四个阶段是 `line N: msg`；执行器是 `i OpName: msg`（`i` 是指令下标） |
-| 4 | **`StopeResult.Success == 0`** | `if rc:` 判反，成功被当成失败 |
+| 4 | **`Stope.Result.Success == 0`** | `if rc:` 判反，成功被当成失败 |
 
 | 阶段 | 账本 | 格式 |
 | --- | --- | --- |
@@ -77,7 +77,7 @@
 | `expected "<". ` | 顶层不是元素 | 文档必须以元素开头 |
 | `expected string. ` | 属性值不是引号串 | 属性要么不带值，要么写 `"..."` / `'...'` |
 | `unexpected character. ` | `Xml` 态遇到非法字符 | 消费 1 个字符后继续；改成合法字符 |
-| `unexpected lexer state N. ` | 回调返回了非法的状态值 | 只能用 `STMLLexer.State` 的四个值 |
+| `unexpected lexer state N. ` | 回调返回了非法的状态值 | 只能用 `Stope.STMLLexer.State` 的四个值 |
 | `unclosed string literal`（**没有句点**） | STML **Xml 属性串**没闭合 | 补引号。它会把剩余输入全部吃掉，后面的报错都是连锁的。这句文案与 C++ 逐字一致，别"顺手"补句点 |
 | `unclosed string literal. `（**有句点**） | STML **代码段**（Nevext / Stope）里的引号没闭合 | 补引号；行号取的是**引号开始**那一行，不是输入末尾 |
 
@@ -104,7 +104,7 @@
 | `Out of bounds get index '33'` on `Array[Callable]` | `Api.op_map` 只有 33 项，没给自定义编号扩表 | `api.op_map.resize(编号 + 1)`，见 [usage.md](usage.md) §7.1 |
 | `Attempt to call function 'null::null (Callable)'` | 表扩了但那一格没填处理函数 | 33…N-1 全填成明确报错的 handler |
 | `ERROR: Stack underflow! (Engine Bug)` | 把 `max_depth` 调到 400+ 后跑深嵌套 | 保持默认 256 —— GD 每层吃 2 个栈帧，硬墙约 500 |
-| `Identifier "StopeLexer" not declared in the current scope` | 全局类缓存过期 | `godot --import`，见 [testing.md](testing.md) §1 |
+| `Identifier "Stope" not declared in the current scope` | 脚本顶部缺引入行 | 加 `const Stope = preload("res://addons/stope/stope.gd")`，见 [README.md](README.md) §4 |
 
 > 这一类的共同点是：**出错的函数当场中止并返回默认值**（`bool` 是 `false`），调用方继续跑。
 > 所以「`run()` 返回 `false` 但 `errors` 是空的」，八成属于这一类。

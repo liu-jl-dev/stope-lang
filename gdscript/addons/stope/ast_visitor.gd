@@ -1,4 +1,7 @@
-class_name StopeASTVisitor
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const Ast = preload("res://addons/stope/ast.gd")
+const Lexer = preload("res://addons/stope/lexer.gd")
+
 # 遍历骨架 —— 逐项对齐 cpp/include/stope/ast_visitor.hpp（+.cpp 里的分发表）。
 #
 # 用法：继承 ASTVisitor，按需重写 on_visit_xxx。默认实现一律「按源码顺序递归子节点」，
@@ -12,7 +15,7 @@ class_name StopeASTVisitor
 # 表要能被测试看见：漏一项不会报错、只会静默跳过整类节点（Node / Stmt / Expr
 # 三个裸基类本来就没有表项，它们在错误恢复路径上出现，visit() 直接跳过）。
 
-const NodeType = StopeAst.NodeType
+const NodeType = Ast.NodeType
 
 class ASTVisitor:
 	# 当前正在访问的节点行号，由 visit() 顺带更新。基类自己不用，留给要报诊断的
@@ -61,79 +64,79 @@ class ASTVisitor:
 	# 只有 NullExpr / ArgcExpr 没有子节点，它们的参数写成可选的 `_n`，这样 visit()
 	# 能对所有钩子统一 call(fn, n)，不必为「无参钩子」单开一条分支。
 
-	func on_visit_prog(p:StopeAst.Prog) -> void:
+	func on_visit_prog(p:Ast.Prog) -> void:
 		for s in p.stmts: visit(s)
 
 	# ---------------- 语句 ----------------
-	func on_visit_expr_stmt(s:StopeAst.ExprStmt) -> void:
+	func on_visit_expr_stmt(s:Ast.ExprStmt) -> void:
 		visit(s.expr)
 	# 只走初值：idents 是名字（String 列表），不是 Expr
-	func on_visit_let_stmt(s:StopeAst.LetStmt) -> void:
+	func on_visit_let_stmt(s:Ast.LetStmt) -> void:
 		if s.has_assign: visit(s.expr)
-	func on_visit_return_stmt(s:StopeAst.ReturnStmt) -> void:
+	func on_visit_return_stmt(s:Ast.ReturnStmt) -> void:
 		for e in s.exprs: visit(e)
-	func on_visit_export_stmt(_s:StopeAst.ExportStmt) -> void:
+	func on_visit_export_stmt(_s:Ast.ExportStmt) -> void:
 		pass
 	# 块里嵌的是裸 Prog，递归回 Prog 的表项即可，不必 dispatch 两遍
-	func on_visit_block_stmt(s:StopeAst.BlockStmt) -> void:
+	func on_visit_block_stmt(s:Ast.BlockStmt) -> void:
 		visit(s.prog)
 	# 顺序：条件 → 首分支 → 每个 elif（条件 → 块）→ else 块
-	func on_visit_if_stmt(s:StopeAst.IfStmt) -> void:
+	func on_visit_if_stmt(s:Ast.IfStmt) -> void:
 		visit(s.cond)
 		visit(s.first_prog)
 		for ei in s.elifs:
 			visit(ei.cond)
 			visit(ei.prog)
 		if s.else_prog != null: visit(s.else_prog)
-	func on_visit_while_stmt(s:StopeAst.WhileStmt) -> void:
+	func on_visit_while_stmt(s:Ast.WhileStmt) -> void:
 		visit(s.cond)	# 条件可省（while { }），visit(null) 自己会返回
 		visit(s.prog)
-	func on_visit_assign_stmt(s:StopeAst.AssignStmt) -> void:
+	func on_visit_assign_stmt(s:Ast.AssignStmt) -> void:
 		visit(s.left_expr)
 		visit(s.right_expr)
-	func on_visit_break_stmt(_s:StopeAst.BreakStmt) -> void:
+	func on_visit_break_stmt(_s:Ast.BreakStmt) -> void:
 		pass
-	func on_visit_continue_stmt(_s:StopeAst.ContinueStmt) -> void:
+	func on_visit_continue_stmt(_s:Ast.ContinueStmt) -> void:
 		pass
 	# 载荷缺省（defer; 报错路径）时为 null，visit(null) 自己会返回
-	func on_visit_defer_stmt(s:StopeAst.DeferStmt) -> void:
+	func on_visit_defer_stmt(s:Ast.DeferStmt) -> void:
 		visit(s.stmt)
 
 	# ---------------- 表达式 ----------------
 	# 叶子：没有子节点
 	func on_visit_null_expr(_n = null) -> void: pass
-	func on_visit_bool_expr(_e:StopeAst.BoolExpr) -> void: pass
-	func on_visit_int_expr(_e:StopeAst.IntExpr) -> void: pass
-	func on_visit_float_expr(_e:StopeAst.FloatExpr) -> void: pass
-	func on_visit_bin_arr_expr(_e:StopeAst.BinArrExpr) -> void: pass
-	func on_visit_string_expr(_e:StopeAst.StringExpr) -> void: pass
-	func on_visit_ident_expr(_e:StopeAst.IdentExpr) -> void: pass
+	func on_visit_bool_expr(_e:Ast.BoolExpr) -> void: pass
+	func on_visit_int_expr(_e:Ast.IntExpr) -> void: pass
+	func on_visit_float_expr(_e:Ast.FloatExpr) -> void: pass
+	func on_visit_bin_arr_expr(_e:Ast.BinArrExpr) -> void: pass
+	func on_visit_string_expr(_e:Ast.StringExpr) -> void: pass
+	func on_visit_ident_expr(_e:Ast.IdentExpr) -> void: pass
 	func on_visit_argc_expr(_n = null) -> void: pass
-	func on_visit_args_expr(e:StopeAst.ArgsExpr) -> void:
+	func on_visit_args_expr(e:Ast.ArgsExpr) -> void:
 		visit(e.key_expr)	# args[] 的下标缺失时为 null
-	func on_visit_unary_op_expr(e:StopeAst.UnaryOpExpr) -> void:
+	func on_visit_unary_op_expr(e:Ast.UnaryOpExpr) -> void:
 		visit(e.expr)
-	func on_visit_binary_op_expr(e:StopeAst.BinaryOpExpr) -> void:
-		if e.op == StopeLexer.Token.Type.Or:
+	func on_visit_binary_op_expr(e:Ast.BinaryOpExpr) -> void:
+		if e.op == Lexer.Token.Type.Or:
 			on_visit_or_expr(e)
 			return
-		if e.op == StopeLexer.Token.Type.And:
+		if e.op == Lexer.Token.Type.And:
 			on_visit_and_expr(e)
 			return
 		visit(e.left_expr)
 		visit(e.right_expr)
 	# 短路语义的钩子：默认实现与上面的普通路径等价，需要特判的后端（编译器）自行重写
-	func on_visit_or_expr(e:StopeAst.BinaryOpExpr) -> void:
+	func on_visit_or_expr(e:Ast.BinaryOpExpr) -> void:
 		visit(e.left_expr)
 		visit(e.right_expr)
-	func on_visit_and_expr(e:StopeAst.BinaryOpExpr) -> void:
+	func on_visit_and_expr(e:Ast.BinaryOpExpr) -> void:
 		visit(e.left_expr)
 		visit(e.right_expr)
-	func on_visit_call_expr(e:StopeAst.CallExpr) -> void:
+	func on_visit_call_expr(e:Ast.CallExpr) -> void:
 		visit(e.callee)
 		for a in e.args: visit(a)
-	func on_visit_at_expr(e:StopeAst.AtExpr) -> void:
+	func on_visit_at_expr(e:Ast.AtExpr) -> void:
 		visit(e.container)
 		for k in e.key_exprs: visit(k)
-	func on_visit_custom_opcode_expr(e:StopeAst.CustomOpcodeExpr) -> void:
+	func on_visit_custom_opcode_expr(e:Ast.CustomOpcodeExpr) -> void:
 		for a in e.args: visit(a)

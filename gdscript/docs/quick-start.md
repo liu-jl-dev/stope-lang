@@ -34,8 +34,8 @@ Stope 只规定三件事：**语言**、**STML**、**编译器的产物 `Program
 
 | 部分 | 稳定性 | 涉及的类 |
 | --- | --- | --- |
-| 编译环节（§3） | **相对稳定**（标准的一部分） | `StopeLexer` `StopeParser` `StopeAst` `StopeCompiler` `StopeProgram` `StopeOpcode.CustomOpcodeConfig` |
-| 虚拟机环节（§4–§6） | **会维护，接口不随意调整**（但不是标准） | `StopeBasicVM.Api` `State` `Arguments` |
+| 编译环节（§3） | **相对稳定**（标准的一部分） | `Stope.Lexer` `Stope.Parser` `Stope.Ast` `Stope.Compiler` `Stope.Program` `Stope.Opcode.CustomOpcodeConfig` |
+| 虚拟机环节（§4–§6） | **会维护，接口不随意调整**（但不是标准） | `Stope.BasicVM.Api` `State` `Arguments` |
 
 **编译环节**跟着编译器规格走：`Program` 有明确的编码契约（指令编号、操作数、跳转目标都是
 `opcodes` 下标，见 [`compiler-test-plan.md`](../../docs/zh-cn/compiler-test-plan.md) §2），
@@ -47,7 +47,7 @@ bug 会修、`Program` 演进时同步、八份实现的语义彼此对齐；接
 增删参数只会为了修 bug 或跟进 `Program`，不会为了换个风格而做，所以边界内的用法可以放心依赖。
 
 它只是**不属于标准**：标准只覆盖语言、STML 和 `Program`，所以宿主换一台执行器时，
-`StopeBasicVM.*` 这些名字本来就不存在 —— 值怎么表示（这里直接用 `Variant`）、栈怎么布局、
+`Stope.BasicVM.*` 这些名字本来就不存在 —— 值怎么表示（这里直接用 `Variant`）、栈怎么布局、
 宿主函数怎么注册、错误怎么报，全由执行器自己定；你完全可以遍历 AST、编成 `Callable`、
 或者转译成别的 IR。
 
@@ -121,7 +121,7 @@ required stack size: 3
 result: 15
 ```
 
-前一半是 `StopeDebug.disasm(program)` 的反汇编，由 step 1 打印；后一半是执行器真正跑出来的
+前一半是 `Stope.Debug.disasm(program)` 的反汇编，由 step 1 打印；后一半是执行器真正跑出来的
 结果。**这份输出与 `cpp/demo/01-quick-start.cpp` 的完全一致**（`test/data/golden_disasm.txt`
 就是拿 C++ 的产物当期望值）—— 两侧对同一份源码产出同一份字节码，是这套实现的核心承诺。
 
@@ -131,12 +131,12 @@ result: 15
 
 ```
 源码(String)
-  │  StopeLexer      → Token 流
-  │  StopeParser     → AST（可选地做常量折叠）
-  │  StopeCompiler   → Program（字节码 + 常量池 + exports）
+  │  Stope.Lexer      → Token 流
+  │  Stope.Parser     → AST（可选地做常量折叠）
+  │  Stope.Compiler   → Program（字节码 + 常量池 + exports）
   ▼
 Program ──┐
-          │  StopeBasicVM.Api    33 条指令的实现表
+          │  Stope.BasicVM.Api    33 条指令的实现表
           ▼
         State ── Arguments ── 宿主 Callable
           │  run() / step()
@@ -146,8 +146,8 @@ Program ──┐
 
 | 步 | 做什么 | 主要类型 | 稳定性 |
 | --- | --- | --- | --- |
-| 1 | 编译源码 | `StopeLexer` `StopeParser` `StopeCompiler` → `Program` | 相对稳定（编译器接口） |
-| 2 | 建指令表 | `StopeBasicVM.Api` | 内置基础 VM（会维护，非标准） |
+| 1 | 编译源码 | `Stope.Lexer` `Stope.Parser` `Stope.Compiler` → `Program` | 相对稳定（编译器接口） |
+| 2 | 建指令表 | `Stope.BasicVM.Api` | 内置基础 VM（会维护，非标准） |
 | 3 | `State` 装配 | `State.set_api / set_program / set_arguments` | 内置基础 VM（会维护，非标准） |
 | 4 | 传参并执行 | `Arguments` `run()` / `step()` / `returns` | 内置基础 VM（会维护，非标准） |
 
@@ -157,6 +157,8 @@ Program ──┐
 ---
 
 ## 3. step 1：编译源码
+
+> **引入方式**：插件不注册全局类。示例里的 `Stope` 来自脚本顶部的一行 `const Stope = preload("res://addons/stope/stope.gd")`，完整可跑写法见 [`README.md`](README.md) §5 与 `demo/`。
 
 ```gdscript
 const SRC := """
@@ -170,18 +172,18 @@ fmt:println("结果为: ", result);
 return result;
 """
 
-var lexer := StopeLexer.Lexer.new(SRC)
-var parser := StopeParser.Parser.new(lexer)   # 第二参是 CustomOpcodeConfig，可省
-var tree := StopeAst.Prog.new()
+var lexer := Stope.Lexer.Lexer.new(SRC)
+var parser := Stope.Parser.Parser.new(lexer)   # 第二参是 CustomOpcodeConfig，可省
+var tree := Stope.Ast.Prog.new()
 parser.parse_program(tree)
 
-var compiler := StopeCompiler.Compiler.new()  # 构造参同上，可省
-var program := StopeProgram.Program.new()
+var compiler := Stope.Compiler.Compiler.new()  # 构造参同上，可省
+var program := Stope.Program.Program.new()
 var rc := compiler.compile(tree, program)     # AST 与 Program 都传引用
-if rc != StopeResult.Success:
+if rc != Stope.Result.Success:
 	push_error(str(compiler.errors))
 	return
-print(StopeDebug.disasm(program))
+print(Stope.Debug.disasm(program))
 ```
 
 注意点：
@@ -191,16 +193,16 @@ print(StopeDebug.disasm(program))
 - **输入输出都是引用语义**：`parse_program(tree)`、`compile(tree, program)` 都把结果
   **写进**传进去的对象。`compile` 返回 `rc`，失败时按约定会**把 `program` 清空**
   （见 `compiler-test-plan.md` §2），所以失败后不要拿它去反汇编或执行。
-- **`Success == 0`**，别写 `if rc:` 当成功。这是 `StopeResult` 与 C++ `Stope::Result`
+- **`Success == 0`**，别写 `if rc:` 当成功。这是 `Stope.Result` 与 C++ `Stope::Result`
   同一份定义的直接后果。
-- **内层类要写全名**：`StopeLexer.Lexer`、`StopeCompiler.Compiler`、`StopeAst.Prog`。
-  只写 `StopeLexer` 是那个只有常量与内层类的门面，`new()` 不出来。
+- **内层类要写全名**：`Stope.Lexer.Lexer`、`Stope.Compiler.Compiler`、`Stope.Ast.Prog`。
+  只写 `Stope.Lexer` 是那个只有常量与内层类的门面，`new()` 不出来。
 - **错误不抛异常**，进各自的 `errors: Array[String]`（格式 `line N: msg`）；词法的进
   `lexer.errors`，语法的进 `parser.errors`，两者**不合并**，都要看。
-- `StopeDebug.disasm()` 来自 `debug.gd`，把 `Program` 转成可读文本。产物里有自定义指令时
-  要改用 `StopeDebug.disasm(program, config)`（见 §9 与 `demo_03.gd`）。
+- `Stope.Debug.disasm()` 来自 `debug.gd`，把 `Program` 转成可读文本。产物里有自定义指令时
+  要改用 `Stope.Debug.disasm(program, config)`（见 §9 与 `demo_03.gd`）。
 
-这一节用到的类（`StopeLexer` `StopeParser` `StopeAst` `StopeCompiler` `StopeProgram`）
+这一节用到的类（`Stope.Lexer` `Stope.Parser` `Stope.Ast` `Stope.Compiler` `Stope.Program`）
 是**编译器接口**，围绕的正是标准里规定的那一层 —— `Program` 的编码契约，所以这段代码
 相对稳定、值得照抄。**到此为止就是一个完整的 Stope 编译器用法**，后面三节只是「怎么把
 产物跑起来」的一种做法。
@@ -210,12 +212,12 @@ print(StopeDebug.disasm(program))
 ## 4. step 2：建指令表
 
 > **step 2–4 用的是内置基础虚拟机：会维护、接口不随意改，但不属于标准。** 这里的
-> `StopeBasicVM.*` 全部来自 `addons/stope/basic_vm.gd`；项目不规定执行器的标准（§0），
+> `Stope.BasicVM.*` 全部来自 `addons/stope/basic_vm.gd`；项目不规定执行器的标准（§0），
 > 所以宿主可以换一台 —— 自己写执行器时，只需满足 `vm-guide.md` 里的语义要求。
 > 另外它是**基础虚拟机**：默认没有自定义指令（表就 33 格）、没有自定义数据类型。
 
 ```gdscript
-var api := StopeBasicVM.Api.new()   # 33 个 Callable，下标 = 指令编号
+var api := Stope.BasicVM.Api.new()   # 33 个 Callable，下标 = 指令编号
 ```
 
 - `Api.op_map: Array[Callable]` 是**稠密的**：`run()` / `step()` 直接
@@ -234,7 +236,7 @@ var api := StopeBasicVM.Api.new()   # 33 个 Callable，下标 = 指令编号
 ## 5. step 3：建立 State 并绑定宿主函数
 
 ```gdscript
-var state := StopeBasicVM.State.new()
+var state := Stope.BasicVM.State.new()
 state.set_api(api)
 state.set_program(program)
 state.set_arguments(args)              # args 见 §6
@@ -270,14 +272,14 @@ state.variables[program.exports["fmt:println"]] = Callable(host, "println")
 Stope 程序里的 `argc` / `args[i]` 由宿主的 `Arguments` 提供，继承它实现两个方法：
 
 ```gdscript
-class MyArgs extends StopeBasicVM.Arguments:
+class MyArgs extends "res://addons/stope/basic_vm.gd".Arguments:
 	var data: Array[float] = []
 
 	func _init(values: Array[float]) -> void:
 		data = values
 
 	# 取不到就**自己报错**：state.error(...) + 返回 null，执行器立刻停在这里
-	func at(state: StopeBasicVM.State, index_or_key) -> Variant:
+	func at(state: Stope.BasicVM.State, index_or_key) -> Variant:
 		if not (index_or_key is int):
 			state.error('index must be an integer. ')
 			return null
@@ -289,12 +291,12 @@ class MyArgs extends StopeBasicVM.Arguments:
 	func num() -> int:
 		return data.size()
 
-var state := StopeBasicVM.State.new()
+var state := Stope.BasicVM.State.new()
 state.set_api(api)
 state.set_program(program)
 state.set_arguments(MyArgs.new([1.0, 2.0, 3.0, 4.0, 5.0]))
 
-if state.run() != StopeResult.Success:  # Success = 跑完且没出错
+if state.run() != Stope.Result.Success:  # Success = 跑完且没出错
 	for e in state.errors: print('[vm] ', e)
 	return
 print('result: ', state.returns[0])
@@ -320,30 +322,30 @@ print('result: ', state.returns[0])
 ```gdscript
 extends Node
 
-class NoArgs extends StopeBasicVM.Arguments:
-	func at(_state: StopeBasicVM.State, _key) -> Variant: return null
+class NoArgs extends "res://addons/stope/basic_vm.gd".Arguments:
+	func at(_state: Stope.BasicVM.State, _key) -> Variant: return null
 	func num() -> int: return 0
 
 func _ready() -> void:
 	var src := "let a = 1; let b = 2; return a + b;"
 
 	# 1. 编译
-	var lexer := StopeLexer.Lexer.new(src)
-	var parser := StopeParser.Parser.new(lexer)
-	var tree := StopeAst.Prog.new()
+	var lexer := Stope.Lexer.Lexer.new(src)
+	var parser := Stope.Parser.Parser.new(lexer)
+	var tree := Stope.Ast.Prog.new()
 	parser.parse_program(tree)
-	var compiler := StopeCompiler.Compiler.new()
-	var program := StopeProgram.Program.new()
-	if compiler.compile(tree, program) != StopeResult.Success:
+	var compiler := Stope.Compiler.Compiler.new()
+	var program := Stope.Program.Program.new()
+	if compiler.compile(tree, program) != Stope.Result.Success:
 		push_error(str(compiler.errors))
 		return
 
 	# 2-4. 装配并执行（非标准）
-	var state := StopeBasicVM.State.new()
-	state.set_api(StopeBasicVM.Api.new())
+	var state := Stope.BasicVM.State.new()
+	state.set_api(Stope.BasicVM.Api.new())
 	state.set_program(program)
 	state.set_arguments(NoArgs.new())
-	if state.run() != StopeResult.Success:
+	if state.run() != Stope.Result.Success:
 		push_error(str(state.errors))
 		return
 	print("return = ", state.returns[0])
@@ -359,9 +361,9 @@ func _ready() -> void:
 
 | 现象 | 原因 |
 | --- | --- |
-| `Cannot infer the type of "x" variable` | 类型写成了外层类。静态函数的参数类型也要写内层名：`func f(p: StopeParser.Parser)`，写 `StopeParser` 会让 `:=` 推不出来 |
-| `Could not find type "StopeLexer"` | 插件没启用，或增删过带 `class_name` 的脚本却没重新导入。跑一次 `godot --headless --path <项目> --import` |
-| 用 `if state.run():` / `if not state.run():` 判成功失败 | `run()` 和 `compile()` 都返回 `StopeResult`，**`Success == 0`**，按真假判断必反 —— 写 `== StopeResult.Success` / `!= StopeResult.Success` |
+| `Cannot infer the type of "x" variable` | 类型写成了外层类。静态函数的参数类型也要写内层名：`func f(p: Stope.Parser.Parser)`，写 `Stope.Parser` 会让 `:=` 推不出来 |
+| `Could not find type "Stope.Lexer"` / `Identifier "Stope" not declared` | 脚本顶部缺引入行 `const Stope = preload("res://addons/stope/stope.gd")`，或 `addons/stope/` 没拷全（插件启用时会 `push_warning` 报缺哪个文件） |
+| 用 `if state.run():` / `if not state.run():` 判成功失败 | `run()` 和 `compile()` 都返回 `Stope.Result`，**`Success == 0`**，按真假判断必反 —— 写 `== Stope.Result.Success` / `!= Stope.Result.Success` |
 | 取 `state.returns[0]` 报越界 | 源码没有 `return`，`returns` 是空数组。先判 `is_empty()` |
 | `Out of bounds get index '33'`（控制台，`errors` 却是空的） | `op_map` 没扩到 N+1，或扩了但中间留空 `null`。见 [`usage.md`](usage.md) §7.1 |
 | 自定义指令的处理函数永远不被调用 | 编号占进了 0…32，内置实现赢；反汇编也只会印内置指令名 |
@@ -377,7 +379,7 @@ func _ready() -> void:
 
 ## 9. 下一步
 
-- **只想把 Stope 当表达式求值器**：只用 step 1 的 `StopeCompiler` + `StopeDebug` 就够，
+- **只想把 Stope 当表达式求值器**：只用 step 1 的 `Stope.Compiler` + `Stope.Debug` 就够，
   不碰执行器。
 - **解析 STML 文档**：看 [`stml.md`](stml.md)（语言版教程：回调 → 解析 → 读树 + 可跑骨架）
   与 [`demo_02.gd`](../demo/demo_02.gd)，API 表在 [`usage.md`](usage.md) §10。
@@ -400,8 +402,8 @@ func _ready() -> void:
 
   要点是**内容怎么切由宿主决定**：`parse(root, state_func)` 的回调按标签名 / 属性返回
   `Xml` / `Text` / `Nevext` / `Stope` 四态之一。`STML` 只规定树的形状。
-- **加自己的指令**：填 `StopeOpcode.CustomOpcodeConfig`，同一份对象传给 `Parser` 与
-  `Compiler`，编译完用 `StopeDebug.disasm(program, config)` 反汇编。
+- **加自己的指令**：填 `Stope.Opcode.CustomOpcodeConfig`，同一份对象传给 `Parser` 与
+  `Compiler`，编译完用 `Stope.Debug.disasm(program, config)` 反汇编。
   [`custom-opcode.md`](custom-opcode.md) 是完整教程（含**怎么真的执行**这些编号），
   [`demo_03.gd`](../demo/demo_03.gd) 是可运行的例子（只编译不执行），输出：
 

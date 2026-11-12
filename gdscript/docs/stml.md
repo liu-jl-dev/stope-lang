@@ -26,7 +26,7 @@
 
 | 部分 | 谁管 | 内容 |
 | --- | --- | --- |
-| **树的形状** | `STMLParser.Parser` | 标签名、有没有属性、自闭合还是一对、嵌套关系、结束标签是否匹配 |
+| **树的形状** | `Stope.STMLParser.Parser` | 标签名、有没有属性、自闭合还是一对、嵌套关系、结束标签是否匹配 |
 | **内容怎么切** | **宿主的回调** | 这个元素的内容是子元素、纯文本、Nevext 代码，还是 Stope 代码 |
 | **内容是什么** | 宿主自己找的处理器 | Parser 对 `<func>` 里的代码一个字符都不检查，只是整段交出来 |
 
@@ -137,15 +137,17 @@ let a = 1;
 
 STML 唯一需要宿主发挥的地方，一个函数而已。demo 里就是这么写的（**原文照抄**）：
 
+> **引入方式**：插件不注册全局类。示例里的 `Stope` 来自脚本顶部的一行 `const Stope = preload("res://addons/stope/stope.gd")`，完整可跑写法见 [`README.md`](README.md) §5 与 `demo/`。
+
 ```gdscript
 # 宿主回调：与 C++ demo 的 lexerStateFunc 一一对应。
 #   <config>            -> Nevext 代码
 #   带 stope 属性的元素  -> Stope 代码
 #   其余                -> Xml（按子元素列表解析）
 static func _state_func(tag:String, attrs:Dictionary) -> int:
-	if tag == 'config': return STMLLexer.State.Nevext
-	if 'stope' in attrs: return STMLLexer.State.Stope
-	return STMLLexer.State.Xml
+	if tag == 'config': return Stope.STMLLexer.State.Nevext
+	if 'stope' in attrs: return Stope.STMLLexer.State.Stope
+	return Stope.STMLLexer.State.Xml
 ```
 
 三行 `if` 正好把 §1 那份文档切成三种内容：`<config>` → Nevext、`<func stope>` → Stope、
@@ -153,10 +155,10 @@ static func _state_func(tag:String, attrs:Dictionary) -> int:
 
 | 返回值 | 内容会被切成 | `Element` 里落在哪 |
 | --- | --- | --- |
-| `STMLLexer.State.Xml` | 若干个子元素（递归），中间可以插注释 | `children` |
-| `STMLLexer.State.Text` | 一整段原文，一路吃到 `</` | `text` |
-| `STMLLexer.State.Nevext` | 一整段 Nevext 代码，按 Nevext 的引号/注释规则躲开串内的 `</` | `text` |
-| `STMLLexer.State.Stope` | 一整段 Stope 代码，按 Stope 的引号/注释规则躲开串内的 `</` | `text` |
+| `Stope.STMLLexer.State.Xml` | 若干个子元素（递归），中间可以插注释 | `children` |
+| `Stope.STMLLexer.State.Text` | 一整段原文，一路吃到 `</` | `text` |
+| `Stope.STMLLexer.State.Nevext` | 一整段 Nevext 代码，按 Nevext 的引号/注释规则躲开串内的 `</` | `text` |
+| `Stope.STMLLexer.State.Stope` | 一整段 Stope 代码，按 Stope 的引号/注释规则躲开串内的 `</` | `text` |
 
 四条要记住（前三条与 C++ 相同，第四条是 GDScript 特有的）：
 
@@ -177,10 +179,10 @@ static func _state_func(tag:String, attrs:Dictionary) -> int:
 `demo()` 开头这几行就是全部：
 
 ```gdscript
-var lexer := STMLLexer.Lexer.new(DOC)
-var parser := STMLParser.Parser.new(lexer)
-var root := STML.Element.new()
-if parser.parse(root, _state_func) != StopeResult.Success:
+var lexer := Stope.STMLLexer.Lexer.new(DOC)
+var parser := Stope.STMLParser.Parser.new(lexer)
+var root := Stope.STML.Element.new()
+if parser.parse(root, _state_func) != Stope.Result.Success:
 	for e in lexer.errors: print('[lex] ', e)
 	for e in parser.errors: print('[parse] ', e)
 	return
@@ -189,7 +191,7 @@ if parser.parse(root, _state_func) != StopeResult.Success:
 | 约定 | 内容 |
 | --- | --- |
 | 入口 | `parse(root, _state_func)` **自己会先取一个 token**，你不要替它调 `next_token()` |
-| 返回值 | `StopeResult.Success`（**`== 0`**）当且仅当 `parser.errors` 为空 |
+| 返回值 | `Stope.Result.Success`（**`== 0`**）当且仅当 `parser.errors` 为空 |
 | 错误去哪 | 累加进 `parser.errors`，格式 `line N: msg`；**不抛异常、不中断** |
 | 顶层 | 只解析**一个**元素，根之后的输入静默忽略 |
 | 嵌套深度 | 元素嵌套默认最多 **256 层**（根算第 1 层），`parser.max_depth = 0` 表示不限。超限报 1 条 `nesting too deep (max 256). ` 并中止，剩余输入忽略、**不级联** |
@@ -198,19 +200,19 @@ if parser.parse(root, _state_func) != StopeResult.Success:
 词法错误在 `lexer.errors`，语法错误在 `parser.errors`，**两边不合并** —— 排查时两个都要看。
 demo 里 `for e in lexer.errors` / `parser.errors` 那两行就是干这个的（正常文档什么都不打）。
 
-> `parse()` 用的是 `StopeResult`（与编译器共用的那一份），不是独立的枚举。
+> `parse()` 用的是 `Stope.Result`（与编译器共用的那一份），不是独立的枚举。
 > 所以别写 `if r:` 当成功 —— `Success == 0`，`if r:` 判断的是「失败」。
-> demo 里写成三元表达式 `'Success' if result == StopeResult.Success else 'Error'`，就是这个原因。
+> demo 里写成三元表达式 `'Success' if result == Stope.Result.Success else 'Error'`，就是这个原因。
 
 **`text` 就是一段普通字符串 —— 「内容是什么，Parser 完全不管」。** 想验证这点，把
 `func_ele.text` 交给 Stope 词法器扫一遍，数出 10 个 token：
 
 ```gdscript
-var stope_lexer := StopeLexer.Lexer.new(func_ele.text)
+var stope_lexer := Stope.Lexer.Lexer.new(func_ele.text)
 var n := 0
 while true:
 	var t := stope_lexer.next_token()
-	if t.type == StopeLexer.Token.Type.Eof: break
+	if t.type == Stope.Lexer.Token.Type.Eof: break
 	n += 1
 print(n, ' 个 token')   # 10 —— demo 里没有这一步，留给你自己试
 ```
@@ -234,7 +236,7 @@ class Element:
 
 `text_line` 是**内容**的第一行：词法器切内容前跳过了前导空白（含换行），所以
 `<sto>\nlet a = 1;</sto>` 里 `line` 是 1、`text_line` 是 2。把切出来的代码段交给
-`StopeLexer.Lexer` 时设 `lexer.line = e.text_line`，报错行号才和原文档对得上。
+`Stope.Lexer.Lexer` 时设 `lexer.line = e.text_line`，报错行号才和原文档对得上。
 
 注意字段名与 C++ 的差别：C++ 是 `tagName` / `selfClosing`，GDScript 是 `tag` /
 `self_closing` —— 这是 GDScript 的 snake_case 约定，别照着 C++ 抄。
@@ -272,7 +274,7 @@ demo 第 4 段直接 `print(func_ele.text)`，换行就真的换行了。
 **（3）按名字找，别用下标。** demo 写了个小工具：
 
 ```gdscript
-static func _child_by_tag(ele:STML.Element, tag:String) -> STML.Element:
+static func _child_by_tag(ele:Stope.STML.Element, tag:String) -> Stope.STML.Element:
 	for c in ele.children:
 		if c.tag == tag: return c
 	return null
@@ -349,13 +351,13 @@ extends Node
 const SRC := "<stml><config>windowSize 1280, 720</config>" \
 	+ "<func stope>let a = 1; return a;</func></stml>"
 
-# 回调：返回 STMLLexer.State 的一项
+# 回调：返回 Stope.STMLLexer.State 的一项
 static func _state_func(tag: String, attrs: Dictionary) -> int:
-	if tag == 'config': return STMLLexer.State.Nevext
-	if 'stope' in attrs: return STMLLexer.State.Stope
-	return STMLLexer.State.Xml
+	if tag == 'config': return Stope.STMLLexer.State.Nevext
+	if 'stope' in attrs: return Stope.STMLLexer.State.Stope
+	return Stope.STMLLexer.State.Xml
 
-static func _walk(e: STML.Element, depth: int) -> void:
+static func _walk(e: Stope.STML.Element, depth: int) -> void:
 	var pad := '  '.repeat(depth)
 	var attrs := ''
 	for k in e.attrs: attrs += ' %s="%s"' % [k, e.attrs[k]]
@@ -366,13 +368,13 @@ static func _walk(e: STML.Element, depth: int) -> void:
 	print(pad, '</', e.tag, '>')
 
 func _ready() -> void:
-	var lexer := STMLLexer.Lexer.new(SRC)
-	var parser := STMLParser.Parser.new(lexer)
-	var root := STML.Element.new()
+	var lexer := Stope.STMLLexer.Lexer.new(SRC)
+	var parser := Stope.STMLParser.Parser.new(lexer)
+	var root := Stope.STML.Element.new()
 	var r := parser.parse(root, _state_func)
 	for e in parser.errors: print('parser: ', e)
 	for e in lexer.errors: print('lexer:  ', e)
-	if r != StopeResult.Success:
+	if r != Stope.Result.Success:
 		get_tree().quit(1)
 		return
 	_walk(root, 0)
@@ -411,7 +413,7 @@ func _ready() -> void:
 | 用下标取的元素不是想要的那个 | `children` 变了；按名字找 | §4 |
 | `SCRIPT ERROR: Invalid access to property or key` + 拿到 `null` | `attrs['不存在的键']` 在 GDScript 里会报错并给 `null`（不像 C++ 的 `map::operator[]` 会插入） | §5 |
 | 文档后半段凭空消失 | 只解析一个顶层元素，或注释没闭合 | C++ §6.7、§6.4 |
-| 想执行 `<func>` 里的 Stope 代码 | Parser 不管这些，把 `text` 交给 `StopeLexer.Lexer` | [`quick-start.md`](quick-start.md) |
+| 想执行 `<func>` 里的 Stope 代码 | Parser 不管这些，把 `text` 交给 `Stope.Lexer.Lexer` | [`quick-start.md`](quick-start.md) |
 
 ---
 

@@ -7,6 +7,9 @@
 # 这里引擎机制等价替代）。gc 字段语义见 gc.gd 的头注释。
 
 # 业务对象：继承 Object（gc 决定何时 free()）。
+
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
 class MyObject extends Object:
 	var class_id:int = -1
 	var fields:Array = []	# 下标对齐 Classes.ClassInfo.properties
@@ -31,7 +34,7 @@ class MemberRef extends RefCounted:
 # 方法」的对象，见 runtime.gd 的 pinned。
 class MemberDesc extends RefCounted:
 	var member_id:int = -1
-	var obj:Variant = null	# StopeBasicVM.Handle，null = 未绑定
+	var obj:Variant = null	# Stope.BasicVM.Handle，null = 未绑定
 
 class CtorDesc extends RefCounted:
 	var cls_id:int = -1

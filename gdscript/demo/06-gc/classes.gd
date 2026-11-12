@@ -2,10 +2,13 @@
 # （对应 cpp/demo/06-gc/ 的 Class.* / Function.*）。
 # 与 demo 5 的差异：MethodInfo 多一个 export_binds。
 
+
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
 class MethodInfo extends RefCounted:
 	var name:String = ''
 	var params:Array[String] = []
-	var program:StopeProgram.Program
+	var program:Stope.Program.Program
 	var self_props:Array = []	# [槽位下标, 字段下标] —— 只含方法体实际引用的属性
 	var host_binds:Array = []	# [槽位下标, 宿主函数序号]
 	var self_method_binds:Array = []	# [槽位下标, 成员 id]（self:<方法名> 调用）
@@ -16,7 +19,7 @@ class MethodInfo extends RefCounted:
 	var param_slots:Array[int] = []	# params[i] -> 变量槽位下标
 
 	# self_obj 是 objects.gd 的 MyObject（跨文件不写静态类型，动态分派）。
-	func initialize_state(state:StopeBasicVM.State, self_obj, args:Array) -> void:
+	func initialize_state(state:Stope.BasicVM.State, self_obj, args:Array) -> void:
 		for p in self_props:
 			state.variables[p[0]] = self_obj.fields[p[1]]	# 字段 -> 槽位
 		for k in range(param_slots.size()):
@@ -26,11 +29,11 @@ class MethodInfo extends RefCounted:
 class FunctionInfo extends RefCounted:
 	var name:String = ''
 	var params:Array[String] = []
-	var program:StopeProgram.Program
+	var program:Stope.Program.Program
 	var host_binds:Array = []
 	var param_slots:Array[int] = []
 
-	func initialize_state(state:StopeBasicVM.State, args:Array) -> void:
+	func initialize_state(state:Stope.BasicVM.State, args:Array) -> void:
 		for k in range(param_slots.size()):
 			state.variables[param_slots[k]] = args[k] if k < args.size() else null
 

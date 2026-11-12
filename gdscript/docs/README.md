@@ -1,7 +1,8 @@
 # GDScript 实现 · 总览
 
 `gdscript/` 是 Stope 的 **GDScript 参考实现**，以 **Godot 插件**的形式分发：一个纯库插件，
-不含任何编辑器 UI。装进项目后，15 个全局类可直接当 API 用。
+不含任何编辑器 UI。全部脚本都**不注册 `class_name` 全局类**（不占用工程的全局类命名空间、
+不会与其他插件撞名），用一行 `preload` 从统一入口 `stope.gd` 引入即可。
 
 它和 C++ 实现的关系只有一句话：**C++ 是权威实现，本实现按它逐项对齐**。两侧出现分歧，
 以 `cpp/include/stope/*.hpp` 的实测行为为准，差异登记在
@@ -20,31 +21,33 @@ Godot，不需要 C++ 工具链。
 
 ## 1. 包含什么
 
-| 全局类 | 文件 | 对应 C++ |
+统一入口 `stope.gd` 把各组件暴露为常量（`const Stope = preload(...)` 后按 `Stope.*` 访问）：
+
+| 组件（`Stope.*`） | 文件 | 对应 C++ |
 | --- | --- | --- |
-| `StopeOpcode` | `opcode.gd` | `cpp/include/stope/opcode.hpp` |
-| `StopeLexer` | `lexer.gd` | `cpp/include/stope/lexer.hpp` |
-| `StopeParser` | `parser.gd` | `cpp/include/stope/parser.hpp` |
-| `StopeAst` | `ast.gd` | `cpp/include/stope/ast.hpp` |
-| `StopeASTVisitor` | `ast_visitor.gd` | `cpp/include/stope/ast_visitor.hpp` |
-| `StopeBinArrParser` | `binarr_parser.gd` | `cpp/include/stope/parse_binarr.hpp` |
-| `StopeExprOptim` | `expr_optim.gd` | `cpp/include/stope/expr_optim.hpp` |
-| `StopeCompiler` | `compiler.gd` | `cpp/include/stope/compiler.hpp` |
-| `StopeProgram` | `program.gd` | `cpp/include/stope/program.hpp` |
-| `StopeBasicVM` | `basic_vm.gd` | `cpp/include/stope/basic_vm.hpp` |
-| `STML` | `stml.gd` | `cpp/include/stope/stml.hpp` |
-| `STMLLexer` | `stml_lexer.gd` | `cpp/include/stope/stml_lexer.hpp` |
-| `STMLParser` | `stml_parser.gd` | `cpp/include/stope/stml_parser.hpp` |
-| `StopeResult` | `stope_result.gd` | `cpp/include/stope/common.hpp` 的 `Result` |
-| `StopeDebug` | `debug.gd` | `cpp/include/stope/debug.hpp` |
+| `Stope.Opcode` | `opcode.gd` | `cpp/include/stope/opcode.hpp` |
+| `Stope.Lexer` | `lexer.gd` | `cpp/include/stope/lexer.hpp` |
+| `Stope.Parser` | `parser.gd` | `cpp/include/stope/parser.hpp` |
+| `Stope.Ast` | `ast.gd` | `cpp/include/stope/ast.hpp` |
+| `Stope.ASTVisitor` | `ast_visitor.gd` | `cpp/include/stope/ast_visitor.hpp` |
+| `Stope.BinArrParser` | `binarr_parser.gd` | `cpp/include/stope/parse_binarr.hpp` |
+| `Stope.ExprOptim` | `expr_optim.gd` | `cpp/include/stope/expr_optim.hpp` |
+| `Stope.Compiler` | `compiler.gd` | `cpp/include/stope/compiler.hpp` |
+| `Stope.Program` | `program.gd` | `cpp/include/stope/program.hpp` |
+| `Stope.BasicVM` | `basic_vm.gd` | `cpp/include/stope/basic_vm.hpp` |
+| `Stope.STML` | `stml.gd` | `cpp/include/stope/stml.hpp` |
+| `Stope.STMLLexer` | `stml_lexer.gd` | `cpp/include/stope/stml_lexer.hpp` |
+| `Stope.STMLParser` | `stml_parser.gd` | `cpp/include/stope/stml_parser.hpp` |
+| `Stope.Result` | `stope_result.gd` | `cpp/include/stope/common.hpp` 的 `Result` |
+| `Stope.Debug` | `debug.gd` | `cpp/include/stope/debug.hpp` |
 
 链路是：源码 →（`Lexer`）Token →（`Parser`）AST →（`Compiler`）`Program` →
-（`BasicVM.State`）结果。`StopeASTVisitor` 是编译器的遍历骨架；`StopeExprOptim` 由
+（`BasicVM.State`）结果。`Stope.ASTVisitor` 是编译器的遍历骨架；`Stope.ExprOptim` 由
 `Parser` 在构造一元 / 二元节点时直接调用。
 
 ## 2. 不包含什么
 
-- **虚拟机不是标准；内置的是一台「基础虚拟机」。** `StopeBasicVM.State` / `Api` 会一直维护
+- **虚拟机不是标准；内置的是一台「基础虚拟机」。** `Stope.BasicVM.State` / `Api` 会一直维护
   （修 bug、与 C++ / Node.js / C# / Python 对齐）、接口不会随意调整 —— 但指令语义、栈布局、
   宿主函数约定都不属于规范，换个执行器完全可以。能力边界：**不支持自定义指令**
   （`Api.op_map` 默认只有 33 格，
@@ -62,7 +65,8 @@ Godot，不需要 C++ 工具链。
 
 ```
 gdscript/
-  addons/stope/          插件本体（13 个脚本 + plugin.cfg + plugin.gd）
+  addons/stope/          插件本体（17 个脚本 + plugin.cfg）
+    stope.gd             统一入口：preload 后按 Stope.* 访问全部组件
     opcode.gd            指令集 33 条 + 自定义指令登记
     lexer.gd             Token 47 种 + 词法分析
     parser.gd            Pratt 解析器
@@ -104,24 +108,25 @@ gdscript/
    enabled=PackedStringArray("res://addons/stope/plugin.cfg")
    ```
 
-3. 首次拷入（或增删过带 `class_name` 的脚本）后跑一次导入，让 Godot 重建全局类缓存：
+3. 之后在任何脚本里用一行 `preload` 引入统一入口，按 `Stope.*` 访问各组件：
 
-   ```bash
-   godot --headless --path <目标项目> --import
+   ```gdscript
+   const Stope = preload("res://addons/stope/stope.gd")
    ```
 
-4. 之后在任何脚本里直接用 `StopeLexer`、`StopeParser` 这些名字。引用**内层类**要写全名：
-   `StopeLexer.Lexer`、`StopeCompiler.Compiler`、`STML.Element`。
+   引用**内层类**要写全名：`Stope.Lexer.Lexer`、`Stope.Compiler.Compiler`、
+   `Stope.STML.Element`。
 
-插件在 `_enter_tree()` 里只做一件事：比对 13 个全局类是否都在
-`ProjectSettings.get_global_class_list()` 里，缺了就 `push_warning` 说明目录被裁剪或
-`class_name` 被改过。**它不往编辑器里加任何节点、菜单或 autoload。**
+插件在 `_enter_tree()` 里只做一件事：核对 17 个脚本文件是否都在，缺了就
+`push_warning` 说明目录被裁剪。**它不往编辑器里加任何节点、菜单或 autoload。**
 
 两条硬约束：
 
-- **不要给 `addons/stope/` 下的脚本改名，也不要删 `class_name`。** 这 13 个类全靠全局类名
-  互相引用，改一个就全链路失效。
-- 全局类名都有 `Stope` / `STML` 前缀，与业务代码撞名概率很低，但并非不可能。
+- **不要给 `addons/stope/` 下的脚本改名、移动，也不要加回 `class_name`。** 脚本之间全靠
+  `preload("res://addons/stope/...")` 路径互相引用，改路径就全链路失效；注册全局类则会
+  重新污染工程的全局命名空间（本实现特意零全局类，与业务代码零撞名）。
+- 不注册全局类也就不依赖 `.godot/global_script_class_cache.cfg`：删掉 `.godot/`
+  或换机拷贝后，无需 `--import` 刷新缓存即可直接跑。
 
 依赖：只用 Godot 内置能力（`RegEx`、`FileAccess`、`PackedByteArray`），零第三方插件。
 `basic_vm.gd` 用到了 `@abstract`，低版本 Godot 未验证；开发与实测版本是 **4.7.2**。
@@ -131,7 +136,9 @@ gdscript/
 ```gdscript
 extends Node
 
-class MyArgs extends StopeBasicVM.Arguments:
+const Stope = preload("res://addons/stope/stope.gd")
+
+class MyArgs extends "res://addons/stope/basic_vm.gd".Arguments:
 	func at(_key): return null
 	func num() -> int: return 0
 
@@ -139,28 +146,28 @@ func _ready() -> void:
 	var src := "let a = 1; let b = 2; return a + b;"
 
 	# 1. 源码 -> AST
-	var lexer := StopeLexer.Lexer.new(src)
-	var parser := StopeParser.Parser.new(lexer)		# 第二参是 CustomOpcodeConfig，可省
-	var tree := StopeAst.Prog.new()
+	var lexer := Stope.Lexer.Lexer.new(src)
+	var parser := Stope.Parser.Parser.new(lexer)		# 第二参是 CustomOpcodeConfig，可省
+	var tree := Stope.Ast.Prog.new()
 	parser.parse_program(tree)
 	if not lexer.errors.is_empty() or not parser.errors.is_empty():
 		push_error(str(lexer.errors) + str(parser.errors))
 		return
 
 	# 2. AST -> Program
-	var compiler := StopeCompiler.Compiler.new()
-	var program := StopeProgram.Program.new()
-	if compiler.compile(tree, program) != StopeResult.Success:
+	var compiler := Stope.Compiler.Compiler.new()
+	var program := Stope.Program.Program.new()
+	if compiler.compile(tree, program) != Stope.Result.Success:
 		push_error(str(compiler.errors))
 		return
-	print(StopeDebug.disasm(program))
+	print(Stope.Debug.disasm(program))
 
 	# 3. 装配参考执行器并运行（这一段不是标准，可以整个换掉）
-	var state := StopeBasicVM.State.new()
-	state.set_api(StopeBasicVM.Api.new())
+	var state := Stope.BasicVM.State.new()
+	state.set_api(Stope.BasicVM.Api.new())
 	state.set_program(program)
 	state.set_arguments(MyArgs.new())
-	if state.run() != StopeResult.Success:
+	if state.run() != Stope.Result.Success:
 		push_error(str(state.errors))
 		return
 	print(state.returns)	# [3]

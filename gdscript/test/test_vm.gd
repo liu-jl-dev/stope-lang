@@ -1,5 +1,15 @@
-class_name StopeTestVM
-# 执行器测试。StopeBasicVM 是**参考实现**，不是标准（见 docs/zh-cn/vm-guide.md）。
+# 测试脚本不注册 class_name；依赖以 preload 常量引入。
+const Ast = preload("res://addons/stope/ast.gd")
+const BasicVM = preload("res://addons/stope/basic_vm.gd")
+const Compiler = preload("res://addons/stope/compiler.gd")
+const Lexer = preload("res://addons/stope/lexer.gd")
+const Opcode = preload("res://addons/stope/opcode.gd")
+const Parser = preload("res://addons/stope/parser.gd")
+const Program = preload("res://addons/stope/program.gd")
+const Result = preload("res://addons/stope/stope_result.gd")
+const TestUtil = preload("res://test/test_util.gd")
+
+# 执行器测试。BasicVM 是**参考实现**，不是标准（见 docs/zh-cn/vm-guide.md）。
 #
 # 这组没有 C++ golden 数据，原因两条：
 #   1. VM 不在三项标准里，两侧错误文案格式本就不同 —— GD 是 "3 Add: msg"
@@ -13,19 +23,19 @@ const SRC_LINEAR := 'let a = 1; let b = 2; let c = a + b; return c;'
 const SRC_LOOP := 'let i = 0; while i < 3 { i = i + 1; } return i;'
 const SRC_ERR := 'let x; let a = 1 + x; return a;' # x 未赋值 = null，Add 运行期报错
 
-class NoArgs extends StopeBasicVM.Arguments:
+class NoArgs extends "res://addons/stope/basic_vm.gd".Arguments:
 	# 这组用例都不用 args/argc；真被取到就报错，立刻暴露「用例写错了」
-	func at(state:StopeBasicVM.State, index_or_key) -> Variant:
+	func at(state:BasicVM.State, index_or_key) -> Variant:
 		state.error('args not provided in this test. ')
 		return null
 	func num() -> int: return 0
 
 # V-05 用：一条主动报错的自定义指令
 class HostBoom:
-	func boom(s:StopeBasicVM.State) -> void:
+	func boom(s:BasicVM.State) -> void:
 		s.error('boom. ')
 
-static func run(rep:StopeTestUtil.Report) -> void:
+static func run(rep:TestUtil.Report) -> void:
 	# 顺序执行的程序：步数恰好等于指令条数（不含操作数），顺手锁住 step 的计数
 	_paths(rep, 'V-01', SRC_LINEAR, true)
 	# 带回边（If / GoTo 会改 i）：只比两条路径是否一致，步数不可预知
@@ -42,13 +52,13 @@ static func run(rep:StopeTestUtil.Report) -> void:
 # 宿主侧的错误通道：`Arguments.at(state, key)` 里 state.error(...) 之后 VM 必须停，
 # 错误进同一个 errors，且定位到 GetArg 那条指令。以前 at 拿不到 state，宿主只能
 # push_error 到 Godot 控制台，VM 当成功继续跑。
-static func _get_arg_error(rep:StopeTestUtil.Report) -> void:
+static func _get_arg_error(rep:TestUtil.Report) -> void:
 	var prog := _build('return args[0];')
 	if prog == null:
 		rep.add_fail('  FAIL V-04  编译失败')
 		return
 	var s := _new_state(prog)
-	rep.check('V-04', 'run 返回 Error', 'true', str(s.run() == StopeResult.Error))
+	rep.check('V-04', 'run 返回 Error', 'true', str(s.run() == Result.Error))
 	rep.check('V-04', '错误条数', '1', str(s.errors.size()))
 	rep.check('V-04', '错误全文',
 		str(s.i, ' GetArg: args not provided in this test. '), _join(s.errors))
@@ -57,9 +67,9 @@ static func _get_arg_error(rep:StopeTestUtil.Report) -> void:
 # `Opcode.keys()` 只有 33 项，早期直接 `Opcode.keys()[opcode]` 下标取 —— 自定义指令
 # 一报错就变成引擎级 `Out of bounds get index`，错误一句都没记下来，而 errors 既然
 # 为空，run() 还会返回 Success（假装成功）。修复后按 debug.gd 的惯例印成 `Custom<N>`。
-static func _custom_opcode_error(rep:StopeTestUtil.Report) -> void:
-	var first := StopeOpcode.FIRST_CUSTOM_OPCODE
-	var cfg := StopeOpcode.CustomOpcodeConfig.new()
+static func _custom_opcode_error(rep:TestUtil.Report) -> void:
+	var first := Opcode.FIRST_CUSTOM_OPCODE
+	var cfg := Opcode.CustomOpcodeConfig.new()
 	cfg.add_custom_opcode('my:boom', first, 0)
 	var prog := _build_with('my:boom();', cfg)
 	if prog == null:
@@ -67,20 +77,20 @@ static func _custom_opcode_error(rep:StopeTestUtil.Report) -> void:
 		return
 
 	var host := HostBoom.new()
-	var api := StopeBasicVM.Api.new()
+	var api := BasicVM.Api.new()
 	# 分派表是稠密 Array，下标即编号 ⇒ 长度必须 >= 编号 + 1
 	api.op_map.resize(first + 1)
 	api.op_map[first] = host.boom
 
-	var s := StopeBasicVM.State.new()
+	var s := BasicVM.State.new()
 	s.set_api(api)
 	s.set_program(prog)
 	s.set_arguments(NoArgs.new())
-	rep.check('V-05', 'run 返回 Error', 'true', str(s.run() == StopeResult.Error))
+	rep.check('V-05', 'run 返回 Error', 'true', str(s.run() == Result.Error))
 	rep.check('V-05', '错误条数', '1', str(s.errors.size()))
 	rep.check('V-05', '错误全文', str('0 Custom', first, ': boom. '), _join(s.errors))
 
-static func _paths(rep:StopeTestUtil.Report, id:String, src:String, check_steps:bool) -> void:
+static func _paths(rep:TestUtil.Report, id:String, src:String, check_steps:bool) -> void:
 	var prog := _build(src)
 	if prog == null:
 		rep.add_fail(str('  FAIL ', id, '  编译失败：', src))
@@ -91,10 +101,10 @@ static func _paths(rep:StopeTestUtil.Report, id:String, src:String, check_steps:
 
 	var b := _new_state(prog)
 	var steps := 0
-	while b.i < prog.opcodes.size() and b.step() == StopeResult.Success: steps += 1
+	while b.i < prog.opcodes.size() and b.step() == Result.Success: steps += 1
 
 	# run 的返回值就是「errors 为空」，两路都得守住这条
-	rep.check(id, 'run 返回值↔errors', 'true', str((ok_a == StopeResult.Success) == a.errors.is_empty()))
+	rep.check(id, 'run 返回值↔errors', 'true', str((ok_a == Result.Success) == a.errors.is_empty()))
 	if check_steps:
 		rep.check(id, 'step 步数', str(_inst_count(prog)), str(steps))
 	rep.check(id, 'returns', _fmt(a.returns), _fmt(b.returns))
@@ -106,13 +116,13 @@ static func _paths(rep:StopeTestUtil.Report, id:String, src:String, check_steps:
 	# 出错停机 → errors 仍非空，step 返回 Error；走到末尾 → 返回 Success。
 	var err_before := b.errors.size()
 	var i_before := b.i
-	var step_expect := StopeResult.Error if err_before > 0 else StopeResult.Success
+	var step_expect := Result.Error if err_before > 0 else Result.Success
 	rep.check(id, '停机后 step', str(step_expect), str(b.step()))
 	rep.check(id, '停机后 i 不变', str(i_before), str(b.i))
 	rep.check(id, '停机后 errors 不变', str(err_before), str(b.errors.size()))
 
 # 指令条数（不含操作数）：顺序执行时 step 应当正好走这么多条
-static func _inst_count(prog:StopeProgram.Program) -> int:
+static func _inst_count(prog:Program.Program) -> int:
 	var n := 0
 	var k := 0
 	var ops := prog.opcodes
@@ -121,27 +131,27 @@ static func _inst_count(prog:StopeProgram.Program) -> int:
 		n += 1
 		k += 1
 		# > Return 的是自定义指令，本组用例不涉及
-		if op <= StopeOpcode.Opcode.Return and StopeOpcode.has_a_param(op): k += 1
+		if op <= Opcode.Opcode.Return and Opcode.has_a_param(op): k += 1
 	return n
 
-static func _build(src:String) -> StopeProgram.Program:
+static func _build(src:String) -> Program.Program:
 	return _build_with(src, null)
 
 # cfg 同时交给 Parser 与 Compiler（少给一处，自定义指令就会被当成普通函数调用）
-static func _build_with(src:String, cfg:StopeOpcode.CustomOpcodeConfig) -> StopeProgram.Program:
-	var lx := StopeLexer.Lexer.new(src)
-	var ps := StopeParser.Parser.new(lx, cfg)
-	var ast := StopeAst.Prog.new()
+static func _build_with(src:String, cfg:Opcode.CustomOpcodeConfig) -> Program.Program:
+	var lx := Lexer.Lexer.new(src)
+	var ps := Parser.Parser.new(lx, cfg)
+	var ast := Ast.Prog.new()
 	ps.parse_program(ast)
 	if not ps.errors.is_empty(): return null
-	var c := StopeCompiler.Compiler.new(cfg)
-	var out := StopeProgram.Program.new()
-	if c.compile(ast, out) != StopeResult.Success: return null
+	var c := Compiler.Compiler.new(cfg)
+	var out := Program.Program.new()
+	if c.compile(ast, out) != Result.Success: return null
 	return out
 
-static func _new_state(prog:StopeProgram.Program) -> StopeBasicVM.State:
-	var s := StopeBasicVM.State.new()
-	s.set_api(StopeBasicVM.Api.new())
+static func _new_state(prog:Program.Program) -> BasicVM.State:
+	var s := BasicVM.State.new()
+	s.set_api(BasicVM.Api.new())
 	s.set_program(prog)
 	s.set_arguments(NoArgs.new())
 	return s
@@ -159,7 +169,7 @@ static func _join(errs:Array) -> String:
 # ============================ 值语义（V-06 起） ============================
 # 这组锁的是「GD 执行器与 C++ / Node.js 对同一份产物给出同一种答案」。
 # 全部用变量而不是字面量：字面量会被常量折叠吃掉，根本走不到执行器。
-static func _value_semantics(rep:StopeTestUtil.Report) -> void:
+static func _value_semantics(rep:TestUtil.Report) -> void:
 	# 布尔就是整数 1 / 0（C++ opPushTrue 压 Integer，没有 bool 值类型）
 	_returns(rep, 'V-06', 'return true;', '[1]')
 	_returns(rep, 'V-06b', 'return false;', '[0]')
@@ -221,7 +231,7 @@ static func _value_semantics(rep:StopeTestUtil.Report) -> void:
 	# 宿主函数据返回 bool：归一成整数（Stope 没有布尔值类型）
 	_host_bool(rep)
 
-static func _host_bool(rep:StopeTestUtil.Report) -> void:
+static func _host_bool(rep:TestUtil.Report) -> void:
 	var prog := _build('return f();')
 	if prog == null:
 		rep.add_fail('  FAIL V-14  编译失败')
@@ -230,31 +240,31 @@ static func _host_bool(rep:StopeTestUtil.Report) -> void:
 	# 未声明就被调用 → 编译器隐式登记进 exports；槽位号由编译器分配，不能写死
 	s.variables[prog.exports['f']] = func(_argv): return true
 	var ok := s.run()
-	rep.check('V-14', 'run 返回 Success', 'true', str(ok == StopeResult.Success))
+	rep.check('V-14', 'run 返回 Success', 'true', str(ok == Result.Success))
 	rep.check('V-14', 'returns[0] 类型', str(TYPE_INT), str(typeof(s.returns[0])))
 	rep.check('V-14', 'returns', '[1]', _fmt(s.returns))
 
 # 跑一段源码，断言返回值（顺带要求没有任何错误）
-static func _returns(rep:StopeTestUtil.Report, id:String, src:String, want:String) -> void:
+static func _returns(rep:TestUtil.Report, id:String, src:String, want:String) -> void:
 	var s = _state_of(rep, id, src)
 	if s == null: return
 	rep.check(id, 'returns', want, _fmt(s.returns))
 	rep.check(id, 'errors', '', _join(s.errors))
 
 # 跑一段源码，断言**报错**（错误串的「下标 + 指令名」前缀由实现定，只比消息部分）
-static func _err(rep:StopeTestUtil.Report, id:String, src:String, want_msg:String) -> void:
+static func _err(rep:TestUtil.Report, id:String, src:String, want_msg:String) -> void:
 	var s = _state_of(rep, id, src)
 	if s == null: return
 	rep.check(id, '错误条数', '1', str(s.errors.size()))
 	rep.check(id, '错误消息', want_msg, _msg_only(s.errors))
 
-static func _ret_type(rep:StopeTestUtil.Report, id:String, src:String, want:int) -> void:
+static func _ret_type(rep:TestUtil.Report, id:String, src:String, want:int) -> void:
 	var s = _state_of(rep, id, src)
 	if s == null: return
 	rep.check(id, 'errors', '', _join(s.errors))
 	rep.check(id, 'returns[0] 类型', str(want), str(typeof(s.returns[0])) if s.returns.size() > 0 else 'none')
 
-static func _state_of(rep:StopeTestUtil.Report, id:String, src:String) -> StopeBasicVM.State:
+static func _state_of(rep:TestUtil.Report, id:String, src:String) -> BasicVM.State:
 	var prog := _build(src)
 	if prog == null:
 		rep.add_fail(str('  FAIL ', id, '  编译失败：', src))

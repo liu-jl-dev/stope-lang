@@ -1,6 +1,9 @@
-class_name StopeBasicVM
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const Opcode = preload("res://addons/stope/opcode.gd")
+const Program = preload("res://addons/stope/program.gd")
+const Result = preload("res://addons/stope/stope_result.gd")
 
-const Opcode = StopeOpcode.Opcode
+const Op = Opcode.Opcode
 
 # 变量槽位的**左值**标记。只有 PushId 会造它，也只有 Assign 会读它。
 #
@@ -32,7 +35,7 @@ class Handle:
 
 class State:
 	var api:Api
-	var program:StopeProgram.Program
+	var program:Program.Program
 	var args:Arguments
 	var returns:Array
 
@@ -47,7 +50,7 @@ class State:
 
 	# 绑定程序：按 variable_num 开好槽位、i 归零、清运行态。
 	#（C++ 侧那句必写的 state.variables.resize(...) 在这里由 set_program 代做。）
-	func set_program(prog:StopeProgram.Program):
+	func set_program(prog:Program.Program):
 		program = prog
 		returns = []
 		i = 0
@@ -72,11 +75,11 @@ class State:
 	# 调用 + 返回值判断，在 GDScript 里是实打实的开销，而 run 是执行路径上唯一
 	# 的性能敏感处。代价是两处循环体要保持同步 —— 改步进规则（错误检查、i 推进）
 	# 必须同时改这两个函数。
-	# 执行一条指令。返回 StopeResult（匿名 enum，类型注 int）：Success = 这条
+	# 执行一条指令。返回 Result（匿名 enum，类型注 int）：Success = 这条
 	# 跑完了且没出错，可以接着 step。返回 Error 有两种情况，靠 errors 区分：
 	#   · errors 非空 —— 出错了，i 停在出错的那条指令上；
 	#   · errors 为空 —— 指令流已经走完（i 越过末尾，返回 Success）。
-	# 所以 `while s.i < ops.size() and s.step() == StopeResult.Success: ...`
+	# 所以 `while s.i < ops.size() and s.step() == Result.Success: ...`
 	# 与 run() 等价，连走的条数都一样。
 	#
 	# 与 run 是**两份独立实现**，不互相调用：热循环里每条指令多一次 step()
@@ -84,13 +87,13 @@ class State:
 	# 的性能敏感处。代价是两处循环体要保持同步 —— 改步进规则（错误检查、i 推进）
 	# 必须同时改这两个函数。
 	func step() -> int:
-		if not errors.is_empty(): return StopeResult.Error
+		if not errors.is_empty(): return Result.Error
 		var ops := program.opcodes
-		if i >= ops.size(): return StopeResult.Success
+		if i >= ops.size(): return Result.Success
 		api.op_map[ops[i]].call(self)
-		if not errors.is_empty(): return StopeResult.Error
+		if not errors.is_empty(): return Result.Error
 		i += 1
-		return StopeResult.Success
+		return Result.Success
 
 	func run() -> int: # 出错返回 Error，否则 Success
 		# ops / n 提到循环外：opcodes 在执行中不会变长（Return 只是把 i 拨到末尾）。
@@ -98,9 +101,9 @@ class State:
 		var n := ops.size()
 		while i < n:
 			api.op_map[ops[i]].call(self)
-			if not errors.is_empty(): return StopeResult.Error
+			if not errors.is_empty(): return Result.Error
 			i += 1
-		return StopeResult.Success
+		return Result.Success
 
 	# 真值判定，逐行照 C++ 的 API::truely：
 	#   null / 整数 0 / 浮点 0.0 / 空字符串 / 空二进制数组 → 假；其余 → 真。
@@ -121,12 +124,12 @@ class State:
 
 	# 错误串里的指令名。内置指令取枚举名；>= 33 的自定义编号在枚举里没有位置，
 	# 按 debug.gd 的惯例印成 `Custom<N>`（那里没传 config 时也是这么印的）。
-	# ⚠ 这里**必须**兜住越界：早期直接写 `Opcode.keys()[raw]`，自定义指令一报错
+	# ⚠ 这里**必须**兜住越界：早期直接写 `Op.keys()[raw]`，自定义指令一报错
 	# 就变成 `Out of bounds get index` —— 错误没记下来，run() 还会返回 true。
 	func _inst_name(raw:int) -> String:
-		var keys := Opcode.keys()
+		var keys := Op.keys()
 		if raw >= 0 and raw < keys.size(): return keys[raw]
-		return str('Custom', raw) if raw > Opcode.Return else str('Op#', raw)
+		return str('Custom', raw) if raw > Op.Return else str('Op#', raw)
 
 
 class Api:

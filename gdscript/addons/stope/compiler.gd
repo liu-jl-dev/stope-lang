@@ -1,4 +1,11 @@
-class_name StopeCompiler
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const Ast = preload("res://addons/stope/ast.gd")
+const ExprOptim = preload("res://addons/stope/expr_optim.gd")
+const Lexer = preload("res://addons/stope/lexer.gd")
+const Opcode = preload("res://addons/stope/opcode.gd")
+const Program = preload("res://addons/stope/program.gd")
+const Result = preload("res://addons/stope/stope_result.gd")
+
 # 编译器：把 AST 编译成 Program（指令流 + 常量池 + 变量表）。
 # 逐行端口 cpp/stope/compiler.hpp（C++ 为权威实现，2026-10-18 重写）。
 #
@@ -10,23 +17,23 @@ class_name StopeCompiler
 #   If / GoTo                                             —— 跳转目标（opcodes 下标）
 #   Return                                                —— 返回值个数
 #   custom                                                —— 变长参数时多一个参数个数
-# 其余指令无操作数（见 StopeOpcode.has_a_param）。
+# 其余指令无操作数（见 Opcode.has_a_param）。
 #
 # 【PushValue 与 PushId 的分工】PushId 压的是槽位引用（左值），只有两处产生：
 #   「有赋值的 let」左侧、Assign 左端是裸标识符时。其余读变量一律 PushValue（压值）。
 #   所以执行器【不需要】在运算指令里做解引用兜底 —— 那样只会掩盖编译器的产物错误。
 #
-# 【遍历骨架】继承 StopeAstVisitor.ASTVisitor（对齐 C++：ASTVisitor + visitMap），
+# 【遍历骨架】继承 ast_visitor.gd 的 ASTVisitor（对齐 C++：ASTVisitor + visitMap），
 # 语义动作全在 on_visit_xxx 里。基类的默认实现只是「按源码顺序递归子节点」，
 # 这里凡是需要发指令的一律整段重写（不再 down 到 super），其余靠基类递归。
 # cur_line 由基类的 visit() 维护，没有专属行号的错误就用它。
 
-const TokenType = StopeLexer.Token.Type
-const Opcode = StopeOpcode.Opcode
+const TokenType = Lexer.Token.Type
+const Op = Opcode.Opcode
 
-class Compiler extends StopeASTVisitor.ASTVisitor:
-	var prog:StopeProgram.Program			# 正在写入的 Program，不拥有
-	var custom_opcodes:StopeOpcode.CustomOpcodeConfig	# 可空，只读（不拥有）
+class Compiler extends "res://addons/stope/ast_visitor.gd".ASTVisitor:
+	var prog:Program.Program			# 正在写入的 Program，不拥有
+	var custom_opcodes:Opcode.CustomOpcodeConfig	# 可空，只读（不拥有）
 	var errors:Array[String] = []
 
 	var var_alloc:VariableAllocator
@@ -47,22 +54,22 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	# 最内层 while 的循环体里是否有本层 break（死循环判定用）；按 while 配对保存恢复。
 	var saw_break:bool = false
 
-	func _init(custom:StopeOpcode.CustomOpcodeConfig = null) -> void:
+	func _init(custom:Opcode.CustomOpcodeConfig = null) -> void:
 		custom_opcodes = custom
 
 	# 与 C++ 的 Compiler::Reset 一致：清错误、换自定义指令表。
-	func reset(custom:StopeOpcode.CustomOpcodeConfig = null) -> void:
+	func reset(custom:Opcode.CustomOpcodeConfig = null) -> void:
 		errors = []
 		custom_opcodes = custom
 
 	# ---------------- 对外接口 ----------------
-	# 编译 ast，结果直接写进 out。有错误时返回 StopeResult.Error 并把 out 复原为空 ——
+	# 编译 ast，结果直接写进 out。有错误时返回 Result.Error 并把 out 复原为空 ——
 	# 半成品 Program 跑不了，留着反而误导。
 	# pre_exports：遍历 AST 之前先导出的标识符（宿主注入的全局）。每个名字按给定顺序
 	# 占一个「永不回收」的槽位，所以源码里所有变量的编号整体后移；名字进了文件作用域，
 	# 源码里再 export 同名、或顶层 let 同名，都会报 duplicate —— 预导出的变量只能赋值。
 	# 空名字与重名都是编译错误（行号记 0：这些名字不来自源码）。
-	func compile(ast:StopeAst.Prog, out:StopeProgram.Program,
+	func compile(ast:Ast.Prog, out:Program.Program,
 			pre_exports:Array = []) -> int:
 		_reset(out)
 		_export_pre_exports(pre_exports)
@@ -74,14 +81,14 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		_file_scope().defers.clear()	# 最终结算：途中出口（return）已各拼过副本
 		if not errors.is_empty():
 			_clear_output()
-			return StopeResult.Error
+			return Result.Error
 		out.variable_num = var_alloc.num()
 		out.required_stack_size = stack_size_mgr.max_size
-		return StopeResult.Success
+		return Result.Success
 
 	# ---------------- 遍历骨架 ----------------
-	# visit() / visit_map 都在基类 StopeAstVisitor.ASTVisitor 里，这里只重写钩子。
-	func _reset(out:StopeProgram.Program) -> void:
+	# visit() / visit_map 都在基类 ASTVisitor 里，这里只重写钩子。
+	func _reset(out:Program.Program) -> void:
 		errors = []
 		var_alloc = VariableAllocator.new()
 		stack_size_mgr = StackSizeManager.new()
@@ -205,7 +212,7 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	# 语句序列（顶层 Prog / 块体 / if 分支 / while 体共用）：终止语句（return /
 	# break / continue / 死循环）之后的语句在语言语义下执行不到——不再发射，也
 	# 不登记它们的 defer（死代码消除）。序列的终止性 = 最后一条已发射语句。
-	func on_visit_prog(p:StopeAst.Prog) -> void:
+	func on_visit_prog(p:Ast.Prog) -> void:
 		var terminated := false
 		for s in p.stmts:
 			if terminated: break
@@ -213,10 +220,10 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 			visit(s)
 			terminated = stmt_terminates
 		stmt_terminates = terminated
-	func on_visit_expr_stmt(s:StopeAst.ExprStmt) -> void:
+	func on_visit_expr_stmt(s:Ast.ExprStmt) -> void:
 		visit(s.expr)
-		_emit_op(Opcode.Pop); stack_size_mgr.dec()
-	func on_visit_let_stmt(s:StopeAst.LetStmt) -> void:
+		_emit_op(Op.Pop); stack_size_mgr.dec()
+	func on_visit_let_stmt(s:Ast.LetStmt) -> void:
 		var bs:BlockScope = _top_block_scope()
 		if bs == null: return
 		if s.has_assign:	# let a = expr; —— 只有一个标识符
@@ -228,16 +235,16 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 			# 不要 visit 标识符本身（那会生成 PushValue 取值），这里是要绑定到新变量
 			var idx:int = var_alloc.new_var()
 			_declare_local(bs, name, idx)
-			_emit_op(Opcode.PushId); _emit_index(idx); stack_size_mgr.inc()
+			_emit_op(Op.PushId); _emit_index(idx); stack_size_mgr.inc()
 			visit(s.expr)
-			_emit_op(Opcode.Assign); stack_size_mgr.dec(2)
+			_emit_op(Op.Assign); stack_size_mgr.dec(2)
 		else:
 			for nm in s.idents:
 				if nm in bs.id_map:
 					error(s.line, str("duplicate declaration of '", nm, "'. "))
 					continue
 				_declare_local(bs, nm, var_alloc.new_var())
-	func on_visit_return_stmt(s:StopeAst.ReturnStmt) -> void:
+	func on_visit_return_stmt(s:Ast.ReturnStmt) -> void:
 		# defer 边界：return 的终点是整个程序，在载荷内必然越界，一律报错。
 		for sc in scope_stack:
 			if sc is BlockScope and sc.is_defer_payload:
@@ -249,11 +256,11 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 			var sc:Scope = scope_stack[i]
 			if sc is BlockScope: _splice_defers(sc)
 		for e in s.exprs: visit(e)
-		_emit_op(Opcode.Return); _emit_index(len(s.exprs))
+		_emit_op(Op.Return); _emit_index(len(s.exprs))
 		prog.max_return_num = maxi(prog.max_return_num, len(s.exprs))
 		stmt_terminates = true
 		# Return 会让 VM 直接跳到 code 末尾，栈上的返回值不回收
-	func on_visit_export_stmt(s:StopeAst.ExportStmt) -> void:
+	func on_visit_export_stmt(s:Ast.ExportStmt) -> void:
 		if len(scope_stack) > 1:
 			error(s.line, '"export" can only be used at top scope. ')
 		var fs:FileScope = _file_scope()
@@ -262,7 +269,7 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 				error(s.line, str('duplicate export of "', id, '". '))
 				continue
 			_declare_exported(id, var_alloc.new_unique_var(id))
-	func on_visit_block_stmt(s:StopeAst.BlockStmt) -> void:
+	func on_visit_block_stmt(s:Ast.BlockStmt) -> void:
 		var bs:BlockScope = _push_block_scope()
 		visit(s.prog)
 		# 块尾结算：本 scope 的 defer 在这里执行（LIFO）。块体以终止语句结尾时
@@ -277,9 +284,9 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	# 与 cpp/src/compiler.cpp 的 constCondTruth 一致（GDScript 无出参，拆成判断 +
 	# truthy 两步调用）。
 	func _is_const_cond(e) -> bool:
-		return StopeExprOptim.is_const(StopeExprOptim.kind_of(e))
+		return ExprOptim.is_const(ExprOptim.kind_of(e))
 
-	func on_visit_if_stmt(s:StopeAst.IfStmt) -> void:
+	func on_visit_if_stmt(s:Ast.IfStmt) -> void:
 		if s.cond == null: return
 		# OQ-2（2026-11-09 落地）：字面量条件折叠。条件是常量字面量时按真值表
 		# 静态判定——常量真只发该分支（零条件、零跳转指令），常量假整支消除
@@ -295,7 +302,7 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		var branch_term:bool = false
 
 		if _is_const_cond(s.cond):
-			if StopeExprOptim.truthy(s.cond):	# 常量真：整条链只剩这一个分支体
+			if ExprOptim.truthy(s.cond):	# 常量真：整条链只剩这一个分支体
 				_visit_body_as_block(s.first_prog)
 				all_bodies_terminate = all_bodies_terminate and stmt_terminates
 				any_body_emitted = true
@@ -304,19 +311,19 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 			# 常量假：跳过，看 elifs / else
 		else:	# 非常量：普通发射
 			visit(s.cond)
-			_emit_op(Opcode.If); stack_size_mgr.dec()
+			_emit_op(Op.If); stack_size_mgr.dec()
 			pending_false = _emit_placeholder()	# 条件为假时跳到这里
 			_visit_body_as_block(s.first_prog)
 			branch_term = stmt_terminates
 			all_bodies_terminate = all_bodies_terminate and branch_term
 			any_body_emitted = true
 			if not branch_term:	# 分支走完会落到这里，需要跳出整个 if；终止则死代码
-				_emit_op(Opcode.GoTo)
+				_emit_op(Op.GoTo)
 				goto_end_indices.append(_emit_placeholder())
 		for ei in s.elifs:
 			if chain_ended or ei.cond == null: continue
 			if _is_const_cond(ei.cond):
-				if StopeExprOptim.truthy(ei.cond):
+				if ExprOptim.truthy(ei.cond):
 					# 常量真：之前的假路径在这里进体，链到此为止
 					if pending_false >= 0:
 						_patch_index(pending_false, _code_size())
@@ -332,14 +339,14 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 				_patch_index(pending_false, _code_size())
 				pending_false = -1
 			visit(ei.cond)
-			_emit_op(Opcode.If); stack_size_mgr.dec()
+			_emit_op(Op.If); stack_size_mgr.dec()
 			pending_false = _emit_placeholder()
 			_visit_body_as_block(ei.prog)
 			branch_term = stmt_terminates
 			all_bodies_terminate = all_bodies_terminate and branch_term
 			any_body_emitted = true
 			if not branch_term:
-				_emit_op(Opcode.GoTo)
+				_emit_op(Op.GoTo)
 				goto_end_indices.append(_emit_placeholder())
 		if not chain_ended and s.else_prog != null:
 			if pending_false >= 0:
@@ -355,14 +362,14 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		# if 语句的终止性：所有可达分支体终止，且「一路为假」的落空路径被
 		# else / 常量真接住——否则那条路径直接落到 if 之后，不算终止。
 		stmt_terminates = any_body_emitted and all_bodies_terminate and fallthrough_resolved
-	func on_visit_while_stmt(s:StopeAst.WhileStmt) -> void:
+	func on_visit_while_stmt(s:Ast.WhileStmt) -> void:
 		# OQ-2：常量条件折叠——常量真折叠为无条件循环（其后语句按真死循环
 		# 消除），常量假整环消除（体不访问，其中的 defer 不登记）。
 		var truth := false
 		var cond_const := false
 		if s.cond != null:
 			cond_const = _is_const_cond(s.cond)
-			if cond_const: truth = StopeExprOptim.truthy(s.cond)
+			if cond_const: truth = ExprOptim.truthy(s.cond)
 		var eliminate:bool = cond_const and not truth
 
 		var ws:WhileScope = _push_while_scope()
@@ -370,7 +377,7 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		var case_goto_end_pos:int = -1
 		if s.cond != null and not cond_const:	# 非常量条件才发射判断
 			visit(s.cond)
-			_emit_op(Opcode.If); stack_size_mgr.dec()
+			_emit_op(Op.If); stack_size_mgr.dec()
 			case_goto_end_pos = _emit_placeholder()
 		if eliminate:	# 常量假：体永不执行，整环消除（break/continue 无可达）
 			stmt_terminates = false
@@ -384,7 +391,7 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		var body_saw_break:bool = saw_break
 		saw_break = saved_saw_break
 		if not body_term:	# 体终止（return/break/continue 收尾）则回跳是死代码
-			_emit_op(Opcode.GoTo); _emit_index(ws.start_index)
+			_emit_op(Op.GoTo); _emit_index(ws.start_index)
 		for pos in ws.break_indices: _patch_index(pos, _code_size())
 		# [纠正 4] 条件可省。无条件（含折叠为真的常量条件）时必须跳过回填，
 		# 否则会把第 0 条指令改成跳转目标。
@@ -393,20 +400,20 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		# break 的真死循环才永不退出。
 		stmt_terminates = (s.cond == null or (cond_const and truth)) and not body_saw_break
 		_pop_scope()
-	func on_visit_assign_stmt(s:StopeAst.AssignStmt) -> void:
-		if s.left_expr.node_type == StopeAst.NodeType.IdentExpr:
+	func on_visit_assign_stmt(s:Ast.AssignStmt) -> void:
+		if s.left_expr.node_type == Ast.NodeType.IdentExpr:
 			# 赋值左端的裸标识符要压【槽位】而不是值，否则 Assign 无处可存。
 			# 这条与 on_visit_ident_expr 的 PushValue 是一对：只有这里和
 			# 「有赋值的 let」会产生 PushId。
-			var e:StopeAst.IdentExpr = s.left_expr
+			var e:Ast.IdentExpr = s.left_expr
 			var idx:int = _ident_slot(e.ident)
-			_emit_op(Opcode.PushId); _emit_index(idx); stack_size_mgr.inc()
+			_emit_op(Op.PushId); _emit_index(idx); stack_size_mgr.inc()
 		else:
 			# 可能是使用者设计的数组元素引用、对象成员引用等。压入值。
 			visit(s.left_expr)
 		visit(s.right_expr)
-		_emit_op(Opcode.Assign); stack_size_mgr.dec(2)
-	func on_visit_break_stmt(s:StopeAst.BreakStmt) -> void:
+		_emit_op(Op.Assign); stack_size_mgr.dec(2)
+	func on_visit_break_stmt(s:Ast.BreakStmt) -> void:
 		# 找最内层 WhileScope。途中先撞到 defer 载荷边界 = 目标循环在载荷外：
 		# 载荷在退出点才执行，break 从收尾代码里跳回主流程是灾难语义，禁。
 		var wi:int = -1
@@ -426,11 +433,11 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		# 块尾拼接不会执行到，必须在跳转前就地结算。
 		for i in range(len(scope_stack) - 1, wi, -1):
 			if scope_stack[i] is BlockScope: _splice_defers(scope_stack[i])
-		_emit_op(Opcode.GoTo)
+		_emit_op(Op.GoTo)
 		scope_stack[wi].break_indices.append(_emit_placeholder())
 		saw_break = true	# 告知最内层 while：本层有 break（死循环判定用）
 		stmt_terminates = true
-	func on_visit_continue_stmt(s:StopeAst.ContinueStmt) -> void:
+	func on_visit_continue_stmt(s:Ast.ContinueStmt) -> void:
 		# 同 break：continue 也退出循环体块，体块的 defer 必须先结算。
 		var wi:int = -1
 		for i in range(len(scope_stack) - 1, -1, -1):
@@ -446,11 +453,11 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 			return
 		for i in range(len(scope_stack) - 1, wi, -1):
 			if scope_stack[i] is BlockScope: _splice_defers(scope_stack[i])
-		_emit_op(Opcode.GoTo); _emit_index(scope_stack[wi].start_index)
+		_emit_op(Op.GoTo); _emit_index(scope_stack[wi].start_index)
 		stmt_terminates = true
 	# defer：纯编译期登记，defer 语句位置零指令。载荷在退出点才编译（每个退出点
 	# 各编译一次——If/GoTo 操作数是绝对下标，编译一次再拷贝会破坏跳转目标）。
-	func on_visit_defer_stmt(s:StopeAst.DeferStmt) -> void:
+	func on_visit_defer_stmt(s:Ast.DeferStmt) -> void:
 		var bs:BlockScope = _top_block_scope()
 		if bs == null: return	# 不可能：FileScope 常驻栈底
 		var d := Deferred.new()
@@ -490,40 +497,40 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	# ---------------- 表达式 ----------------
 	# NullExpr / ArgcExpr 没有子节点，但签名保持一致以便统一 call(n)
 	func on_visit_null_expr(_n=null) -> void:
-		_emit_op(Opcode.PushNull); stack_size_mgr.inc()
-	func on_visit_bool_expr(e:StopeAst.BoolExpr) -> void:
-		_emit_op(Opcode.PushTrue if e.value else Opcode.PushFalse)
+		_emit_op(Op.PushNull); stack_size_mgr.inc()
+	func on_visit_bool_expr(e:Ast.BoolExpr) -> void:
+		_emit_op(Op.PushTrue if e.value else Op.PushFalse)
 		stack_size_mgr.inc()
-	func on_visit_int_expr(e:StopeAst.IntExpr) -> void:
-		_emit_op(Opcode.PushInt); _emit_index(_const_index(prog.int_consts, e.value))
+	func on_visit_int_expr(e:Ast.IntExpr) -> void:
+		_emit_op(Op.PushInt); _emit_index(_const_index(prog.int_consts, e.value))
 		stack_size_mgr.inc()
-	func on_visit_float_expr(e:StopeAst.FloatExpr) -> void:
-		_emit_op(Opcode.PushFloat); _emit_index(_const_index(prog.float_consts, e.value))
+	func on_visit_float_expr(e:Ast.FloatExpr) -> void:
+		_emit_op(Op.PushFloat); _emit_index(_const_index(prog.float_consts, e.value))
 		stack_size_mgr.inc()
-	func on_visit_string_expr(e:StopeAst.StringExpr) -> void:
-		_emit_op(Opcode.PushString)
+	func on_visit_string_expr(e:Ast.StringExpr) -> void:
+		_emit_op(Op.PushString)
 		_emit_index(_const_index(prog.string_consts, e.value))
 		stack_size_mgr.inc()
-	func on_visit_bin_arr_expr(e:StopeAst.BinArrExpr) -> void:	# 旧版没有这个类型
-		_emit_op(Opcode.PushBinArr)
+	func on_visit_bin_arr_expr(e:Ast.BinArrExpr) -> void:	# 旧版没有这个类型
+		_emit_op(Op.PushBinArr)
 		_emit_index(_const_index(prog.bin_arr_consts, e.value))
 		stack_size_mgr.inc()
-	func on_visit_ident_expr(e:StopeAst.IdentExpr) -> void:
+	func on_visit_ident_expr(e:Ast.IdentExpr) -> void:
 		var idx:int = _ident_slot(e.ident)
-		_emit_op(Opcode.PushValue)	# 压的是变量的【值】；要槽位请用 PushId
+		_emit_op(Op.PushValue)	# 压的是变量的【值】；要槽位请用 PushId
 		_emit_index(idx)
 		stack_size_mgr.inc()
 	func on_visit_argc_expr(_n=null) -> void:
-		_emit_op(Opcode.ArgNum); stack_size_mgr.inc()
-	func on_visit_args_expr(e:StopeAst.ArgsExpr) -> void:
+		_emit_op(Op.ArgNum); stack_size_mgr.inc()
+	func on_visit_args_expr(e:Ast.ArgsExpr) -> void:
 		visit(e.key_expr)
-		_emit_op(Opcode.GetArg)	# 弹下标、压结果，栈大小不变
-	func on_visit_unary_op_expr(e:StopeAst.UnaryOpExpr) -> void:
+		_emit_op(Op.GetArg)	# 弹下标、压结果，栈大小不变
+	func on_visit_unary_op_expr(e:Ast.UnaryOpExpr) -> void:
 		visit(e.expr)
-		if e.op == TokenType.Not: _emit_op(Opcode.Not)
-		elif e.op == TokenType.Sub: _emit_op(Opcode.Minus)
+		if e.op == TokenType.Not: _emit_op(Op.Not)
+		elif e.op == TokenType.Sub: _emit_op(Op.Minus)
 		# 一元指令：弹 1 压 1，栈大小不变
-	func on_visit_binary_op_expr(e:StopeAst.BinaryOpExpr) -> void:
+	func on_visit_binary_op_expr(e:Ast.BinaryOpExpr) -> void:
 		if e.op == TokenType.Or:
 			on_visit_or_expr(e); return
 		if e.op == TokenType.And:
@@ -533,59 +540,59 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 		stack_size_mgr.dec()	# 弹 2 压 1
 	# 短路或：任一侧为真就 PushTrue，两条路径都在栈上留下恰好 1 个结果。
 	# [纠正 2] 这里对 PushTrue / PushFalse 记账，且末尾不 dec。
-	func on_visit_or_expr(e:StopeAst.BinaryOpExpr) -> void:
+	func on_visit_or_expr(e:Ast.BinaryOpExpr) -> void:
 		visit(e.left_expr)
-		_emit_op(Opcode.If); stack_size_mgr.dec()
+		_emit_op(Op.If); stack_size_mgr.dec()
 		var first_if_pos:int = _emit_placeholder()
 		var depth_at_if_target:int = stack_size_mgr.size	# If 已弹掉条件 = 汇合点深度
-		_emit_op(Opcode.PushTrue); stack_size_mgr.inc()
-		_emit_op(Opcode.GoTo); var goto_end1:int = _emit_placeholder()
+		_emit_op(Op.PushTrue); stack_size_mgr.inc()
+		_emit_op(Op.GoTo); var goto_end1:int = _emit_placeholder()
 		_patch_index(first_if_pos, _code_size())
 		stack_size_mgr.converge(depth_at_if_target)	# 后面接的是「左侧为假」这条路径
 
 		visit(e.right_expr)
-		_emit_op(Opcode.If); stack_size_mgr.dec()
+		_emit_op(Op.If); stack_size_mgr.dec()
 		var second_if_pos:int = _emit_placeholder()
 		depth_at_if_target = stack_size_mgr.size
-		_emit_op(Opcode.PushTrue); stack_size_mgr.inc()
-		_emit_op(Opcode.GoTo); var goto_end2:int = _emit_placeholder()
+		_emit_op(Op.PushTrue); stack_size_mgr.inc()
+		_emit_op(Op.GoTo); var goto_end2:int = _emit_placeholder()
 		_patch_index(second_if_pos, _code_size())
 		stack_size_mgr.converge(depth_at_if_target)
 
-		_emit_op(Opcode.PushFalse)	# 两侧都不成立
+		_emit_op(Op.PushFalse)	# 两侧都不成立
 		stack_size_mgr.inc()
 		_patch_index(goto_end1, _code_size())
 		_patch_index(goto_end2, _code_size())
-	func on_visit_and_expr(e:StopeAst.BinaryOpExpr) -> void:
+	func on_visit_and_expr(e:Ast.BinaryOpExpr) -> void:
 		visit(e.left_expr)
-		_emit_op(Opcode.If); stack_size_mgr.dec()
+		_emit_op(Op.If); stack_size_mgr.dec()
 		var first_if_pos:int = _emit_placeholder()
 		visit(e.right_expr)
-		_emit_op(Opcode.If); stack_size_mgr.dec()
+		_emit_op(Op.If); stack_size_mgr.dec()
 		var second_if_pos:int = _emit_placeholder()
 		var depth_at_if_target:int = stack_size_mgr.size		# 两侧都为真才落到这里
-		_emit_op(Opcode.PushTrue); stack_size_mgr.inc()
-		_emit_op(Opcode.GoTo); var goto_end:int = _emit_placeholder()
+		_emit_op(Op.PushTrue); stack_size_mgr.inc()
+		_emit_op(Op.GoTo); var goto_end:int = _emit_placeholder()
 		_patch_index(first_if_pos, _code_size())
 		_patch_index(second_if_pos, _code_size())
 		stack_size_mgr.converge(depth_at_if_target)
-		_emit_op(Opcode.PushFalse); stack_size_mgr.inc()
+		_emit_op(Op.PushFalse); stack_size_mgr.inc()
 		_patch_index(goto_end, _code_size())
-	func on_visit_call_expr(e:StopeAst.CallExpr) -> void:
+	func on_visit_call_expr(e:Ast.CallExpr) -> void:
 		visit(e.callee)
 		for a in e.args: visit(a)
-		_emit_op(Opcode.Call); _emit_index(len(e.args))
+		_emit_op(Op.Call); _emit_index(len(e.args))
 		stack_size_mgr.dec(len(e.args))		# callee + args 换成 1 个返回值
-	func on_visit_at_expr(e:StopeAst.AtExpr) -> void:
+	func on_visit_at_expr(e:Ast.AtExpr) -> void:
 		visit(e.container)
 		for k in e.key_exprs: visit(k)
-		_emit_op(Opcode.At); _emit_index(len(e.key_exprs))
+		_emit_op(Op.At); _emit_index(len(e.key_exprs))
 		stack_size_mgr.dec(len(e.key_exprs))
-	func on_visit_custom_opcode_expr(e:StopeAst.CustomOpcodeExpr) -> void:
+	func on_visit_custom_opcode_expr(e:Ast.CustomOpcodeExpr) -> void:
 		if custom_opcodes == null or not custom_opcodes.opcodes.has(e.opcode_name):
 			error(e.line, str('undefined custom opcode "', e.opcode_name, '". '))
 			return
-		var info:StopeOpcode.CustomOpcode = custom_opcodes.opcodes[e.opcode_name]
+		var info:Opcode.CustomOpcode = custom_opcodes.opcodes[e.opcode_name]
 		var is_var_arg:bool = info.arg_num < 0	# 与 C++ 的 isVarArg 同一判据
 		if not is_var_arg and info.arg_num != len(e.args):
 			error(e.line, str('custom opcode "', e.opcode_name, '" expected ', info.arg_num,
@@ -638,7 +645,7 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	# 这里补一层 BlockScope，让内部 let 的变量在离开时被回收。
 	# 块尾结算（if 分支 / 循环体同普通块）：体以终止语句结尾时这里不可达，
 	# 跳过——出口结算（return / break / continue）已就地拼过副本。
-	func _visit_body_as_block(p:StopeAst.Prog) -> void:
+	func _visit_body_as_block(p:Ast.Prog) -> void:
 		var bs:BlockScope = _push_block_scope()
 		visit(p)
 		if not stmt_terminates: _splice_defers(bs)
@@ -648,20 +655,20 @@ class Compiler extends StopeASTVisitor.ASTVisitor:
 	# 二元运算符 -> 指令。注意二元 `-` 是 Sub 而不是 Minus（[纠正 1]）
 	static func _binary_opcode(op:int) -> int:
 		var T := TokenType
-		if op == T.EQ: return Opcode.EQ
-		if op == T.NE: return Opcode.NE
-		if op == T.LT: return Opcode.LT
-		if op == T.LE: return Opcode.LE
-		if op == T.GT: return Opcode.GT
-		if op == T.GE: return Opcode.GE
-		if op == T.Add: return Opcode.Add
-		if op == T.Sub: return Opcode.Sub
-		if op == T.Mul: return Opcode.Mul
-		if op == T.Div: return Opcode.Div
-		if op == T.IDiv: return Opcode.IDiv
-		if op == T.Mod: return Opcode.Mod
-		if op == T.Pow: return Opcode.Pow
-		return Opcode.Pop	# 到不了：parser 只会用上面这些 op 构造 BinaryOpExpr
+		if op == T.EQ: return Op.EQ
+		if op == T.NE: return Op.NE
+		if op == T.LT: return Op.LT
+		if op == T.LE: return Op.LE
+		if op == T.GT: return Op.GT
+		if op == T.GE: return Op.GE
+		if op == T.Add: return Op.Add
+		if op == T.Sub: return Op.Sub
+		if op == T.Mul: return Op.Mul
+		if op == T.Div: return Op.Div
+		if op == T.IDiv: return Op.IDiv
+		if op == T.Mod: return Op.Mod
+		if op == T.Pow: return Op.Pow
+		return Op.Pop	# 到不了：parser 只会用上面这些 op 构造 BinaryOpExpr
 
 # ====================================================================
 class Scope:
@@ -687,7 +694,7 @@ class BlockScope extends Scope:
 
 # defer 登记条目（对照 C++ BlockScope::Deferred）
 class Deferred:
-	var stmt:StopeAst.Stmt = null
+	var stmt:Ast.Stmt = null
 	var line:int = 0
 	var order_baseline:int = 0
 

@@ -1,4 +1,10 @@
-class_name StopeTestSTML
+# 测试脚本不注册 class_name；依赖以 preload 常量引入。
+const STML = preload("res://addons/stope/stml.gd")
+const STMLLexer = preload("res://addons/stope/stml_lexer.gd")
+const STMLParser = preload("res://addons/stope/stml_parser.gd")
+const Result = preload("res://addons/stope/stope_result.gd")
+const TestUtil = preload("res://test/test_util.gd")
+
 # STML 测试。契约见 docs/zh-cn/stml-test-plan.md（§4 的 125 条用例）。
 #
 # 与其它三组不同，这一组的**用例清单也是数据文件**：
@@ -11,17 +17,17 @@ class_name StopeTestSTML
 const CASES := 'res://test/data/stml_cases.txt'
 const GOLDEN := 'res://test/data/golden_stml.txt'
 
-static func run(rep:StopeTestUtil.Report) -> void:
-	var cases := StopeTestUtil.read_golden(CASES)
+static func run(rep:TestUtil.Report) -> void:
+	var cases := TestUtil.read_golden(CASES)
 	var gold := {}
-	for g in StopeTestUtil.read_golden(GOLDEN):
+	for g in TestUtil.read_golden(GOLDEN):
 		gold[g.get('ID', '')] = g
 	if cases.is_empty() or gold.is_empty():
 		rep.add_fail(str('  FAIL STML：读不到 ', CASES, ' 或 ', GOLDEN))
 		return
 	for c in cases:
 		var id:String = c.get('ID', '')
-		var src := StopeTestUtil.unesc(c.get('SRC', ''))
+		var src := TestUtil.unesc(c.get('SRC', ''))
 		var times:int = int(c.get('TIMES', '1'))
 		if times > 1:
 			var one := src
@@ -37,7 +43,7 @@ static func run(rep:StopeTestUtil.Report) -> void:
 			_run_lex(rep, id, src, c.get('ST', 'Xml'), g)
 	_check_attrs_copy(rep)
 
-static func _run_lex(rep:StopeTestUtil.Report, id:String, src:String,
+static func _run_lex(rep:TestUtil.Report, id:String, src:String,
 		st_name:String, g:Dictionary) -> void:
 	var lx := STMLLexer.Lexer.new(src)
 	lx.state = _state(st_name)
@@ -49,15 +55,15 @@ static func _run_lex(rep:StopeTestUtil.Report, id:String, src:String,
 		toks += str(STML.Token.Type.keys()[t.type], '(', t.line, ')')
 		if _has_lexeme(t.type):
 			if lexes != '': lexes += ','
-			lexes += str(i, ':', StopeTestUtil.esc_shape(t.lexeme))
+			lexes += str(i, ':', TestUtil.esc_shape(t.lexeme))
 		if t.type == STML.Token.Type.Eof: break
 	rep.check(id, 'TOKS', g.get('TOKS', ''), toks)
 	rep.check(id, 'LEXS', g.get('LEXS', ''), lexes)
 	rep.check(id, 'ERRN', g.get('ERRN', ''), str(lx.errors.size()))
 	rep.check(id, 'ERRS', g.get('ERRS', ''),
-		StopeTestUtil.join_esc(lx.errors, StopeTestUtil.esc_shape))
+		TestUtil.join_esc(lx.errors, TestUtil.esc_shape))
 
-static func _run_parse(rep:StopeTestUtil.Report, id:String, src:String,
+static func _run_parse(rep:TestUtil.Report, id:String, src:String,
 		sf_name:String, max_depth:int, g:Dictionary) -> void:
 	var lx := STMLLexer.Lexer.new(src)
 	var parser := STMLParser.Parser.new(lx)
@@ -66,26 +72,26 @@ static func _run_parse(rep:StopeTestUtil.Report, id:String, src:String,
 	var result:int = parser.parse(root, _state_func(sf_name))
 	rep.check(id, 'SHAPE', g.get('SHAPE', ''), shape_elem(root))
 	rep.check(id, 'RESULT', g.get('RESULT', ''),
-		'Success' if result == StopeResult.Success else 'Error')
+		'Success' if result == Result.Success else 'Error')
 	rep.check(id, 'ERRN', g.get('ERRN', ''), str(parser.errors.size()))
 	rep.check(id, 'ERRS', g.get('ERRS', ''),
-		StopeTestUtil.join_esc(parser.errors, StopeTestUtil.esc_shape))
+		TestUtil.join_esc(parser.errors, TestUtil.esc_shape))
 	# B-16：词法错误不并进 parser.errors，两边都要查
 	rep.check(id, 'LEXERRN', g.get('LEXERRN', ''), str(lx.errors.size()))
 	rep.check(id, 'LEXERRS', g.get('LEXERRS', ''),
-		StopeTestUtil.join_esc(lx.errors, StopeTestUtil.esc_shape))
+		TestUtil.join_esc(lx.errors, TestUtil.esc_shape))
 
 # ============================ 形状串 ============================
 # 与 C++ 的 Stope::STML::Test::shapeElem 逐字符一致：
 # tag → line → / → 属性（**键的字典序**，不是源码顺序）→ 文本 → 子元素
 static func shape_elem(e:STML.Element) -> String:
-	var d := str('Elem(', StopeTestUtil.esc_shape(e.tag), ', L', e.line)
+	var d := str('Elem(', TestUtil.esc_shape(e.tag), ', L', e.line)
 	if e.self_closing: d += ', /'
 	var keys:Array = e.attrs.keys(); keys.sort()
 	for k in keys:
-		d += str(', @', StopeTestUtil.esc_shape(k))
-		if e.attrs[k] != '': d += str('="', StopeTestUtil.esc_shape(e.attrs[k]), '"')
-	if e.text != '': d += str(', T(L', e.text_line, ')="', StopeTestUtil.esc_shape(e.text), '"')
+		d += str(', @', TestUtil.esc_shape(k))
+		if e.attrs[k] != '': d += str('="', TestUtil.esc_shape(e.attrs[k]), '"')
+	if e.text != '': d += str(', T(L', e.text_line, ')="', TestUtil.esc_shape(e.text), '"')
 	if not e.children.is_empty():
 		d += ', C=['
 		for i in range(e.children.size()):
@@ -126,7 +132,7 @@ static func _sf_mutate(_tag:String, attrs:Dictionary) -> int:
 	attrs.clear()
 	return STMLLexer.State.Xml
 
-static func _check_attrs_copy(rep:StopeTestUtil.Report) -> void:
+static func _check_attrs_copy(rep:TestUtil.Report) -> void:
 	const SRC := '<r a="1" b="2"><c d="3"/></r>'
 	rep.check('S-COPY', 'attrs 不受宿主影响',
 		_parse_shape(SRC, _sf_default), _parse_shape(SRC, _sf_mutate))

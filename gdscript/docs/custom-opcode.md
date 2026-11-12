@@ -25,7 +25,7 @@
 
 Stope 只规定三件事：语言、STML、编译器产物 `Program` 的编码。指令集里内置的 **33** 条
 （`addons/stope/opcode.gd`，编号 0…32）是标准的一部分；**从 33 起全部留给宿主**
-（`StopeOpcode.FIRST_CUSTOM_OPCODE == 33`）。
+（`Stope.Opcode.FIRST_CUSTOM_OPCODE == 33`）。
 
 于是加指令这件事只发生在你的 GDScript 里，Stope 源码不需要任何新语法：
 
@@ -33,7 +33,7 @@ Stope 只规定三件事：语言、STML、编译器产物 `Program` 的编码�
 CustomOpcodeConfig： "my:add" -> #33，2 参
         │
         ├── Lexer     名字命中注册表 → Custom token
-        ├── Parser    Custom token → StopeAst.CustomOpcodeExpr
+        ├── Parser    Custom token → Stope.Ast.CustomOpcodeExpr
         └── Compiler  查编号与参数个数 → 写进 Program
 
 Stope 源码：my:add(x, 4);      和普通函数调用长得一样，只靠名字区分
@@ -77,7 +77,7 @@ demo 分五段（`[1]`–`[5]`），本文按同样的顺序讲，**每一节都
 | demo 段 | 那段代码在干什么 | 本文 |
 | --- | --- | --- |
 | `[1]` | 建 `CustomOpcodeConfig`、登记三条、按编号排好打印 | §2 |
-| `[2]` | 编译 demo 里那段源码，`print(StopeDebug.disasm(program, config))` | §3、§4 |
+| `[2]` | 编译 demo 里那段源码，`print(Stope.Debug.disasm(program, config))` | §3、§4 |
 | `[3]` | 同一个 `my:add(1, 2);`，**不传 config** → 退化成普通 `Call` | §5.1 |
 | `[4]` | 定长 2 参却只给 1 个 → 编译期报错、`Program` 被清空 | §5.2 |
 | `[5]` | 用内置 `Add` 的编号注册 → 反汇编只能按内置解码 + warning | §5.3 |
@@ -134,6 +134,8 @@ required stack size: 2
 
 ## 2. 登记：`CustomOpcodeConfig` —— demo 的 `[1]` 段
 
+> **引入方式**：插件不注册全局类。示例里的 `Stope` 来自脚本顶部的一行 `const Stope = preload("res://addons/stope/stope.gd")`，完整可跑写法见 [`README.md`](README.md) §5 与 `demo/`。
+
 ```gdscript
 # addons/stope/opcode.gd
 class CustomOpcode:
@@ -149,14 +151,14 @@ class CustomOpcodeConfig:
 demo 的 `[1]` 段就是建表 + 登记三条 + 打印（**原文照抄**）：
 
 ```gdscript
-var config := StopeOpcode.CustomOpcodeConfig.new()
-config.add_custom_opcode('my:add', StopeOpcode.FIRST_CUSTOM_OPCODE + 0, 2)
-config.add_custom_opcode('my:log', StopeOpcode.FIRST_CUSTOM_OPCODE + 1, -1)
-config.add_custom_opcode('my:halt', StopeOpcode.FIRST_CUSTOM_OPCODE + 2, 0)
+var config := Stope.Opcode.CustomOpcodeConfig.new()
+config.add_custom_opcode('my:add', Stope.Opcode.FIRST_CUSTOM_OPCODE + 0, 2)
+config.add_custom_opcode('my:log', Stope.Opcode.FIRST_CUSTOM_OPCODE + 1, -1)
+config.add_custom_opcode('my:halt', Stope.Opcode.FIRST_CUSTOM_OPCODE + 2, 0)
 print('[1] 登记自定义指令：')
-var items:Array[StopeOpcode.CustomOpcode] = []
+var items:Array[Stope.Opcode.CustomOpcode] = []
 for k in config.opcodes: items.append(config.opcodes[k])
-items.sort_custom(func(a:StopeOpcode.CustomOpcode, b:StopeOpcode.CustomOpcode) -> bool:
+items.sort_custom(func(a:Stope.Opcode.CustomOpcode, b:Stope.Opcode.CustomOpcode) -> bool:
 	return a.opcode < b.opcode)
 for info in items:
 	print('  ', info.name, ' -> #', info.opcode,
@@ -167,9 +169,9 @@ for info in items:
 
 | 点 | 说明 |
 | --- | --- |
-| **编号起点** | 用 `StopeOpcode.FIRST_CUSTOM_OPCODE`（= 33）。撞到 0…32 会被当成内置指令，见 §5.3 |
+| **编号起点** | 用 `Stope.Opcode.FIRST_CUSTOM_OPCODE`（= 33）。撞到 0…32 会被当成内置指令，见 §5.3 |
 | **变长 = `arg_num < 0`** | 传 `-1`（默认值）即变长；GDScript 侧**没有** `is_var_arg` 字段，判断一律写 `info.arg_num < 0` |
-| **返回值** | `StopeResult.Success`（0）；同名重复注册返回 `DuplicateWithBuiltinOpcode`（3）且**不插入**。GDScript 允许丢弃返回值，要查就接 |
+| **返回值** | `Stope.Result.Success`（0）；同名重复注册返回 `DuplicateWithBuiltinOpcode`（3）且**不插入**。GDScript 允许丢弃返回值，要查就接 |
 | **不校验编号范围** | 和 C++ 一样，`add_custom_opcode('x', 20, 2)` 会成功 —— 撞内置只在反汇编时给 warning |
 
 名字的规则来自词法器：普通标识符或命名空间形式 `a:b`，且**关键字优先** —— 注册一个叫
@@ -187,18 +189,18 @@ for info in items:
 
 | 环节 | 拿 config 做什么 | 查不到会怎样 |
 | --- | --- | --- |
-| `StopeLexer.Lexer` | 标识符命中注册表 → 吐 `Custom` token | 当普通标识符 |
-| `StopeParser.Parser` | `Custom` token → `StopeAst.CustomOpcodeExpr` | 走 `Call`（普通函数调用） |
-| `StopeCompiler.Compiler` | 查编号 / 参数个数，写编号（变长再多写一个参数个数） | 报 `undefined custom opcode "…"` |
+| `Stope.Lexer.Lexer` | 标识符命中注册表 → 吐 `Custom` token | 当普通标识符 |
+| `Stope.Parser.Parser` | `Custom` token → `Stope.Ast.CustomOpcodeExpr` | 走 `Call`（普通函数调用） |
+| `Stope.Compiler.Compiler` | 查编号 / 参数个数，写编号（变长再多写一个参数个数） | 报 `undefined custom opcode "…"` |
 
 ```gdscript
-var lexer := StopeLexer.Lexer.new(src)
-var parser := StopeParser.Parser.new(lexer, config)  # 第二参可空
-var tree := StopeAst.Prog.new()
+var lexer := Stope.Lexer.Lexer.new(src)
+var parser := Stope.Parser.Parser.new(lexer, config)  # 第二参可空
+var tree := Stope.Ast.Prog.new()
 parser.parse_program(tree)
 
-var compiler := StopeCompiler.Compiler.new(config)    # 只在构造时注入一次
-var program := StopeProgram.Program.new()
+var compiler := Stope.Compiler.Compiler.new(config)    # 只在构造时注入一次
+var program := Stope.Program.Program.new()
 var rc := compiler.compile(tree, program)
 ```
 
@@ -210,19 +212,19 @@ demo 把上面这几行收进了辅助函数 `compile_and_report()`（在 `demo_
 
 ```gdscript
 # 编译一份源码并打印错误。config 为 null 时按「没有自定义指令」处理。
-static func compile_and_report(src:String, config:StopeOpcode.CustomOpcodeConfig,
-		out:StopeProgram.Program) -> bool:
-	var lexer := StopeLexer.Lexer.new(src)
-	var parser := StopeParser.Parser.new(lexer, config)	# 第二参：可空的 config
-	var tree := StopeAst.Prog.new()
+static func compile_and_report(src:String, config:Stope.Opcode.CustomOpcodeConfig,
+		out:Stope.Program.Program) -> bool:
+	var lexer := Stope.Lexer.Lexer.new(src)
+	var parser := Stope.Parser.Parser.new(lexer, config)	# 第二参：可空的 config
+	var tree := Stope.Ast.Prog.new()
 	parser.parse_program(tree)
 	for e in lexer.errors: print('  lexer: ', e)
 	for e in parser.errors: print('  parser: ', e)
 
-	var compiler := StopeCompiler.Compiler.new(config)	# 配置只在构造时注入一次
+	var compiler := Stope.Compiler.Compiler.new(config)	# 配置只在构造时注入一次
 	var rc := compiler.compile(tree, out)
 	for e in compiler.errors: print('  compiler: ', e)
-	return rc == StopeResult.Success and lexer.errors.is_empty() \
+	return rc == Stope.Result.Success and lexer.errors.is_empty() \
 		and parser.errors.is_empty()
 ```
 
@@ -258,12 +260,12 @@ const src := """
 
 ---
 
-## 4. 反汇编：`StopeDebug.disasm(program, config)` —— demo 的 `[2]` 段末尾
+## 4. 反汇编：`Stope.Debug.disasm(program, config)` —— demo 的 `[2]` 段末尾
 
 | 函数 | 什么时候用 |
 | --- | --- |
-| `StopeDebug.disasm(prog, config)` | 产物里**可能**有自定义指令 —— 拿得到名字、变长操作数与注册表 |
-| `StopeDebug.disasm(prog)` | 确定没有自定义指令的产物；等价于 `disasm(prog, null)` |
+| `Stope.Debug.disasm(prog, config)` | 产物里**可能**有自定义指令 —— 拿得到名字、变长操作数与注册表 |
+| `Stope.Debug.disasm(prog)` | 确定没有自定义指令的产物；等价于 `disasm(prog, null)` |
 
 带 config 时它多做三件事：
 
@@ -295,7 +297,7 @@ const src := """
 demo 的 `[3]` 段（第二参传 `null`，即不传 config）：
 
 ```gdscript
-var plain := StopeProgram.Program.new()
+var plain := Stope.Program.Program.new()
 if compile_and_report('my:add(1, 2);', null, plain):
 ```
 
@@ -321,7 +323,7 @@ variables:
 demo 的 `[4]` 段（`my:add` 注册的是 2 参，这里只给 1 个）：
 
 ```gdscript
-var bad := StopeProgram.Program.new()
+var bad := Stope.Program.Program.new()
 if not compile_and_report('my:add(1);', config, bad):
 ```
 
@@ -339,8 +341,8 @@ if not compile_and_report('my:add(1);', config, bad):
 demo 的 `[5]` 段（用内置 `Add` 的编号注册）：
 
 ```gdscript
-var collide := StopeOpcode.CustomOpcodeConfig.new()
-collide.add_custom_opcode('my:steal', StopeOpcode.Opcode.Add, 2)
+var collide := Stope.Opcode.CustomOpcodeConfig.new()
+collide.add_custom_opcode('my:steal', Stope.Opcode.Opcode.Add, 2)
 ```
 
 ```
@@ -374,17 +376,17 @@ demo 到此为止 —— 再往下就是执行器，而项目**不规定虚拟�
 ```gdscript
 class Host:
 	# my:add：弹 2 个、压 1 个。s.i 已经指着这条指令本身
-	func my_add(s: StopeBasicVM.State) -> void:
+	func my_add(s: Stope.BasicVM.State) -> void:
 		var b = s.stack.pop_back()	# 栈上一定是值：读变量走 PushValue
 		var a = s.stack.pop_back()
 		s.stack.push_back(a + b)
 
 var host := Host.new()
-var api := StopeBasicVM.Api.new()
+var api := Stope.BasicVM.Api.new()
 api.op_map.resize(34)          # 33 号要能下标取到 ⇒ 至少 34 项
 api.op_map[33] = Callable(host, 'my_add')
 
-var state := StopeBasicVM.State.new()
+var state := Stope.BasicVM.State.new()
 state.set_api(api)
 state.set_program(program)
 state.set_arguments(NoArgs.new())
@@ -398,7 +400,7 @@ print(state.run(), state.returns)   # 0[3]（Success）
 
 | 约定 | 说明 |
 | --- | --- |
-| 签名 | `func(s: StopeBasicVM.State) -> void`，靠副作用干活 |
+| 签名 | `func(s: Stope.BasicVM.State) -> void`，靠副作用干活 |
 | 操作数 | `s.i` 已指着这条指令，**先 `s.i += 1` 再读** `s.program.opcodes[s.i]`；循环末尾还会统一 `+1`，别自己多推 |
 | 栈效果 | 参数已按从左到右压好；结果压回栈顶、占 **1 格**；自定义指令**没有 callee 入栈** |
 | 变长指令 | 流里在参数之后多一个「实参个数」操作数，先读它再决定弹几个 |
@@ -425,49 +427,49 @@ extends Node
 
 func _ready() -> void:
 	# 1. 登记
-	var config := StopeOpcode.CustomOpcodeConfig.new()
-	config.add_custom_opcode('my:add', StopeOpcode.FIRST_CUSTOM_OPCODE, 2)
+	var config := Stope.Opcode.CustomOpcodeConfig.new()
+	config.add_custom_opcode('my:add', Stope.Opcode.FIRST_CUSTOM_OPCODE, 2)
 
 	# 2. 编译（同一份 config 交给 Parser 与 Compiler）
-	var lexer := StopeLexer.Lexer.new('let x = my:add(1, 2); return x;')
-	var parser := StopeParser.Parser.new(lexer, config)
-	var tree := StopeAst.Prog.new()
+	var lexer := Stope.Lexer.Lexer.new('let x = my:add(1, 2); return x;')
+	var parser := Stope.Parser.Parser.new(lexer, config)
+	var tree := Stope.Ast.Prog.new()
 	parser.parse_program(tree)
-	var compiler := StopeCompiler.Compiler.new(config)
-	var program := StopeProgram.Program.new()
-	if compiler.compile(tree, program) != StopeResult.Success:
+	var compiler := Stope.Compiler.Compiler.new(config)
+	var program := Stope.Program.Program.new()
+	if compiler.compile(tree, program) != Stope.Result.Success:
 		push_error(str(compiler.errors))
 		get_tree().quit(1)
 		return
 
 	# 3. 看一眼产物
-	print(StopeDebug.disasm(program, config))
+	print(Stope.Debug.disasm(program, config))
 
 	# 4. 执行：把 33 号挂上自己的处理函数
 	# 先存进变量再构造 Callable —— 内联写 Callable(Host.new(), 'my_add') 时
 	# 那个临时对象会被回收，运行期报 ... on a null instance（§8 最后一行）
 	var host := Host.new()
-	var api := StopeBasicVM.Api.new()
+	var api := Stope.BasicVM.Api.new()
 	api.op_map.resize(34)
 	api.op_map[33] = Callable(host, 'my_add')
-	var state := StopeBasicVM.State.new()
+	var state := Stope.BasicVM.State.new()
 	state.set_api(api)
 	state.set_program(program)
 	state.set_arguments(NoArgs.new())
-	if state.run() != StopeResult.Success:
+	if state.run() != Stope.Result.Success:
 		push_error(str(state.errors))
 		get_tree().quit(1)
 		return
 	print('return = ', state.returns[0])
 
 class Host:
-	func my_add(s: StopeBasicVM.State) -> void:
+	func my_add(s: Stope.BasicVM.State) -> void:
 		var b = s.stack.pop_back()	# 栈上一定是值：读变量走 PushValue
 		var a = s.stack.pop_back()
 		s.stack.push_back(a + b)
 
-class NoArgs extends StopeBasicVM.Arguments:
-	func at(_state: StopeBasicVM.State, _key) -> Variant: return null
+class NoArgs extends "res://addons/stope/basic_vm.gd".Arguments:
+	func at(_state: Stope.BasicVM.State, _key) -> Variant: return null
 	func num() -> int: return 0
 ```
 
@@ -523,7 +525,7 @@ return = 3
 | --- | --- |
 | `demo/demo_03.gd` | 本文讲的 demo（场景 `demo_03.tscn`），只编译 + 反汇编 |
 | `addons/stope/opcode.gd` | `Opcode` / `CustomOpcode` / `CustomOpcodeConfig` / `FIRST_CUSTOM_OPCODE` |
-| `addons/stope/debug.gd` | `StopeDebug.disasm` / `disasm_no_custom` / `opcode_has_arg` |
+| `addons/stope/debug.gd` | `Stope.Debug.disasm` / `disasm_no_custom` / `opcode_has_arg` |
 | `addons/stope/basic_vm.gd` | `Api.op_map`、`State`、`Arguments` —— 执行自定义指令要扩的那张表 |
 | [`usage.md`](usage.md) §7、§7.1 | 登记与反汇编的 API 表、扩表的三条坑 |
 | [`stml.md`](stml.md) | 另一种宿主扩展：解析 STML 文档 |

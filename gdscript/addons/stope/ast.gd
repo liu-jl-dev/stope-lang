@@ -1,4 +1,5 @@
-class_name StopeAst
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const Lexer = preload("res://addons/stope/lexer.gd")
 
 # AST 节点定义 —— 与 cpp/stope/ast.hpp 逐项对齐（2026-10-18 重写）。
 #
@@ -16,7 +17,7 @@ class_name StopeAst
 # 也没有科学计数法格式化。fmt_g() 手工复刻了 %g（精度 6）的全部决策，
 # 包含「舍入进位后指数 +1」的情形，详见函数上方注释。
 
-const TokenType = StopeLexer.Token.Type
+const TokenType = Lexer.Token.Type
 
 # 与 AST::NodeType 同序同值，共 29 项
 enum NodeType {
@@ -82,77 +83,80 @@ const binop_literal_map:Dictionary = {
 }
 
 # ================================ 格式化小工具 ================================
-# 与 test_common.hpp 的 escUtf8 对齐：只转义 \\ " \n \r \t，非 ASCII 打成 '?'
-static func esc(s:String) -> String:
-	var o := ''
-	for i in range(s.length()):
-		var ch := s[i]
-		if ch == '\\': o += '\\\\'
-		elif ch == '"': o += '\\"'
-		elif ch == '\n': o += '\\n'
-		elif ch == '\r': o += '\\r'
-		elif ch == '\t': o += '\\t'
-		elif ord(ch) < 128: o += ch
-		else: o += '?'
-	return o
+# 放在内部类里而不是脚本顶层：去掉 class_name 后，内部类访问不到外层的 static func
+# （常量与枚举可以，静态函数不行），兄弟内部类之间互相可见，所以内聚到 Fmt。
+class Fmt:
+	# 与 test_common.hpp 的 escUtf8 对齐：只转义 \\ " \n \r \t，非 ASCII 打成 '?'
+	static func esc(s:String) -> String:
+		var o := ''
+		for i in range(s.length()):
+			var ch := s[i]
+			if ch == '\\': o += '\\\\'
+			elif ch == '"': o += '\\"'
+			elif ch == '\n': o += '\\n'
+			elif ch == '\r': o += '\\r'
+			elif ch == '\t': o += '\\t'
+			elif ord(ch) < 128: o += ch
+			else: o += '?'
+		return o
 
-# BinArr 的字节二分十六进制，小写两位，逗号分隔：BinArr[04,01]
-static func fmt_bytes(ba:PackedByteArray) -> String:
-	var parts:Array[String] = []
-	for b in ba: parts.append("%02x" % b)
-	return ",".join(parts)
+	# BinArr 的字节二分十六进制，小写两位，逗号分隔：BinArr[04,01]
+	static func fmt_bytes(ba:PackedByteArray) -> String:
+		var parts:Array[String] = []
+		for b in ba: parts.append("%02x" % b)
+		return ",".join(parts)
 
-# 复刻 C 的 printf("%g")（默认精度 6）。GDScript 的 % 运算符不支持 %g，
-# String.num() 也没有科学计数法分支，所以这里自己实现，供 shape 与 Program 序列化共用。
-#
-# %g 的决策：先取十进制指数 X（使 10^X <= |v| < 10^(X+1)）；
-#   X < -4 或 X >= 6  -> 科学计数法，尾数 5 位小数
-#   否则              -> 定点表示，5 - X 位小数
-# 两种情形都要去掉尾部的 0 与孤立的小数点。
-# 舍入可能让尾数进位到 10（如 9.9999999 -> 10.00000），此时 X 要 +1 再重新决策，
-# 否则 999999.9 会打印成 "1e+06" 而另一个实现打印 "100000"（已按 glibc 行为校正）。
-#
-# 精度边界（已实测）：浮点发生器 dump 3166 个样本（10 的各次幂、0/1/1.5/边界值、
-# 1500 组随机尾数×随机二的幂、60 个次正规数）与 Python 的 "%g" 逐位对照，
-# 3127 条完全一致；剩下 39 条【全部】落在次正规区间（|v| < 2.2e-308）。
-# 原因是 pow(10.0, x) 在这个区间本身只剩个位数有效比特，a / pow(10.0, x) 无法保住
-# 6 位有效数字。Stope 的正常词法产物（如 1e-320）会落到这一档，
-# 因此通用测试计划里【不】把次正规数纳入比对，选测试用例时要避开。
-const G_PRECISION := 6
-static func fmt_g(v:float) -> String:
-	if is_nan(v): return "nan"
-	if is_inf(v): return "inf" if v > 0.0 else "-inf"
-	if v == 0.0: return "-0" if (1.0 / v) < 0.0 else "0"
-	var sign := "-" if v < 0.0 else ""
-	var a := absf(v)
-	var x:int = int(floor(log(a) / log(10.0)))
-	var guard := 40		# 校正最多迭代这么多次，防止 pow 精度把循环卡死
-	while guard > 0 and pow(10.0, x) > a: x -= 1; guard -= 1
-	while guard > 0 and pow(10.0, x + 1) <= a: x += 1; guard -= 1
-	var mant := String.num(a / pow(10.0, x), G_PRECISION - 1)
-	if mant.begins_with("10"):	# 舍入进位
-		x += 1
-		mant = "1." + "0".repeat(G_PRECISION - 1)
-	if x < -4 or x >= G_PRECISION:
-		return str(sign, strip_zeros(mant), "e", ("+" if x >= 0 else "-"), "%02d" % absi(x))
-	return sign + strip_zeros(String.num(a, G_PRECISION - 1 - x))
+	# 复刻 C 的 printf("%g")（默认精度 6）。GDScript 的 % 运算符不支持 %g，
+	# String.num() 也没有科学计数法分支，所以这里自己实现，供 shape 与 Program 序列化共用。
+	#
+	# %g 的决策：先取十进制指数 X（使 10^X <= |v| < 10^(X+1)）；
+	#   X < -4 或 X >= 6  -> 科学计数法，尾数 5 位小数
+	#   否则              -> 定点表示，5 - X 位小数
+	# 两种情形都要去掉尾部的 0 与孤立的小数点。
+	# 舍入可能让尾数进位到 10（如 9.9999999 -> 10.00000），此时 X 要 +1 再重新决策，
+	# 否则 999999.9 会打印成 "1e+06" 而另一个实现打印 "100000"（已按 glibc 行为校正）。
+	#
+	# 精度边界（已实测）：浮点发生器 dump 3166 个样本（10 的各次幂、0/1/1.5/边界值、
+	# 1500 组随机尾数×随机二的幂、60 个次正规数）与 Python 的 "%g" 逐位对照，
+	# 3127 条完全一致；剩下 39 条【全部】落在次正规区间（|v| < 2.2e-308）。
+	# 原因是 pow(10.0, x) 在这个区间本身只剩个位数有效比特，a / pow(10.0, x) 无法保住
+	# 6 位有效数字。Stope 的正常词法产物（如 1e-320）会落到这一档，
+	# 因此通用测试计划里【不】把次正规数纳入比对，选测试用例时要避开。
+	const G_PRECISION := 6
+	static func fmt_g(v:float) -> String:
+		if is_nan(v): return "nan"
+		if is_inf(v): return "inf" if v > 0.0 else "-inf"
+		if v == 0.0: return "-0" if (1.0 / v) < 0.0 else "0"
+		var sign := "-" if v < 0.0 else ""
+		var a := absf(v)
+		var x:int = int(floor(log(a) / log(10.0)))
+		var guard := 40		# 校正最多迭代这么多次，防止 pow 精度把循环卡死
+		while guard > 0 and pow(10.0, x) > a: x -= 1; guard -= 1
+		while guard > 0 and pow(10.0, x + 1) <= a: x += 1; guard -= 1
+		var mant := String.num(a / pow(10.0, x), G_PRECISION - 1)
+		if mant.begins_with("10"):	# 舍入进位
+			x += 1
+			mant = "1." + "0".repeat(G_PRECISION - 1)
+		if x < -4 or x >= G_PRECISION:
+			return str(sign, strip_zeros(mant), "e", ("+" if x >= 0 else "-"), "%02d" % absi(x))
+		return sign + strip_zeros(String.num(a, G_PRECISION - 1 - x))
 
-# 去掉小数尾部多余的 0，以及随之孤立的小数点：1.50000 -> 1.5   15.0000 -> 15
-static func strip_zeros(s:String) -> String:
-	if s.find('.') < 0: return s
-	while s.ends_with('0'): s = s.substr(0, s.length() - 1)
-	if s.ends_with('.'): s = s.substr(0, s.length() - 1)
-	return s
+	# 去掉小数尾部多余的 0，以及随之孤立的小数点：1.50000 -> 1.5   15.0000 -> 15
+	static func strip_zeros(s:String) -> String:
+		if s.find('.') < 0: return s
+		while s.ends_with('0'): s = s.substr(0, s.length() - 1)
+		if s.ends_with('.'): s = s.substr(0, s.length() - 1)
+		return s
 
-static func node_type_name(t:int) -> String:
-	return NodeType.keys()[t] if t >= 0 and t < NodeType.size() else str("?", t)
+	static func node_type_name(t:int) -> String:
+		return NodeType.keys()[t] if t >= 0 and t < NodeType.size() else str("?", t)
 
-static func indent(level:int) -> String: return "  ".repeat(level)
-static func _e(e) -> String: return e.to_str() if e else "<null>"
-static func op_text(op:int) -> String:
-	if op == TokenType.Sub: return '-'
-	if op == TokenType.Not: return '!'
-	return str(TokenType.keys()[op], '(')
+	static func indent(level:int) -> String: return "  ".repeat(level)
+	static func _e(e) -> String: return e.to_str() if e else "<null>"
+	static func op_text(op:int) -> String:
+		if op == TokenType.Sub: return '-'
+		if op == TokenType.Not: return '!'
+		return str(TokenType.keys()[op], '(')
 
 # ================================ 基类 ================================
 class Node_:
@@ -189,7 +193,7 @@ class ExprStmt extends Stmt:
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.ExprStmt; line = line_
 	func to_str(level:int = 0) -> String:
-		return StopeAst.indent(level) + StopeAst._e(expr) + ";\n"
+		return Fmt.indent(level) + Fmt._e(expr) + ";\n"
 
 # let_stmt : "let" ident ( ("," ident)* | ("=" expr) )? ";"
 class LetStmt extends Stmt:
@@ -200,9 +204,9 @@ class LetStmt extends Stmt:
 		node_type = NodeType.LetStmt; line = line_
 	func ident_num() -> int: return idents.size()
 	func to_str(level:int = 0) -> String:
-		var s := StopeAst.indent(level) + "let"
+		var s := Fmt.indent(level) + "let"
 		if has_assign:
-			s += str(' ', idents[0] if idents.size() > 0 else '?', ' = ', StopeAst._e(expr))
+			s += str(' ', idents[0] if idents.size() > 0 else '?', ' = ', Fmt._e(expr))
 		else:
 			for id in idents: s += str(' ', id, ',')
 			if idents.size() > 0: s = s.substr(0, s.length() - 1)
@@ -215,8 +219,8 @@ class ReturnStmt extends Stmt:
 		node_type = NodeType.ReturnStmt; line = line_
 	func expr_num() -> int: return exprs.size()
 	func to_str(level:int = 0) -> String:
-		var s := StopeAst.indent(level) + "return"
-		for e in exprs: s += str(' ', StopeAst._e(e), ',')
+		var s := Fmt.indent(level) + "return"
+		for e in exprs: s += str(' ', Fmt._e(e), ',')
 		if exprs.size() > 0: s = s.substr(0, s.length() - 1)
 		return s + ";\n"
 
@@ -227,7 +231,7 @@ class ExportStmt extends Stmt:
 		node_type = NodeType.ExportStmt; line = line_
 	func ident_num() -> int: return idents.size()
 	func to_str(level:int = 0) -> String:
-		var s := StopeAst.indent(level) + "export"
+		var s := Fmt.indent(level) + "export"
 		for id in idents: s += str(' ', id, ',')
 		if idents.size() > 0: s = s.substr(0, s.length() - 1)
 		return s + ";\n"
@@ -238,43 +242,43 @@ class BlockStmt extends Stmt:
 	# 而是一个空 Prog，形状串输出 Block{} 而不是 Block{null}。GD 侧是引用类型，
 	# 所以必须在构造时就建好实例 —— 只有 IfStmt.else_prog 例外，它对应 C++ 的
 	# std::optional<Prog>，null 表示「没有 else 分支」。
-	var prog:Prog = StopeAst.Prog.new()
+	var prog:Prog = Prog.new()
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.BlockStmt; line = line_
 	func to_str(level:int = 0) -> String:
-		return str(StopeAst.indent(level), '{\n', prog.to_str(level + 1), StopeAst.indent(level), '}\n')
+		return str(Fmt.indent(level), '{\n', prog.to_str(level + 1), Fmt.indent(level), '}\n')
 
 class IfStmtElif extends Node_:
 	var cond:Expr = null
-	var prog:Prog = StopeAst.Prog.new()
+	var prog:Prog = Prog.new()
 
 # if_stmt : "if" expr "{" prog "}" ( "elif" expr "{" prog "}" )* ( "else" "{" prog "}" )?
 class IfStmt extends Stmt:
 	var cond:Expr = null
-	var first_prog:Prog = StopeAst.Prog.new()
+	var first_prog:Prog = Prog.new()
 	var elifs:Array[IfStmtElif] = []
 	var else_prog:Prog = null	# 没有 else 分支时为 null（对应 C++ 的 std::optional）
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.IfStmt; line = line_
 	func has_else() -> bool: return else_prog != null
 	func to_str(level:int = 0) -> String:
-		var o := str(StopeAst.indent(level), 'if ', StopeAst._e(cond), ' ',
+		var o := str(Fmt.indent(level), 'if ', Fmt._e(cond), ' ',
 				first_prog.to_str(level))
 		for ei in elifs:
-			o += str(StopeAst.indent(level), 'elif ', StopeAst._e(ei.cond), ' ',
+			o += str(Fmt.indent(level), 'elif ', Fmt._e(ei.cond), ' ',
 					ei.prog.to_str(level))
 		if has_else():
-			o += str(StopeAst.indent(level), 'else ', else_prog.to_str(level))
+			o += str(Fmt.indent(level), 'else ', else_prog.to_str(level))
 		return o
 
 # while_stmt : "while" expr? "{" prog "}"   —— cond 为 null 表示无条件循环
 class WhileStmt extends Stmt:
 	var cond:Expr = null
-	var prog:Prog = StopeAst.Prog.new()
+	var prog:Prog = Prog.new()
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.WhileStmt; line = line_
 	func to_str(level:int = 0) -> String:
-		return str(StopeAst.indent(level), 'while ', StopeAst._e(cond), ' ',
+		return str(Fmt.indent(level), 'while ', Fmt._e(cond), ' ',
 				prog.to_str(level))
 
 # assign_stmt : expr "=" expr ";"
@@ -284,17 +288,17 @@ class AssignStmt extends Stmt:
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.AssignStmt; line = line_
 	func to_str(level:int = 0) -> String:
-		return str(StopeAst.indent(level), StopeAst._e(left_expr), ' = ', StopeAst._e(right_expr), ";\n")
+		return str(Fmt.indent(level), Fmt._e(left_expr), ' = ', Fmt._e(right_expr), ";\n")
 
 class BreakStmt extends Stmt:
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.BreakStmt; line = line_
-	func to_str(level:int = 0) -> String: return StopeAst.indent(level) + "break;\n"
+	func to_str(level:int = 0) -> String: return Fmt.indent(level) + "break;\n"
 
 class ContinueStmt extends Stmt:
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.ContinueStmt; line = line_
-	func to_str(level:int = 0) -> String: return StopeAst.indent(level) + "continue;\n"
+	func to_str(level:int = 0) -> String: return Fmt.indent(level) + "continue;\n"
 
 # defer_stmt : "defer" stmt —— 载荷缺省（defer; 报错路径）时 stmt 为 null
 class DeferStmt extends Stmt:
@@ -302,7 +306,7 @@ class DeferStmt extends Stmt:
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.DeferStmt; line = line_
 	func to_str(level:int = 0) -> String:
-		return str(StopeAst.indent(level), 'defer ', StopeAst._e(stmt), '\n')
+		return str(Fmt.indent(level), 'defer ', Fmt._e(stmt), '\n')
 
 # ================================ 表达式 ================================
 class NullExpr extends Expr:
@@ -326,13 +330,13 @@ class FloatExpr extends Expr:
 	var value:float = 0.0
 	func _init(line_:int = -1, v:float = 0.0) -> void:
 		node_type = NodeType.FloatExpr; line = line_; value = v
-	func to_str(_level:int = 0) -> String: return StopeAst.fmt_g(value)
+	func to_str(_level:int = 0) -> String: return Fmt.fmt_g(value)
 
 class BinArrExpr extends Expr:
 	var value:PackedByteArray = PackedByteArray()
 	func _init(line_:int = -1, v:PackedByteArray = PackedByteArray()) -> void:
 		node_type = NodeType.BinArrExpr; line = line_; value = v
-	func to_str(_level:int = 0) -> String: return str("'", StopeAst.fmt_bytes(value), "'")
+	func to_str(_level:int = 0) -> String: return str("'", Fmt.fmt_bytes(value), "'")
 
 class StringExpr extends Expr:
 	var value:String = ''
@@ -355,7 +359,7 @@ class ArgsExpr extends Expr:
 	var key_expr:Expr = null
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.ArgsExpr; line = line_
-	func to_str(_level:int = 0) -> String: return str('args[', StopeAst._e(key_expr), ']')
+	func to_str(_level:int = 0) -> String: return str('args[', Fmt._e(key_expr), ']')
 
 class UnaryOpExpr extends Expr:
 	var op:int = TokenType.Invalid	# TokenType
@@ -363,7 +367,7 @@ class UnaryOpExpr extends Expr:
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.UnaryOpExpr; line = line_
 	func to_str(_level:int = 0) -> String:
-		return str(StopeAst.op_text(op), StopeAst._e(expr))
+		return str(Fmt.op_text(op), Fmt._e(expr))
 
 class BinaryOpExpr extends Expr:
 	var left_expr:Expr = null
@@ -375,7 +379,7 @@ class BinaryOpExpr extends Expr:
 		var o:String = binop_literal_map.get(op, '?')
 		if o == 'idiv': o = ' idiv '
 		else: o = str(' ', o, ' ')
-		return str('(', StopeAst._e(left_expr), o, StopeAst._e(right_expr), ')')
+		return str('(', Fmt._e(left_expr), o, Fmt._e(right_expr), ')')
 
 class CallExpr extends Expr:
 	var callee:Expr = null
@@ -383,8 +387,8 @@ class CallExpr extends Expr:
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.CallExpr; line = line_
 	func to_str(_level:int = 0) -> String:
-		var s := str(StopeAst._e(callee), '(')
-		for a in args: s += str(StopeAst._e(a), ',')
+		var s := str(Fmt._e(callee), '(')
+		for a in args: s += str(Fmt._e(a), ',')
 		if args.size() > 0: s = s.substr(0, s.length() - 1)
 		return str(s, ')')
 
@@ -394,8 +398,8 @@ class AtExpr extends Expr:
 	func _init(line_:int = -1) -> void:
 		node_type = NodeType.AtExpr; line = line_
 	func to_str(_level:int = 0) -> String:
-		var s := str(StopeAst._e(container), '[')
-		for a in key_exprs: s += str(StopeAst._e(a), ',')
+		var s := str(Fmt._e(container), '[')
+		for a in key_exprs: s += str(Fmt._e(a), ',')
 		if key_exprs.size() > 0: s = s.substr(0, s.length() - 1)
 		return str(s, ']')
 
@@ -407,7 +411,7 @@ class CustomOpcodeExpr extends Expr:
 		node_type = NodeType.CustomOpcodeExpr; line = line_
 	func to_str(_level:int = 0) -> String:
 		var s := str(opcode_name, '(')
-		for a in args: s += str(StopeAst._e(a), ',')
+		for a in args: s += str(Fmt._e(a), ',')
 		if args.size() > 0: s = s.substr(0, s.length() - 1)
 		return str(s, ')')
 
@@ -440,7 +444,7 @@ static func shape_stmt(s) -> String:
 		var d := "Let["
 		for i in range(s.idents.size()):
 			if i > 0: d += ","
-			d += esc(s.idents[i])
+			d += Fmt.esc(s.idents[i])
 		d += "]"
 		if s.has_assign: d += "=" + shape_expr(s.expr)
 		return d
@@ -454,7 +458,7 @@ static func shape_stmt(s) -> String:
 		var d := "Export["
 		for i in range(s.idents.size()):
 			if i > 0: d += ","
-			d += esc(s.idents[i])
+			d += Fmt.esc(s.idents[i])
 		return d + "]"
 	elif t == NodeType.BlockStmt:
 		return "Block{" + shape_prog(s.prog) + "}"
@@ -474,7 +478,7 @@ static func shape_stmt(s) -> String:
 		return "Continue"
 	elif t == NodeType.DeferStmt:
 		return "Defer(" + shape_stmt(s.stmt) + ")"
-	return "?" + node_type_name(t)
+	return "?" + Fmt.node_type_name(t)
 
 static func shape_expr(e) -> String:
 	if e == null: return "null"
@@ -490,20 +494,20 @@ static func shape_expr(e) -> String:
 	elif t == NodeType.IntExpr:
 		return str("Int(", e.value, ")")
 	elif t == NodeType.FloatExpr:
-		return str("Float(", StopeAst.fmt_g(e.value), ")")
+		return str("Float(", Fmt.fmt_g(e.value), ")")
 	elif t == NodeType.BinArrExpr:
-		return "BinArr[" + StopeAst.fmt_bytes(e.value) + "]"
+		return "BinArr[" + Fmt.fmt_bytes(e.value) + "]"
 	elif t == NodeType.StringExpr:
-		return 'Str("' + esc(e.value) + '")'
+		return 'Str("' + Fmt.esc(e.value) + '")'
 	elif t == NodeType.IdentExpr:
-		return "Ident(" + esc(e.ident) + ")"
+		return "Ident(" + Fmt.esc(e.ident) + ")"
 	elif t == NodeType.ArgsExpr:
 		if e.key_expr == null: return "Args(null)"
 		return "Args(" + shape_expr(e.key_expr) + ")"
 	elif t == NodeType.UnaryOpExpr:
-		return str("Unary(", StopeLexer.Token.type_name(e.op), ", ", shape_expr(e.expr), ")")
+		return str("Unary(", Lexer.Token.type_name(e.op), ", ", shape_expr(e.expr), ")")
 	elif t == NodeType.BinaryOpExpr:
-		return str("Bin(", StopeLexer.Token.type_name(e.op), ", ", shape_expr(e.left_expr),
+		return str("Bin(", Lexer.Token.type_name(e.op), ", ", shape_expr(e.left_expr),
 				", ", shape_expr(e.right_expr), ")")
 	elif t == NodeType.CallExpr:
 		var d := "Call(" + shape_expr(e.callee)
@@ -514,7 +518,7 @@ static func shape_expr(e) -> String:
 		for k in e.key_exprs: d += "; " + shape_expr(k)
 		return d + ")"
 	elif t == NodeType.CustomOpcodeExpr:
-		var d := "Custom(" + esc(e.opcode_name)
+		var d := "Custom(" + Fmt.esc(e.opcode_name)
 		for a in e.args: d += "; " + shape_expr(a)
 		return d + ")"
-	return "?" + node_type_name(t)
+	return "?" + Fmt.node_type_name(t)

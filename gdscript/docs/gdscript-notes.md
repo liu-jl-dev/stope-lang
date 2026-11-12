@@ -72,17 +72,17 @@ GDScript 的 `String` 是 UTF-32：`s[i]` 是一个**码点**（类型还是 `St
 
 ### 1.4 内层类必须写全名，类型标注也一样
 
-`class_name` 只给**外层**脚本注册全局类。内层类没有全局名，任何地方都得写
-`StopeLexer.Lexer`、`StopeCompiler.Compiler`、`STML.Element`。
+门面常量只代表**外层脚本**。内层类任何地方都得写全：
+`Stope.Lexer.Lexer`、`Stope.Compiler.Compiler`、`Stope.STML.Element`。
 
 最容易踩的是**静态函数的参数类型**：
 
 ```gdscript
 # 错：外层名不是类型，:= 推断不出来，报 "Cannot infer the type of ..."
-static func parse_ident_expr(p: StopeParser) -> StopeAst.Expr: ...
+static func parse_ident_expr(p: Stope.Parser) -> Stope.Ast.Expr: ...
 
 # 对：必须写内层名
-static func parse_ident_expr(p: StopeParser.Parser) -> StopeAst.Expr: ...
+static func parse_ident_expr(p: Stope.Parser.Parser) -> Stope.Ast.Expr: ...
 ```
 
 解析器的前缀 / 中缀函数表全是静态函数、第一个参数都是 `p: Parser`，就是这个原因。
@@ -118,7 +118,7 @@ static func parse_ident_expr(p: StopeParser.Parser) -> StopeAst.Expr: ...
 ### 1.8 浮点格式化没有 `%g`
 
 GDScript 的 `%` 运算符不支持 `%g`，`String.num()` 也没有科学计数法分支。C++ 的
-`printf("%g")` 只能手写复刻，见 `StopeAst.fmt_g()`：
+`printf("%g")` 只能手写复刻，见 `ast.gd` 的 `Fmt.fmt_g()`：
 
 - 先求十进制指数 `X`（`10^X <= |v| < 10^(X+1)`），**必须用循环校正**，因为
   `log(a)/log(10)` 在边界上会差一位；
@@ -157,19 +157,25 @@ if raw.ends_with('\r'): raw = raw.substr(0, len(raw) - 1)
 
 demo 反过来是普通 `Node` + `_ready()`，跑完主动 `get_tree().quit()`，否则 headless 会挂着。
 
-### 1.12 全局类缓存要手动刷新
+### 1.12 零全局类：内部类访问外层成员的分层规则
 
-全局类列表缓存在 `.godot/global_script_class_cache.cfg`。**移动 / 改名 / 新增带
-`class_name` 的脚本后**，编辑器可能还在用旧表，表现为
-`Identifier "Xxx" not declared in the current scope` 或 `Could not find type "Xxx"`。
+本实现**不注册任何 `class_name` 全局类**（避免占用工程全局命名空间，也不依赖
+`.godot/global_script_class_cache.cfg`），跨文件引用一律
+`const X = preload("res://addons/stope/xxx.gd")`。去掉全局类名后，内部类访问外层成员
+是分层规则的（4.7.2 实测）：
 
-修法：先跑一次导入再跑测试。
+| 外层成员 | 内部类里裸名可用？ | 替代写法 |
+| --- | --- | --- |
+| `const`（含 preload 别名）、`enum` | **可以** | 直接用 |
+| `static func` | **不行**，报 `Function "xxx()" not found in base self` | 收进兄弟内部类，如 `ast.gd` 的 `Fmt` |
+| 兄弟内部类 | **可以**（裸名可见） | `Fmt.fmt_g(v)` |
 
-```bash
-godot --headless --path gdscript --import
-```
+`ast.gd` 的格式化函数（`esc` / `fmt_g` / `fmt_bytes` 等）因此整体内聚在内部类 `Fmt`
+里：外层只留常量与枚举，内部类经 `Fmt.*` 调用，跨文件经 `Stope.Ast.Fmt.*` 调用。
+**新加外层 static func 前先想清楚谁要调它** —— 有内部类要调就直接放进 `Fmt`。
 
-这条在 `addons/` 目录搬动之后尤其容易忘。
+历史教训：全局类时代依赖 `global_script_class_cache.cfg`，删掉 `.godot/` 就
+`Identifier "Xxx" not declared`；改 preload 后零缓存副本直接全绿，这条坑随之消失。
 
 ---
 
@@ -194,8 +200,9 @@ opcodeName -> opcode_name  hasAssign -> has_assign      binArrConsts -> bin_arr_
 
 ### 2.3 序列化格式是跨实现契约
 
-`StopeAst.shape_*`、`StopeTestUtil.dump_program`、`STML.Element.to_str` 的输出格式都写在
-`docs/zh-cn/*-test-plan.md` 里，**不是调试用的随便格式**。改格式等于改测试基线。
+`ast.gd` 的 `shape_*`、`test_util.gd` 的 `dump_program`、`Stope.STML.Element.to_str`
+的输出格式都写在 `docs/zh-cn/*-test-plan.md` 里，**不是调试用的随便格式**。
+改格式等于改测试基线。
 
 ### 2.4 每个文件头部写清对应关系
 
@@ -214,12 +221,12 @@ opcodeName -> opcode_name  hasAssign -> has_assign      binArrConsts -> bin_arr_
 
 ### 2.7 返回码只有一个枚举：`stope_result.gd`
 
-`StopeResult.Success / Error / UnknownError / DuplicateWithBuiltinOpcode` 对应 C++
+`Stope.Result.Success / Error / UnknownError / DuplicateWithBuiltinOpcode` 对应 C++
 `common.hpp` 的 `Stope::Result`。**别在模块里另立一份** —— 以前 `compiler.gd` 内嵌 4 项、
 `stml_parser.gd` 内嵌 2 项，同名不同义，跨模块拿到返回值根本比不了。
 
-用匿名 `enum {}` 而不是 `enum Result {}`，引用才是 `StopeResult.Success`；写成后者会变成
-`StopeResult.Result.Success`。注意 `Success == 0`，**不要用真假判断**。
+用匿名 `enum {}` 而不是 `enum Result {}`，引用才是 `Stope.Result.Success`；写成后者会变成
+`Stope.Result.Result.Success`。注意 `Success == 0`，**不要用真假判断**。
 
 ### 2.8 性能敏感处允许写两份循环
 
@@ -244,7 +251,7 @@ GDScript 每次函数调用 + `Callable.call` 在热循环里都是实打实的�
 3. **路径写法**：同目录写裸名（`usage.md`），跨目录写相对路径
    （`../../cpp/docs/stml.md`），别写 `docs/stml.md` 这种半截路径（会失效）。
 4. **示例必须真跑**。代码块要么从 `demo/` 抄，要么跑一遍再贴 —— 尤其 `op_map` 扩容、
-   `--import`、golden 重生成这类「不跑看不出来」的地方。
+   golden 重生成这类「不跑看不出来」的地方。
 5. **缺陷编号**：本实现独有的问题登记成 `GD-P-xx`（解析）/ `GD-S-xx`（STML）等，跨实现的
    差异写进 `docs/zh-cn/*-test-plan.md` §7 的偏差表；别只在 commit 或聊天里说。
 
@@ -257,7 +264,6 @@ Godot 没进 PATH，本机（4.7.2 mono）写全路径：
 ```bash
 GODOT="/c/Program Files/Godot/Godot_v4.7.2-stable_mono_win64/godot_console.exe"
 
-"$GODOT" --headless --path gdscript --import                                     # 刷新全局类
 "$GODOT" --headless --path gdscript --script res://test/run_tests.gd            # 跑测试
 "$GODOT" --headless --path gdscript res://demo/demo_01.tscn                     # 跑 demo 01
 "$GODOT" --headless --path gdscript res://demo/demo_02.tscn                     # 跑 demo 02

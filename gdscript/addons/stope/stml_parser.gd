@@ -1,4 +1,7 @@
-class_name STMLParser
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const STML = preload("res://addons/stope/stml.gd")
+const STMLLexer = preload("res://addons/stope/stml_lexer.gd")
+const Result = preload("res://addons/stope/stope_result.gd")
 
 # STML 语法器。契约见 docs/zh-cn/stml-test-plan.md §2.6~§2.8，
 # 权威实现是 cpp/src/stml_parser.cpp（本文件逐分支照抄它）。
@@ -24,13 +27,13 @@ class Parser:
 	# 顶层只解析**一个**元素（B-15），根之后的剩余输入被忽略。
 	# state_func(tag, attrs) -> STMLLexer.State：由宿主决定某个标签的内容该按
 	# 哪种状态扫；传空 Callable() 等价于 C++ 的 nullptr，一律 Xml（子元素模式）。
-	# 返回值是 StopeResult.Success / StopeResult.Error（与 C++ 共用同一份 Result）。
+	# 返回值是 Result.Success / Result.Error（与 C++ 共用同一份 Result）。
 	func parse(root:STML.Element, state_func_:Callable) -> int:
 		state_func = state_func_
 		_aborted = false
 		next_token()
 		parse_element(root, 1) # 根元素算第 1 层
-		return StopeResult.Success if errors.is_empty() else StopeResult.Error
+		return Result.Success if errors.is_empty() else Result.Error
 
 	func parse_element(e:STML.Element, depth:int) -> void:
 		var T := STML.Token.Type

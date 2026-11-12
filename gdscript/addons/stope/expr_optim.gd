@@ -1,4 +1,7 @@
-class_name StopeExprOptim
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const Ast = preload("res://addons/stope/ast.gd")
+const Lexer = preload("res://addons/stope/lexer.gd")
+
 # 常量折叠 —— 端口 cpp/include/stope/expr_optim.hpp（2026-10-18）。
 #
 # 契约与 C++ 完全一致：
@@ -17,7 +20,7 @@ class_name StopeExprOptim
 #   L0 两侧必须都是字面量常量 -> L1 and/or -> L2 任一侧 null -> L3 比较 -> L4 算术
 # 刻意【不】拆成 foldXxx 分派函数，保持「一个格子 = 一个分支」，方便两边对照。
 
-const TokenType = StopeLexer.Token.Type
+const TokenType = Lexer.Token.Type
 
 const INT64_MAX := 9223372036854775807
 const INT64_MIN := -9223372036854775807 - 1
@@ -27,10 +30,10 @@ enum ConstKind { NotConst, Null, Bool, Int, Float, String, BinArr }
 
 # ==================== 入口 ====================
 # 返回一个（可能是新的）节点：成功折叠时是新常量节点，否则是入参本身。
-static func optimize(e) -> StopeAst.Expr:
+static func optimize(e) -> Ast.Expr:
 	if e == null: return null
-	if e.node_type == StopeAst.NodeType.UnaryOpExpr: return fold_unary(e)
-	if e.node_type == StopeAst.NodeType.BinaryOpExpr: return fold_binary(e)
+	if e.node_type == Ast.NodeType.UnaryOpExpr: return fold_unary(e)
+	if e.node_type == Ast.NodeType.BinaryOpExpr: return fold_binary(e)
 	return e
 
 # ==================== 常量分类与取值 ====================
@@ -39,12 +42,12 @@ static func optimize(e) -> StopeAst.Expr:
 static func kind_of(e) -> ConstKind:
 	if e == null: return ConstKind.NotConst
 	match e.node_type:
-		StopeAst.NodeType.NullExpr: return ConstKind.Null
-		StopeAst.NodeType.BoolExpr: return ConstKind.Bool
-		StopeAst.NodeType.IntExpr: return ConstKind.Int
-		StopeAst.NodeType.FloatExpr: return ConstKind.Float
-		StopeAst.NodeType.StringExpr: return ConstKind.String
-		StopeAst.NodeType.BinArrExpr: return ConstKind.BinArr
+		Ast.NodeType.NullExpr: return ConstKind.Null
+		Ast.NodeType.BoolExpr: return ConstKind.Bool
+		Ast.NodeType.IntExpr: return ConstKind.Int
+		Ast.NodeType.FloatExpr: return ConstKind.Float
+		Ast.NodeType.StringExpr: return ConstKind.String
+		Ast.NodeType.BinArrExpr: return ConstKind.BinArr
 	return ConstKind.NotConst
 
 static func is_const(k:ConstKind) -> bool: return k != ConstKind.NotConst
@@ -69,33 +72,33 @@ static func bool_val(e) -> bool: return e.value
 static func as_int(e) -> int: return e.value
 static func double_val(e) -> float: return e.value
 static func num_as_int(e) -> int:
-	if e.node_type == StopeAst.NodeType.BoolExpr: return 1 if bool_val(e) else 0
+	if e.node_type == Ast.NodeType.BoolExpr: return 1 if bool_val(e) else 0
 	return as_int(e)
 static func as_double(e) -> float:
-	if e.node_type == StopeAst.NodeType.BoolExpr: return 1.0 if bool_val(e) else 0.0
-	if e.node_type == StopeAst.NodeType.IntExpr: return float(as_int(e))
+	if e.node_type == Ast.NodeType.BoolExpr: return 1.0 if bool_val(e) else 0.0
+	if e.node_type == Ast.NodeType.IntExpr: return float(as_int(e))
 	return double_val(e)
 
 # ==================== 序列（String / BinArr）的载荷读写 ====================
 # 两者载荷类型不同（String / PackedByteArray），但需要的操作只有下面 4 个，
 # 集中在这里分发，二元的每个格子就不必为 String 与 BinArr 各写一套分支。
 static func seq_size(e) -> int:
-	if e.node_type == StopeAst.NodeType.StringExpr: return e.value.length()
+	if e.node_type == Ast.NodeType.StringExpr: return e.value.length()
 	return e.value.size()
 static func seq_equal(a, b) -> bool: return a.value == b.value
-static func make_seq(line:int, k:ConstKind) -> StopeAst.Expr:
-	if k == ConstKind.String: return StopeAst.StringExpr.new(line)
-	return StopeAst.BinArrExpr.new(line)
+static func make_seq(line:int, k:ConstKind) -> Ast.Expr:
+	if k == ConstKind.String: return Ast.StringExpr.new(line)
+	return Ast.BinArrExpr.new(line)
 static func seq_append(dst, src) -> void:
-	if dst.node_type == StopeAst.NodeType.StringExpr: dst.value += src.value
+	if dst.node_type == Ast.NodeType.StringExpr: dst.value += src.value
 	else: dst.value.append_array(src.value)
 
 # 真值规则：null -> 假；bool -> 自身；int/float -> 非零；序列 -> 非空
 static func truthy(e) -> bool:
-	if e.node_type == StopeAst.NodeType.NullExpr: return false
-	if e.node_type == StopeAst.NodeType.BoolExpr: return bool_val(e)
-	if e.node_type == StopeAst.NodeType.IntExpr: return as_int(e) != 0
-	if e.node_type == StopeAst.NodeType.FloatExpr: return double_val(e) != 0.0
+	if e.node_type == Ast.NodeType.NullExpr: return false
+	if e.node_type == Ast.NodeType.BoolExpr: return bool_val(e)
+	if e.node_type == Ast.NodeType.IntExpr: return as_int(e) != 0
+	if e.node_type == Ast.NodeType.FloatExpr: return double_val(e) != 0.0
 	if is_seq(kind_of(e)): return seq_size(e) != 0
 	return false
 
@@ -130,18 +133,18 @@ static func int_pow(base:int, exp:int) -> Array:
 	return [false, result]
 
 # ==================== 造节点 / 拷贝常量 / 取负 / 串重复 ====================
-static func make_bool(line:int, v:bool) -> StopeAst.BoolExpr: return StopeAst.BoolExpr.new(line, v)
-static func make_int(line:int, v:int) -> StopeAst.IntExpr: return StopeAst.IntExpr.new(line, v)
-static func make_float(line:int, v:float) -> StopeAst.FloatExpr: return StopeAst.FloatExpr.new(line, v)
-static func make_null(line:int) -> StopeAst.Expr: return StopeAst.NullExpr.new()
+static func make_bool(line:int, v:bool) -> Ast.BoolExpr: return Ast.BoolExpr.new(line, v)
+static func make_int(line:int, v:int) -> Ast.IntExpr: return Ast.IntExpr.new(line, v)
+static func make_float(line:int, v:float) -> Ast.FloatExpr: return Ast.FloatExpr.new(line, v)
+static func make_null(line:int) -> Ast.Expr: return Ast.NullExpr.new()
 
 # 拷贝一个字面量常量节点（用于 null + X -> X 这类规则），非常量返回 null
-static func clone_const(line:int, e) -> StopeAst.Expr:
+static func clone_const(line:int, e) -> Ast.Expr:
 	match e.node_type:
-		StopeAst.NodeType.NullExpr: return StopeAst.NullExpr.new()
-		StopeAst.NodeType.BoolExpr: return make_bool(line, bool_val(e))
-		StopeAst.NodeType.IntExpr: return make_int(line, as_int(e))
-		StopeAst.NodeType.FloatExpr: return make_float(line, double_val(e))
+		Ast.NodeType.NullExpr: return Ast.NullExpr.new()
+		Ast.NodeType.BoolExpr: return make_bool(line, bool_val(e))
+		Ast.NodeType.IntExpr: return make_int(line, as_int(e))
+		Ast.NodeType.FloatExpr: return make_float(line, double_val(e))
 	var k := kind_of(e)
 	if not is_seq(k): return null
 	var r := make_seq(line, k)
@@ -151,18 +154,18 @@ static func clone_const(line:int, e) -> StopeAst.Expr:
 # 取负：Int/Float -> 同类型取负；Bool -> 转成 Int 取负。
 # 不可取负（null / 序列）返回 null。整数按 64 位回绕（-INT64_MIN == INT64_MIN），
 # 所以走 `~a + 1` 而不是 `-a`：后者在 GD 里对 INT64_MIN 会直接崩，前者等价且安全。
-static func negate_const(line:int, e) -> StopeAst.Expr:
+static func negate_const(line:int, e) -> Ast.Expr:
 	match e.node_type:
-		StopeAst.NodeType.BoolExpr: return make_int(line, -1 if bool_val(e) else 0)
-		StopeAst.NodeType.IntExpr:
+		Ast.NodeType.BoolExpr: return make_int(line, -1 if bool_val(e) else 0)
+		Ast.NodeType.IntExpr:
 			var v:int = as_int(e)
 			return make_int(line, ~v + 1)
-		StopeAst.NodeType.FloatExpr: return make_float(line, -double_val(e))
+		Ast.NodeType.FloatExpr: return make_float(line, -double_val(e))
 	return null
 
 # 串重复：`"ab" * 3` / `'x 41' * 3`。times 必须是非负整数（Bool 已在调用侧折算）；
 # 负次或结果元素数超过上限 -> null。
-static func repeat_seq(line:int, base, times:int) -> StopeAst.Expr:
+static func repeat_seq(line:int, base, times:int) -> Ast.Expr:
 	if times < 0: return null	# 负次重复无定义 -> 不折叠
 	var unit:int = seq_size(base)
 	if unit == 0: return make_seq(line, kind_of(base))	# 空串/空数组的任意次重复仍是空
@@ -179,7 +182,7 @@ static func cmp_of(op:int, a, b) -> bool:
 	return a >= b
 
 # ==================== 一元 ====================
-static func fold_unary(e) -> StopeAst.Expr:
+static func fold_unary(e) -> Ast.Expr:
 	if e == null or e.expr == null: return e
 	var line:int = e.line
 	var inn = e.expr
@@ -195,12 +198,12 @@ static func fold_unary(e) -> StopeAst.Expr:
 	return ret if ret else e
 
 # ==================== 二元 ====================
-static func fold_binary(e) -> StopeAst.Expr:
+static func fold_binary(e) -> Ast.Expr:
 	if e == null or e.left_expr == null or e.right_expr == null: return e
 	var ret = try_fold_binary(e)
 	return ret if ret else e
 
-static func try_fold_binary(e) -> StopeAst.Expr:
+static func try_fold_binary(e) -> Ast.Expr:
 	var line:int = e.line
 	var op:int = e.op
 	var L = e.left_expr

@@ -13,20 +13,22 @@
    `Reset` 对应；`Compiler.compile()` 内部也会先清空输出。
 3. **输入输出都是引用语义。** `parse_program(tree)`、`compile(tree, program)` 都是把结果
    **写进**传进去的对象，没有返回值（`compile` 返回的是错误码）。
-4. **返回码只有一个枚举：`StopeResult`。** 编译器、STML 语法器、指令表注册共用它，
+4. **返回码只有一个枚举：`Stope.Result`。** 编译器、STML 语法器、指令表注册共用它，
    `Success / Error / UnknownError / DuplicateWithBuiltinOpcode` 四项与 C++
    `Stope::Result` 一一对应。**`Success == 0`，别写 `if rc:` 当成功。**
 
 ---
 
-## 1. 词法：`StopeLexer`
+## 1. 词法：`Stope.Lexer`
+
+> **引入方式**：插件不注册全局类。示例里的 `Stope` 来自脚本顶部的一行 `const Stope = preload("res://addons/stope/stope.gd")`，完整可跑写法见 [`README.md`](README.md) §5 与 `demo/`。
 
 ```gdscript
-var lexer := StopeLexer.Lexer.new("let a = 1;")		# 也可以 new() 后 reset(src)
+var lexer := Stope.Lexer.Lexer.new("let a = 1;")		# 也可以 new() 后 reset(src)
 while true:
 	var t := lexer.next_token()
-	print(t.line, " ", StopeLexer.Token.type_name(t.type), " ", t.literal)
-	if t.type == StopeLexer.Token.Type.Eof: break
+	print(t.line, " ", Stope.Lexer.Token.type_name(t.type), " ", t.literal)
+	if t.type == Stope.Lexer.Token.Type.Eof: break
 print(lexer.errors)		# [] 表示没有词法错误
 ```
 
@@ -36,7 +38,7 @@ print(lexer.errors)		# [] 表示没有词法错误
 | --- | --- |
 | `Lexer.new(input := '')` | 构造即 `reset` |
 | `reset(input: String)` | 换源码，行号归 1，清空 `errors` |
-| `next_token(custom := null) -> Token` | 取下一个 token；`custom` 是 `StopeOpcode.CustomOpcodeConfig` |
+| `next_token(custom := null) -> Token` | 取下一个 token；`custom` 是 `Stope.Opcode.CustomOpcodeConfig` |
 | `errors: Array[String]` | `line N: msg` |
 | `line: int` | 当前行号（1 起） |
 | `input: String` | **未消费的剩余**原文（每取一个 token 就左移一截），不是完整源码 |
@@ -45,13 +47,13 @@ print(lexer.errors)		# [] 表示没有词法错误
 > 自己存一份；`input` 只表示「还剩多少没扫」。
 
 `custom` **不存在词法器里**，而是每次取 token 时传进来 —— 与 C++ `Lexer::NextToken(cfg)`
-一致：换一张自定义指令表不必重建词法器。用 `StopeParser` 时它会在内部代传。
+一致：换一张自定义指令表不必重建词法器。用 `Stope.Parser` 时它会在内部代传。
 
 ### 1.2 `Token`
 
 | 字段 | 说明 |
 | --- | --- |
-| `type: int` | `StopeLexer.Token.Type`，共 47 项（`Invalid` … `Custom`） |
+| `type: int` | `Stope.Lexer.Token.Type`，共 47 项（`Invalid` … `Custom`） |
 | `line: int` | 起始行号 |
 | `literal: String` | 原文切片。**只有** String / BinArr / 数字 / 标识符有值，标点没有 |
 | `parsed: String` | 规范形式：数字去掉 `_`、标识符拼好 `:`、字符串**转义之后**的文本 |
@@ -66,7 +68,7 @@ print(lexer.errors)		# [] 表示没有词法错误
 | `Integer` | `int_value` |
 | `Float` | `float_value` |
 | `String`（`"..."`） | `parsed`（已去转义；`literal` 是原始切片） |
-| `BinArr`（`'...'`） | `literal`（**不做任何转义**，字节由 `StopeBinArrParser` 解析） |
+| `BinArr`（`'...'`） | `literal`（**不做任何转义**，字节由 `Stope.BinArrParser` 解析） |
 | `Ident` | `parsed`（`a : b` 的空白已吃掉，拼成 `a:b`） |
 
 `Token.type_name(t)` 是静态方法，越界时返回 `"?(n)"`，可以直接拿去打日志。
@@ -109,12 +111,12 @@ print(lexer.errors)		# [] 表示没有词法错误
 
 ---
 
-## 2. 语法：`StopeParser`
+## 2. 语法：`Stope.Parser`
 
 ```gdscript
-var lexer := StopeLexer.Lexer.new(src)
-var parser := StopeParser.Parser.new(lexer)		# 第二参 custom 可省
-var tree := StopeAst.Prog.new()
+var lexer := Stope.Lexer.Lexer.new(src)
+var parser := Stope.Parser.Parser.new(lexer)		# 第二参 custom 可省
+var tree := Stope.Ast.Prog.new()
 parser.parse_program(tree)
 print(parser.errors, " / 词法错误: ", lexer.errors)
 ```
@@ -125,7 +127,7 @@ print(parser.errors, " / 词法错误: ", lexer.errors)
 | --- | --- |
 | `Parser.new(lexer, custom := null)` | 构造即预读两个 token（`cur` / `peek`） |
 | `reset(lexer, custom := null)` | 复用解析器 |
-| `parse_program(prog: StopeAst.Prog)` | 顶层：吃到 `Eof` 为止 |
+| `parse_program(prog: Stope.Ast.Prog)` | 顶层：吃到 `Eof` 为止 |
 | `parse_prog(prog, is_top_level: bool)` | 顶层 / 块内共用实现，区别在遇到 `}` 时怎么收尾 |
 | `errors: Array[String]` | `line N: msg`，**不**合并词法错误 |
 | `const_folding: bool = true` | 常量折叠开关，测试里按用例切换 |
@@ -137,7 +139,7 @@ print(parser.errors, " / 词法错误: ", lexer.errors)
 
 ### 2.2 优先级与结合性
 
-`StopeAst.Precedence` 共 10 档，从低到高：`Lowest` → `Or` → `And` → `Equals` →
+`Stope.Ast.Precedence` 共 10 档，从低到高：`Lowest` → `Or` → `And` → `Equals` →
 `LessGreater` → `AddSub` → `MulDiv` → `Pow` → `Prefix` → `Paren`。
 
 `^` 是**右结合**：`2^3^2` 解析成 `2^(3^2)`。实现方式是中缀函数里把阈值减 1
@@ -149,7 +151,7 @@ print(parser.errors, " / 词法错误: ", lexer.errors)
 token。少数语句解析入口（`let` / `return`）例外，与 C++ 保持一致。
 
 不能出现的 token 会得到 `no prefix parse function for token type. `，此时返回一个裸
-`StopeAst.Expr`（形状串打印成 `Err(行号)`），让解析继续。
+`Stope.Ast.Expr`（形状串打印成 `Err(行号)`），让解析继续。
 
 嵌套超过 `max_depth` 时报 `line N: nesting too deep (max 256). ` 并**停止解析**：只报这
 一条（连锁错误不再记账），已解析完的语句保留在 `prog.stmts` 里。此时 `left_expr` 之类的
@@ -157,7 +159,7 @@ token。少数语句解析入口（`let` / `return`）例外，与 C++ 保持一
 
 ### 2.4 AST 形状串
 
-`StopeAst.shape_prog(tree)` 把整棵树压成一行文本，测试就是拿它逐字节对比 C++。格式：
+`Stope.Ast.shape_prog(tree)` 把整棵树压成一行文本，测试就是拿它逐字节对比 C++。格式：
 
 ```
 Int(31) / Float(1.5) / Str("a\nb") / BinArr[04,01] / Ident(a) / Null / Bool(true) / Argc
@@ -171,7 +173,7 @@ Block{..} / If(c){..}Elif(c){..}Else{..} / While(c){..} / Assign(l, r) / Break /
 
 ---
 
-## 3. AST：`StopeAst`
+## 3. AST：`Stope.Ast`
 
 28 种节点，`node_type` 与 C++ 的 `AST::NodeType` **同序同值**。字段名是 C++ 的
 snake_case 版本，一一对应：
@@ -201,15 +203,15 @@ snake_case 版本，一一对应：
 | `CustomOpcodeExpr` | `opcode_name`、`args` | |
 
 基类 `Node_` 有 `line` 与 `node_type`；`Stmt` / `Expr` 只是加了默认 `to_str`。
-注意 `op` 存的是 `StopeLexer.Token.Type`，不是字符串；要显示用 `StopeAst.binop_literal_map`。
+注意 `op` 存的是 `Stope.Lexer.Token.Type`，不是字符串；要显示用 `Stope.Ast.binop_literal_map`。
 
 ---
 
-## 4. 遍历：`StopeASTVisitor`
+## 4. 遍历：`Stope.ASTVisitor`
 
 ```gdscript
-class MyPass extends StopeASTVisitor.ASTVisitor:
-	func on_visit_ident_expr(e: StopeAst.IdentExpr) -> void:
+class MyPass extends "res://addons/stope/ast_visitor.gd".ASTVisitor:
+	func on_visit_ident_expr(e: Stope.Ast.IdentExpr) -> void:
 		print("用到了变量 ", e.ident, " @", cur_line)
 ```
 
@@ -229,17 +231,17 @@ class MyPass extends StopeASTVisitor.ASTVisitor:
   `on_visit_or_expr` / `on_visit_and_expr`。默认实现与普通路径等价，只有编译器重写它们。
 - 重写后要继续下钻，调 `super.on_visit_xxx(n)`。
 
-`StopeCompiler.Compiler` 就是这个骨架的子类：凡是需要发指令的钩子整段重写，其余靠基类递归。
+`Stope.Compiler.Compiler` 就是这个骨架的子类：凡是需要发指令的钩子整段重写，其余靠基类递归。
 
 ---
 
-## 5. 编译器：`StopeCompiler`
+## 5. 编译器：`Stope.Compiler`
 
 ```gdscript
-var compiler := StopeCompiler.Compiler.new()		# 第二参 custom 可省
-var program := StopeProgram.Program.new()
+var compiler := Stope.Compiler.Compiler.new()		# 第二参 custom 可省
+var program := Stope.Program.Program.new()
 var rc := compiler.compile(tree, program)
-if rc != StopeResult.Success:
+if rc != Stope.Result.Success:
 	print(compiler.errors)		# program 已被清空
 ```
 
@@ -249,10 +251,10 @@ if rc != StopeResult.Success:
 | --- | --- |
 | `Compiler.new(custom := null)` | |
 | `reset(custom := null)` | 清错误、换自定义指令表 |
-| `compile(ast: Prog, out: Program) -> int` | 返回 `StopeResult`；**有错时清空 `out`** |
+| `compile(ast: Prog, out: Program) -> int` | 返回 `Stope.Result`；**有错时清空 `out`** |
 | `errors: Array[String]` | `line N: msg` |
 
-返回值是 `StopeResult` 里的 `Success` / `Error`，与 C++ 的 `Stope::Result` 同一份定义
+返回值是 `Stope.Result` 里的 `Success` / `Error`，与 C++ 的 `Stope::Result` 同一份定义
 （见开头第 4 条）。`compile` 只会给出这两个值；另两个是保留项 ——
 `DuplicateWithBuiltinOpcode` 现在由 `add_custom_opcode` 用来报重名，见 §7。
 
@@ -286,7 +288,7 @@ if rc != StopeResult.Success:
 
 ## 6. `Program` 与序列化
 
-`StopeProgram.Program` 的字段与 C++ 同名（snake_case）：
+`Stope.Program.Program` 的字段与 C++ 同名（snake_case）：
 
 | 字段 | 含义 |
 | --- | --- |
@@ -304,7 +306,7 @@ print(program.to_json_string())					# {"c":[...],"i":[...],...}
 print(program.to_map())						# 同上，给 Dictionary
 ```
 
-**文本形式不在这里，用 §6.1 的 `StopeDebug.disasm`**。理由和 C++ 侧一样：`Program`
+**文本形式不在这里，用 §6.1 的 `Stope.Debug.disasm`**。理由和 C++ 侧一样：`Program`
 是数据结构，人读的反汇编是另一件事（`debug.hpp` 的 `Disasm`），单行比对格式则是测试
 专用的（C++ 放在 `tools/golden.cpp` 的私有 `dumpLine` 里，GD 放在 `test/test_util.gd`
 的 `dump_program` 里），三方各归其位。
@@ -313,20 +315,20 @@ print(program.to_map())						# 同上，给 Dictionary
 > （`code[...] vars=N stack=N ...`，格式见 `docs/zh-cn/compiler-test-plan.md` §2.3）。
 > 它不是库 API —— 宿主代码不该依赖它，格式是测试契约、随时可能随契约调整。
 
-### 6.1 人读格式：`StopeDebug.disasm`
+### 6.1 人读格式：`Stope.Debug.disasm`
 
 与 C++ `debug.hpp` 的 `Disasm` / `DisasmNoCustom` **同名同形**：
 
 ```gdscript
-print(StopeDebug.disasm(program, cfg))		# cfg 可省
-print(StopeDebug.disasm_no_custom(program))	# 明确「没有自定义指令」
+print(Stope.Debug.disasm(program, cfg))		# cfg 可省
+print(Stope.Debug.disasm_no_custom(program))	# 明确「没有自定义指令」
 ```
 
 | 成员 | 说明 |
 | --- | --- |
 | `disasm(prog, config := null) -> String` | 编号列 + 对齐的名字列 + 自定义指令表 + 变量表 + 常量池 + warning |
 | `disasm_no_custom(prog) -> String` | 同上，`config = null` |
-| `opcode_has_arg(op) -> bool` | 内置指令是否带操作数（转发 `StopeOpcode.has_a_param`） |
+| `opcode_has_arg(op) -> bool` | 内置指令是否带操作数（转发 `Stope.Opcode.has_a_param`） |
 | `custom_opcode_has_arg(raw, config) -> bool` | 自定义指令是否带操作数（只有变长才带「参数个数」） |
 
 **含自定义指令时必须传注册时用的那份 config**：否则名字丢了，而且变长指令后面那个
@@ -344,12 +346,12 @@ warning（`builtin decoding wins`），因为 `opcodes` 是 int 混排，运行�
 > 本节只列 API 与硬约束。
 
 ```gdscript
-var cfg := StopeOpcode.CustomOpcodeConfig.new()
+var cfg := Stope.Opcode.CustomOpcodeConfig.new()
 cfg.add_custom_opcode("myop", 100, 2)		# 定长 2 个参数
 cfg.add_custom_opcode("vop", 101, -1)		# arg_num < 0 表示变长
 
-var parser := StopeParser.Parser.new(StopeLexer.Lexer.new(src), cfg)
-var compiler := StopeCompiler.Compiler.new(cfg)
+var parser := Stope.Parser.Parser.new(Stope.Lexer.Lexer.new(src), cfg)
+var compiler := Stope.Compiler.Compiler.new(cfg)
 ```
 
 | 类型 | 字段 |
@@ -360,19 +362,19 @@ var compiler := StopeCompiler.Compiler.new(cfg)
 规则：
 
 - **重名不插入。** `add_custom_opcode` 与 C++ 的 `addCustomOpcode` 一样，同名再注册
-  返回 `StopeResult.DuplicateWithBuiltinOpcode` 且保留第一次那个；新注册返回
-  `StopeResult.Success`。返回值可以丢弃（GDScript 允许），要防手误就接一下。
-- 编号必须 **> 32**，`StopeOpcode.FIRST_CUSTOM_OPCODE` 就是 33。占 0..32 会在反汇编时
+  返回 `Stope.Result.DuplicateWithBuiltinOpcode` 且保留第一次那个；新注册返回
+  `Stope.Result.Success`。返回值可以丢弃（GDScript 允许），要防手误就接一下。
+- 编号必须 **> 32**，`Stope.Opcode.FIRST_CUSTOM_OPCODE` 就是 33。占 0..32 会在反汇编时
   被当成内置指令解码，没有别的选择。**查重只看名字，不看编号** —— 用内置编号注册
   不会报错，`demo_03` 最后一段演示的正是这个坑。
 - 定长指令参数个数不符时**报错但仍发指令**；变长指令会多写一个「实参个数」操作数。
 - 编译器记账是 `dec(参数个数 - 1)`：自定义指令没有 callee 入栈，结果占 1 格。
 - 词法器按名字认 `Type.Custom`，所以注册名不能与关键字重名（关键字优先）。
 
-`StopeOpcode.has_a_param(inst)` 判断内置指令是否带一个操作数，分档与 golden 探针、
+`Stope.Opcode.has_a_param(inst)` 判断内置指令是否带一个操作数，分档与 golden 探针、
 执行器的步进规则完全一致；序列化和反汇编共用它。
 
-> ⚠ 想打印自定义指令的名字，用 `StopeDebug.disasm(prog, cfg)` —— 它拿 config 反查名字、
+> ⚠ 想打印自定义指令的名字，用 `Stope.Debug.disasm(prog, cfg)` —— 它拿 config 反查名字、
 > 按变长决定吃不吃参数个数，编号撞内置还会报 warning。`StopeTestUtil.dump_program`
 > 是测试比对格式，自定义指令一律打成 `Opcode(33)`，**不反查名字**。
 
@@ -385,17 +387,17 @@ var compiler := StopeCompiler.Compiler.new(cfg)
 ```gdscript
 class Host:
 	# my:add：弹 2 个、压 1 个。s.i 已经指着这条指令本身
-	func my_add(s:StopeBasicVM.State) -> void:
+	func my_add(s:Stope.BasicVM.State) -> void:
 		var b = s.stack.pop_back()	# 栈上一定是值：读变量走 PushValue
 		var a = s.stack.pop_back()
 		s.stack.push_back(a + b)
 
 var host := Host.new()
-var api := StopeBasicVM.Api.new()
+var api := Stope.BasicVM.Api.new()
 api.op_map.resize(34)					# 33 号要能下标取到 ⇒ 至少 34 项
 api.op_map[33] = host.my_add				# 33 = my:add 的编号
 
-var state := StopeBasicVM.State.new()
+var state := Stope.BasicVM.State.new()
 state.set_api(api)
 state.set_program(program)
 state.set_arguments(args)					# args 是你自己的 Arguments 实现
@@ -413,14 +415,14 @@ print(state.run(), state.returns)			# 0[3]（Success）
 | 把编号占进 0…32 | 内置实现赢，你的处理函数永远不会被调用（反汇编也只会印内置指令名） |
 
 > 在自定义指令里调 `state.error()` 时，错误串的指令名印成 `Custom<N>` —— 枚举里没有这个
-> 编号，别指望看到注册名。要看名字用 `StopeDebug.disasm(prog, cfg)`。
+> 编号，别指望看到注册名。要看名字用 `Stope.Debug.disasm(prog, cfg)`。
 
 ---
 
-## 8. 常量折叠：`StopeExprOptim`
+## 8. 常量折叠：`Stope.ExprOptim`
 
 ```gdscript
-var folded := StopeExprOptim.optimize(expr)	# 折了就返回新节点，没折返回入参本身
+var folded := Stope.ExprOptim.optimize(expr)	# 折了就返回新节点，没折返回入参本身
 ```
 
 `Parser` 已经接好了：在构造 `UnaryOpExpr` / `BinaryOpExpr` 的末尾调用，子节点返回时
@@ -443,7 +445,7 @@ var folded := StopeExprOptim.optimize(expr)	# 折了就返回新节点，没折�
 
 ---
 
-## 9. 参考执行器：`StopeBasicVM`
+## 9. 参考执行器：`Stope.BasicVM`
 
 **这是内置的基础虚拟机，不是标准。** 它会一直维护 —— 修 bug、跟 `Program` 演进时同步、
 与另外四份实现语义对齐；接口也**不会随意调整**，改名或增删参数只会为了修 bug 或跟进
@@ -454,22 +456,22 @@ var folded := StopeExprOptim.optimize(expr)	# 折了就返回新节点，没折�
 [`docs/zh-cn/vm-guide.md`](../../docs/zh-cn/vm-guide.md)。
 
 ```gdscript
-class MyArgs extends StopeBasicVM.Arguments:
+class MyArgs extends "res://addons/stope/basic_vm.gd".Arguments:
 	var data: Array = []
 	func _init(v: Array) -> void: data = v
 	# 取不到就自己报错：state.error(...) + 返回 null，VM 会立刻停在这个位置
-	func at(state: StopeBasicVM.State, key) -> Variant:
+	func at(state: Stope.BasicVM.State, key) -> Variant:
 		if not (key is int) or key < 0 or key >= data.size():
 			state.error('argument out of range. ')
 			return null
 		return data[key]
 	func num() -> int: return data.size()
 
-var state := StopeBasicVM.State.new()
-state.set_api(StopeBasicVM.Api.new())
+var state := Stope.BasicVM.State.new()
+state.set_api(Stope.BasicVM.Api.new())
 state.set_program(program)
 state.set_arguments(MyArgs.new([1, 2, 3]))
-if state.run() != StopeResult.Success:
+if state.run() != Stope.Result.Success:
 	print(state.errors)
 print(state.returns)
 ```
@@ -477,8 +479,8 @@ print(state.returns)
 | 成员 | 说明 |
 | --- | --- |
 | `State.set_api / set_program / set_arguments` | 绑定并清 `returns` / `stack` / `errors`；args 用 `set_arguments` 后补 |
-| `State.run() -> StopeResult` | 跑到 `opcodes` 末尾；`errors` 非空立刻返回 `Error` |
-| `State.step() -> StopeResult` | 单步执行一条指令：`Success` = 这条跑完了、可以接着 step；`Error` = 停了（`errors` 非空 = 出错，否则 = 指令流走完，仍返回 `Success`）。`while s.i < ops.size() and s.step() == StopeResult.Success: pass` 与 `s.run()` 走同样的指令、得到同样的结果 |
+| `State.run() -> Stope.Result` | 跑到 `opcodes` 末尾；`errors` 非空立刻返回 `Error` |
+| `State.step() -> Stope.Result` | 单步执行一条指令：`Success` = 这条跑完了、可以接着 step；`Error` = 停了（`errors` 非空 = 出错，否则 = 指令流走完，仍返回 `Success`）。`while s.i < ops.size() and s.step() == Stope.Result.Success: pass` 与 `s.run()` 走同样的指令、得到同样的结果 |
 | `State.returns: Array` | `return` 的返回值，按出现顺序 |
 | `State.errors: Array[String]` | `"i OpName: msg"`（`i` 是指令下标） |
 | `State.error(msg)` | 宿主的报错入口（对应 C++ `State::Error`）；写进 `errors` 后 `run`/`step` 立即停 |
@@ -541,7 +543,7 @@ state.variables[program.exports["fmt:println"]] = Callable(host, "println")
 | 点 | GD 侧 |
 | --- | --- |
 | 错误串格式 | `"3 Add: msg"`（**带指令名**）；C++ 是 `"3: msg"`。下标相同、格式不同，跨实现比对只看消息部分 |
-| `Identifier` 包装 | 有（`StopeBasicVM.Identifier`），但**只有 `PushId` 造它、只有 `Assign` 读它** —— 其它指令不做防御性解引用（与 C++ 一致；拿到它说明编译器产物错了） |
+| `Identifier` 包装 | 有（`Stope.BasicVM.Identifier`），但**只有 `PushId` 造它、只有 `Assign` 读它** —— 其它指令不做防御性解引用（与 C++ 一致；拿到它说明编译器产物错了） |
 | `At` 的 key 数 | 只支持 1 个，其它报 `no implement for key num != 1. ` |
 | `At` 的容器 | 只支持 `PackedByteArray` 与 `String`；取字符串给的是**码点**（`unicode_at`），C++ 给的是 UTF-16 码元 —— 非 BMP 字符上会不同 |
 | `==` 两侧类型不同 | 执行器自己实现 `_equals`（同类型才比、整数与浮点互通、其余不等）。**不能直接用 Godot 的 `==`**：`"1" == 1` 会抛引擎级错误，且 `_store` 不执行 —— 栈没动、`errors` 也没有，`run()` 照常往下跑 |
@@ -551,20 +553,20 @@ state.variables[program.exports["fmt:println"]] = Callable(host, "println")
 
 ---
 
-## 10. STML：`STML` / `STMLLexer` / `STMLParser`
+## 10. STML：`Stope.STML` / `Stope.STMLLexer` / `Stope.STMLParser`
 
-STML 是"两半"：**树的形状**由 `STMLParser` 管（标签名、属性、嵌套、结束标签配对），
+STML 是"两半"：**树的形状**由 `Stope.STMLParser` 管（标签名、属性、嵌套、结束标签配对），
 **内容怎么切**由宿主管 —— 就是 `parse()` 的第二个参数。
 
 ```gdscript
 func _state_func(tag:String, attrs:Dictionary) -> int:
-	if tag == 'config': return STMLLexer.State.Nevext
-	if 'stope' in attrs: return STMLLexer.State.Stope
-	return STMLLexer.State.Xml    # 其余按子元素列表解析
+	if tag == 'config': return Stope.STMLLexer.State.Nevext
+	if 'stope' in attrs: return Stope.STMLLexer.State.Stope
+	return Stope.STMLLexer.State.Xml    # 其余按子元素列表解析
 
-var lx := STMLLexer.Lexer.new(src)
-var p := STMLParser.Parser.new(lx)
-var root := STML.Element.new()
+var lx := Stope.STMLLexer.Lexer.new(src)
+var p := Stope.STMLParser.Parser.new(lx)
+var root := Stope.STML.Element.new()
 var result:int = p.parse(root, _state_func)   # 传 Callable() 等价于不传回调（一律 Xml）
 print(root.to_str())
 print(p.errors, lx.errors)                    # 两边不合并，都要看
@@ -572,13 +574,13 @@ print(p.errors, lx.errors)                    # 两边不合并，都要看
 
 | 类型 | 成员 |
 | --- | --- |
-| `STMLLexer.Lexer` | `new(source := "")`、`next_token()`、`state`（`Xml` / `Text` / `Nevext` / `Stope`）、`errors` |
-| `STMLParser.Parser` | `new(lex)`、`parse(root, state_func) -> int`、`errors` |
-| `STML.Element` | `line`、`tag`、`attrs: Dictionary[String,String]`、`self_closing`、`children`、`text`、`to_str(level := 0)` |
-| `STML.Token` | `line`、`type`、`lexeme`；`Type` 的 12 项**名字与 C++ 完全一致**（`String` / `NevextSrc` / `StopeSrc`），打名字直接用 `Type.keys()[t]`，没有 `type_name()` |
+| `Stope.STMLLexer.Lexer` | `new(source := "")`、`next_token()`、`state`（`Xml` / `Text` / `Nevext` / `Stope`）、`errors` |
+| `Stope.STMLParser.Parser` | `new(lex)`、`parse(root, state_func) -> int`、`errors` |
+| `Stope.STML.Element` | `line`、`tag`、`attrs: Dictionary[String,String]`、`self_closing`、`children`、`text`、`to_str(level := 0)` |
+| `Stope.STML.Token` | `line`、`type`、`lexeme`；`Type` 的 12 项**名字与 C++ 完全一致**（`String` / `NevextSrc` / `StopeSrc`），打名字直接用 `Type.keys()[t]`，没有 `type_name()` |
 
-`parse()` 返回的就是 `StopeResult.Success` / `StopeResult.Error`（与编译器共用同一份枚举，
-见开头第 4 条），不再有 `STMLParser.Result` 这一份独立的。
+`parse()` 返回的就是 `Stope.Result.Success` / `Stope.Result.Error`（与编译器共用同一份枚举，
+见开头第 4 条），不再有 `Stope.STMLParser.Result` 这一份独立的。
 
 回调返回什么，元素内容就按哪种状态扫，与 C++ 的 `LexerStateFunc` 一一对应：
 

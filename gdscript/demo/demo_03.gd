@@ -1,5 +1,8 @@
 extends Node
 
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
+
 # Demo 03: 自定义指令 —— 给编译器加几条自己的指令，只编译 + 反汇编，不运行。
 # 对应 cpp/demo/03-custom-opcode.cpp。
 #
@@ -17,13 +20,13 @@ extends Node
 # 自定义指令的意义正在于此：宿主自己定义、自己执行。
 #
 # 两条硬约束（见 docs/zh-cn/compiler-test-plan.md §4.4）：
-#   * 编号必须 > Opcode.Return（即 >= StopeOpcode.FIRST_CUSTOM_OPCODE）。
+#   * 编号必须 > Opcode.Return（即 >= Stope.Opcode.FIRST_CUSTOM_OPCODE）。
 #     opcodes 是 int 混排序列，撞号以后与内置指令无法区分（[5] 演示）。
 #   * 定长指令的 arg_num 必须与实际调用一致，否则编译期报错、不产出（[4] 演示）。
 #
-# 反汇编用 StopeDebug.disasm()（对应 C++ 的 DumpProgram）：它会拿 config 反查
+# 反汇编用 Stope.Debug.disasm()（对应 C++ 的 DumpProgram）：它会拿 config 反查
 # 自定义指令的名字、按是否变长决定吃不吃后面那个「参数个数」，并在编号撞内置时
-# 打 warning（[5] 演示）。测试比对用的单行格式在测试侧（StopeTestUtil.dump_program），不进库。
+# 打 warning（[5] 演示）。测试比对用的单行格式在测试侧（test_util.gd 的 dump_program），不进库。
 
 func _ready() -> void:
 	demo()
@@ -34,10 +37,10 @@ func demo() -> void:
 	# arg_num >= 0 定长；arg_num < 0（默认 -1）变长，编译产物里会多写一个
 	# 「本次调用的参数个数」。名字里的 ':' 是词法器支持的命名空间写法，
 	# 用来避开宿主函数名（fmt:println 那种）。
-	var config := StopeOpcode.CustomOpcodeConfig.new()
-	config.add_custom_opcode('my:add', StopeOpcode.FIRST_CUSTOM_OPCODE + 0, 2)
-	config.add_custom_opcode('my:log', StopeOpcode.FIRST_CUSTOM_OPCODE + 1, -1)
-	config.add_custom_opcode('my:halt', StopeOpcode.FIRST_CUSTOM_OPCODE + 2, 0)
+	var config := Stope.Opcode.CustomOpcodeConfig.new()
+	config.add_custom_opcode('my:add', Stope.Opcode.FIRST_CUSTOM_OPCODE + 0, 2)
+	config.add_custom_opcode('my:log', Stope.Opcode.FIRST_CUSTOM_OPCODE + 1, -1)
+	config.add_custom_opcode('my:halt', Stope.Opcode.FIRST_CUSTOM_OPCODE + 2, 0)
 	print('[1] 登记自定义指令：')
 	# 打印顺序就是登记顺序（Dictionary 是插入序）—— 各实现按自己的容器顺序打印即可。
 	for key in config.opcodes:
@@ -58,25 +61,25 @@ func demo() -> void:
 
     return x;
   """
-	var program := StopeProgram.Program.new()
+	var program := Stope.Program.Program.new()
 	print('\n[2] 编译结果：')
 	if not compile_and_report(src, config, program):
 		return
-	print(StopeDebug.disasm(program, config))
+	print(Stope.Debug.disasm(program, config))
 
 	# ---------- 3. 对照：名字没登记就只是普通调用 ----------
 	# 词法器只有在 config 里查得到名字时才吐 Custom token，否则 "my:add" 就是个
 	# 普通标识符 —— 编译成 Call，即「调用一个名叫 my:add 的宿主函数」，
 	# 它会被登记进 exports。
-	var plain := StopeProgram.Program.new()
+	var plain := Stope.Program.Program.new()
 	print('\n[3] 同样的调用，不传 config：')
 	if compile_and_report('my:add(1, 2);', null, plain):
-		print(StopeDebug.disasm(plain))
+		print(Stope.Debug.disasm(plain))
 
 	# ---------- 4. 参数个数不符 ----------
 	# 定长指令的参数量在编译期校验；报错后 compile() 会把 out 复原为空，
 	# 免得一个半成品 Program 被当成能跑的东西。
-	var bad := StopeProgram.Program.new()
+	var bad := Stope.Program.Program.new()
 	print('\n[4] 定长 2 参却只给 1 个：')
 	if not compile_and_report('my:add(1);', config, bad):
 		print('  -> 编译失败，Program 已清空（opcodes 剩 ', len(bad.opcodes), ' 个 int）')
@@ -84,26 +87,26 @@ func demo() -> void:
 	# ---------- 5. 陷阱：编号撞到内置指令 ----------
 	# 这里故意用一个内置编号注册：编译器写出的仍是同一个 int，谁也分不清它
 	# 到底是 Add 还是 my:steal —— 反汇编只能按内置指令解码。
-	var collide := StopeOpcode.CustomOpcodeConfig.new()
-	collide.add_custom_opcode('my:steal', StopeOpcode.Opcode.Add, 2)
-	var stolen := StopeProgram.Program.new()
+	var collide := Stope.Opcode.CustomOpcodeConfig.new()
+	collide.add_custom_opcode('my:steal', Stope.Opcode.Opcode.Add, 2)
+	var stolen := Stope.Program.Program.new()
 	print('\n[5] 用内置 Add 的编号注册 my:steal：')
 	if compile_and_report('my:steal(1, 2);', collide, stolen):
-		print(StopeDebug.disasm(stolen, collide))
+		print(Stope.Debug.disasm(stolen, collide))
 		print('  -> 反汇编只认得出 Add：my:steal 这个名字已经丢了，编号千万别撞内置。')
 
 # 编译一份源码并打印错误。config 为 null 时按「没有自定义指令」处理。
-static func compile_and_report(src:String, config:StopeOpcode.CustomOpcodeConfig,
-		out:StopeProgram.Program) -> bool:
-	var lexer := StopeLexer.Lexer.new(src)
-	var parser := StopeParser.Parser.new(lexer, config)	# 第二参：可空的 config
-	var tree := StopeAst.Prog.new()
+static func compile_and_report(src:String, config:Stope.Opcode.CustomOpcodeConfig,
+		out:Stope.Program.Program) -> bool:
+	var lexer := Stope.Lexer.Lexer.new(src)
+	var parser := Stope.Parser.Parser.new(lexer, config)	# 第二参：可空的 config
+	var tree := Stope.Ast.Prog.new()
 	parser.parse_program(tree)
 	for e in lexer.errors: print('  lexer: ', e)
 	for e in parser.errors: print('  parser: ', e)
 
-	var compiler := StopeCompiler.Compiler.new(config)	# 配置只在构造时注入一次
+	var compiler := Stope.Compiler.Compiler.new(config)	# 配置只在构造时注入一次
 	var rc := compiler.compile(tree, out)
 	for e in compiler.errors: print('  compiler: ', e)
-	return rc == StopeResult.Success and lexer.errors.is_empty() \
+	return rc == Stope.Result.Success and lexer.errors.is_empty() \
 		and parser.errors.is_empty()

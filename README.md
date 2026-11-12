@@ -35,7 +35,7 @@ Stope 只规定三件事：
 只要它能消费编译器产出的 `Program`。
 
 本项目**会维护**内置虚拟机 —— 下面这八份实现语义彼此对齐，改一处要同步其余七处：`cpp/include/stope/basic_vm.hpp`（反汇编在同目录的
-`debug.hpp`）、GDScript 侧 `gdscript/addons/stope/basic_vm.gd` 的 `StopeBasicVM.State` / `Api`、
+`debug.hpp`）、GDScript 侧 `gdscript/addons/stope/basic_vm.gd` 的 `State` / `Api`（经 `Stope.BasicVM` 访问）、
 Node.js 侧 `nodejs/src/basic_vm.js` 的 `BasicVM.State` / `Api`、
 C# 侧 `csharp/Stope/BasicVm.cs` 的 `State` / `Api`、
 Python 侧 `python/stope/basic_vm.py` 的 `State` / `Api`、
@@ -51,7 +51,7 @@ Rust 侧 `rust/src/basic_vm.rs` 的 `State` / `Api`。它是**基础虚拟机** 
 
 「会维护」指的是：bug 会修、编译器产物演进时同步、八份实现的语义彼此对齐；接口**不会
 随意调整** —— 改名、增删参数这类改动只为修 bug 或跟进 `Program`，不会为了换个风格而做，
-所以边界内的用法可以放心依赖。它只是**不属于标准**：`BasicVM::*` / `StopeBasicVM.*` /
+所以边界内的用法可以放心依赖。它只是**不属于标准**：`BasicVM::*` / `Stope.BasicVM.*` /
 `BasicVM.*` 这些名字只属于这几份实现，宿主换一台执行器时本来就不存在它们。
 要执行自定义指令只有两条路：自己扩指令表（C++ 的
 `API::opFuncs` 是定长 `std::array`，扩不了；GDScript / Node.js / C# 的是动态数组，可以扩；

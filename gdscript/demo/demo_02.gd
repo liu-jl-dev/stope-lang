@@ -1,5 +1,8 @@
 extends Node
 
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
+
 # Demo 02: STML —— 解析一份内嵌的标记文档，把里面的代码段原样切出来。
 # 对应 cpp/demo/02-stml.cpp：**只解析**，不编译也不执行 ——
 # 接过 text 之后干什么完全是宿主的事。
@@ -34,10 +37,10 @@ func _ready() -> void:
 	get_tree().quit()
 
 func demo() -> void:
-	var lexer := STMLLexer.Lexer.new(DOC)
-	var parser := STMLParser.Parser.new(lexer)
-	var root := STML.Element.new()
-	if parser.parse(root, _state_func) != StopeResult.Success:
+	var lexer := Stope.STMLLexer.Lexer.new(DOC)
+	var parser := Stope.STMLParser.Parser.new(lexer)
+	var root := Stope.STML.Element.new()
+	if parser.parse(root, _state_func) != Stope.Result.Success:
 		for e in lexer.errors: print('[lex] ', e)
 		for e in parser.errors: print('[parse] ', e)
 		return
@@ -63,11 +66,11 @@ func demo() -> void:
 #   带 stope 属性的元素  -> Stope 代码
 #   其余                -> Xml（按子元素列表解析）
 static func _state_func(tag:String, attrs:Dictionary) -> int:
-	if tag == 'config': return STMLLexer.State.Nevext
-	if 'stope' in attrs: return STMLLexer.State.Stope
-	return STMLLexer.State.Xml
+	if tag == 'config': return Stope.STMLLexer.State.Nevext
+	if 'stope' in attrs: return Stope.STMLLexer.State.Stope
+	return Stope.STMLLexer.State.Xml
 
-static func _child_by_tag(ele:STML.Element, tag:String) -> STML.Element:
+static func _child_by_tag(ele:Stope.STML.Element, tag:String) -> Stope.STML.Element:
 	for c in ele.children:
 		if c.tag == tag: return c
 	return null

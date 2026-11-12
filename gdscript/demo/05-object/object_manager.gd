@@ -3,6 +3,9 @@
 
 extends RefCounted
 
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
+
 const Objects := preload("res://demo/05-object/objects.gd")
 
 # 成员种类（对应 C++ 的 kMemberProp / kMemberMethod / kMemberDelete）。
@@ -16,27 +19,27 @@ var max_objects := 0	# 存活对象上限（live 表大小）；0 = 不限（对
 # O(1)），驱逐后无人引用的描述符由引用计数立即回收。
 var bind_cache:Dictionary = {}
 
-func new_object(cls_id:int) -> StopeBasicVM.Handle:
+func new_object(cls_id:int) -> Stope.BasicVM.Handle:
 	var obj = Objects.MyObject.new()
 	obj.class_id = cls_id
 	obj.fields.resize(runtime.classes[cls_id].properties.size())
 	live.append(obj)
-	return StopeBasicVM.Handle.new(obj)
+	return Stope.BasicVM.Handle.new(obj)
 
-func new_member_desc(member_id:int) -> StopeBasicVM.Handle:
+func new_member_desc(member_id:int) -> Stope.BasicVM.Handle:
 	var d = Objects.MemberDesc.new()
 	d.member_id = member_id
-	return StopeBasicVM.Handle.new(d)
+	return Stope.BasicVM.Handle.new(d)
 
-func new_ctor_desc(cls_id:int, ctor_idx:int) -> StopeBasicVM.Handle:
+func new_ctor_desc(cls_id:int, ctor_idx:int) -> Stope.BasicVM.Handle:
 	var d = Objects.CtorDesc.new()
 	d.cls_id = cls_id
 	d.ctor_idx = ctor_idx
-	return StopeBasicVM.Handle.new(d)
+	return Stope.BasicVM.Handle.new(d)
 
 # 绑定（创建即去重）。C++ 版还有 freeDescs 复用池；这里不需要 —— 驱逐后
 # 无人引用的描述符由引用计数当场回收，池的存在意义被语言机制替掉了。
-func bind(member_id:int, obj_handle:StopeBasicVM.Handle) -> StopeBasicVM.Handle:
+func bind(member_id:int, obj_handle:Stope.BasicVM.Handle) -> Stope.BasicVM.Handle:
 	var obj = obj_handle.data
 	var by_member = bind_cache.get(obj)	# 缺键得 null；typed 标注会被 null 赋值打崩
 	if by_member == null:
@@ -44,27 +47,27 @@ func bind(member_id:int, obj_handle:StopeBasicVM.Handle) -> StopeBasicVM.Handle:
 		bind_cache[obj] = by_member
 	var hit = by_member.get(member_id)
 	if hit != null:
-		return StopeBasicVM.Handle.new(hit)	# 命中：复用
+		return Stope.BasicVM.Handle.new(hit)	# 命中：复用
 	var d = Objects.MemberDesc.new()
 	d.member_id = member_id
 	d.obj = obj_handle
 	by_member[member_id] = d
-	return StopeBasicVM.Handle.new(d)
+	return Stope.BasicVM.Handle.new(d)
 
 # obj:<名>[p] -> 绑定描述符（属性引用与绑定方法都从这里出发）。
-func at(s:StopeBasicVM.State, handle:StopeBasicVM.Handle, key) -> Variant:
+func at(s:Stope.BasicVM.State, handle:Stope.BasicVM.Handle, key) -> Variant:
 	var d = handle.data
 	if not (d is Objects.MemberDesc):
 		s.error('no implement for container type. ')
 		return null
-	if not (key is StopeBasicVM.Handle):
+	if not (key is Stope.BasicVM.Handle):
 		s.error('not an object. ')
 		return null
 	return bind(d.member_id, key)
 
 # obj:<属性>[p] = v -> 写字段。两层整数查询：对象自己的 classId 选类，
 # member_by_id 查 MemberRef——同名成员在各类里落在不同位置也各归各。
-func assign(s:StopeBasicVM.State, handle:StopeBasicVM.Handle, value) -> void:
+func assign(s:Stope.BasicVM.State, handle:Stope.BasicVM.Handle, value) -> void:
 	var d = handle.data
 	if not (d is Objects.MemberDesc) or d.obj == null:
 		s.error('not assignable. ')
@@ -79,7 +82,7 @@ func assign(s:StopeBasicVM.State, handle:StopeBasicVM.Handle, value) -> void:
 
 # obj:<名>[p](...) -> 调方法；obj:<名>(...) 直接调（delete 走这里，对象在
 # 实参里）；<Class>:<New>(...) -> 构造。
-func call_member(s:StopeBasicVM.State, handle:StopeBasicVM.Handle,
+func call_member(s:Stope.BasicVM.State, handle:Stope.BasicVM.Handle,
 		args:Array) -> Variant:
 	var d = handle.data
 	if d is Objects.CtorDesc:
@@ -96,7 +99,7 @@ func call_member(s:StopeBasicVM.State, handle:StopeBasicVM.Handle,
 		# kind 由 member_by_id 查表揭晓；类来自绑定对象或实参对象。
 		var obj_handle = d.obj
 		if obj_handle == null:
-			if not args.is_empty() and args[0] is StopeBasicVM.Handle:
+			if not args.is_empty() and args[0] is Stope.BasicVM.Handle:
 				obj_handle = args[0]	# obj:delete(p) 实参形式
 			else:
 				if not args.is_empty():
@@ -124,7 +127,7 @@ func call_member(s:StopeBasicVM.State, handle:StopeBasicVM.Handle,
 	return null
 
 # 跑 <delete>（可读写字段）-> 驱逐绑定描述符 -> free。双重 delete 拦下。
-func delete(s:StopeBasicVM.State, obj) -> void:
+func delete(s:Stope.BasicVM.State, obj) -> void:
 	if not live.has(obj):	# Array.erase 返回 void，先 has 再删
 		s.error('double delete. ')
 		return

@@ -3,13 +3,16 @@
 
 extends RefCounted
 
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
+
 const Classes := preload("res://demo/05-object/classes.gd")
 const Objects := preload("res://demo/05-object/objects.gd")
 
 var failed := false
 
 # GDScript 没有异常（C++ 版用 throw 上传装配期失败）：失败沿返回值上传。
-func visit_doc(root:STML.Element, rt) -> bool:
+func visit_doc(root:Stope.STML.Element, rt) -> bool:
 	for e in root.children:
 		if e.tag == 'class':
 			visit_class(e, rt)
@@ -17,7 +20,7 @@ func visit_doc(root:STML.Element, rt) -> bool:
 			visit_func(e, rt)
 	return link_self_calls(rt)
 
-func visit_class(e:STML.Element, rt) -> void:
+func visit_class(e:Stope.STML.Element, rt) -> void:
 	var cls = rt.new_class()
 	cls.name = e.attrs['name']
 	for c in e.children:
@@ -46,7 +49,7 @@ func visit_class(e:STML.Element, rt) -> void:
 # 成员种类（对应 C++ 的 kMemberProp / kMemberMethod / kMemberDelete）。
 enum MemberKind { PROP, METHOD, DELETE }
 
-func visit_method(e:STML.Element, rt, cls) -> void:
+func visit_method(e:Stope.STML.Element, rt, cls) -> void:
 	var m = Classes.MethodInfo.new()
 	m.name = String(e.attrs.get('name', ''))
 	if e.attrs.has('params'):
@@ -65,7 +68,7 @@ func visit_method(e:STML.Element, rt, cls) -> void:
 		m.param_slots.append(m.program.exports[p])
 	cls.methods.append(m)
 
-func visit_func(e:STML.Element, rt) -> void:
+func visit_func(e:Stope.STML.Element, rt) -> void:
 	var f = Classes.FunctionInfo.new()
 	f.name = String(e.attrs['name'])
 	if e.attrs.has('params'):
@@ -129,19 +132,19 @@ func _ref(kind:int, index:int):
 	return r
 
 # 编译一份源码：pre_exports = 形参；失败返回 null（GDScript 无异常）。
-func _compile(src:String, start_line:int, pre_exports:Array[String]) -> StopeProgram.Program:
-	var lexer := StopeLexer.Lexer.new(src)
+func _compile(src:String, start_line:int, pre_exports:Array[String]) -> Stope.Program.Program:
+	var lexer := Stope.Lexer.Lexer.new(src)
 	lexer.line = start_line	# 报错行号对齐原文档
-	var parser := StopeParser.Parser.new(lexer)
-	var tree := StopeAst.Prog.new()
+	var parser := Stope.Parser.Parser.new(lexer)
+	var tree := Stope.Ast.Prog.new()
 	parser.parse_program(tree)
 	if not lexer.errors.is_empty() or not parser.errors.is_empty():
 		for e in lexer.errors: print('  lexer: ', e)
 		for e in parser.errors: print('  parser: ', e)
 		return null
-	var compiler := StopeCompiler.Compiler.new()
-	var out := StopeProgram.Program.new()
-	if compiler.compile(tree, out, pre_exports) != StopeResult.Success:
+	var compiler := Stope.Compiler.Compiler.new()
+	var out := Stope.Program.Program.new()
+	if compiler.compile(tree, out, pre_exports) != Stope.Result.Success:
 		for e in compiler.errors: print('  compiler: ', e)
 		return null
 	return out

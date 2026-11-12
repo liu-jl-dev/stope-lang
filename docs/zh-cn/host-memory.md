@@ -68,7 +68,7 @@ At/Assign/Call 三条执行路径。**「宿主继承 Api 覆写三个虚函数�
 | 实现 | 覆写机制 | 注意点 |
 | --- | --- | --- |
 | C++ | `class DemoApi : public BasicVM::API` 虚函数覆写 | 指令的 Handle 分支经 `s.Api` 转发（引用虚分发） |
-| GDScript | `class DemoApi extends StopeBasicVM.Api` 方法覆写 | 方法天然动态派发；经 `s.api` 转发 |
+| GDScript | `class DemoApi extends "res://addons/stope/basic_vm.gd".Api` 方法覆写 | 方法天然动态派发；经 `s.api` 转发 |
 | Node.js | `class DemoApi extends BasicVM.Api`（ES class） | `opMap` 是模块级函数，**必须经 `s.api` 转发** |
 | C# | `class DemoApi : Api`（Api 去 sealed）虚方法覆写 | `OpMap` 是 `Ops` 静态方法委托，经 `s.Api` 转发 |
 | Python | `class DemoApi(Api)` 方法覆写 | 同上；`Api` 有 `__slots__`，子类不写 slots 即可 |

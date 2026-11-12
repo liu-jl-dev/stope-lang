@@ -1,4 +1,5 @@
-class_name STMLLexer
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const STML = preload("res://addons/stope/stml.gd")
 
 # STML 词法器。四态状态机（Xml / Text / Nevext / Stope），契约见
 # docs/zh-cn/stml-test-plan.md §2.1~§2.5，权威实现是 cpp/src/stml_lexer.cpp。

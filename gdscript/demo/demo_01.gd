@@ -1,5 +1,8 @@
 extends Node
 
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
+
 const SRC := """
 // example: sum all arguments
 
@@ -16,12 +19,12 @@ return result;
 
 # 宿主侧的参数表：args[i] / argc 都落到它身上（对应 C++ demo 的 MyArgs）。
 # 与标准无关，纯属示例执行器的接口。
-class MyArgs extends StopeBasicVM.Arguments:
+class MyArgs extends "res://addons/stope/basic_vm.gd".Arguments:
 	var data:Array[float] = []
 
 	func _init(values:Array[float]) -> void:
 		data = values
-	func at(state:StopeBasicVM.State, index_or_key) -> Variant:
+	func at(state:Stope.BasicVM.State, index_or_key) -> Variant:
 		if not (index_or_key is int):
 			state.error('index must be an integer. ')
 			return null
@@ -53,29 +56,29 @@ func _ready() -> void:
 	get_tree().quit()
 
 func demo() -> void:
-	var lexer := StopeLexer.Lexer.new(SRC)
-	var parser := StopeParser.Parser.new(lexer)	# 第二参是 CustomOpcodeConfig，这里不需要
-	var tree := StopeAst.Prog.new()
+	var lexer := Stope.Lexer.Lexer.new(SRC)
+	var parser := Stope.Parser.Parser.new(lexer)	# 第二参是 CustomOpcodeConfig，这里不需要
+	var tree := Stope.Ast.Prog.new()
 	parser.parse_program(tree)
 	for e in lexer.errors: print('[lex] ', e)
 	for e in parser.errors: print('[parse] ', e)
 
-	var compiler := StopeCompiler.Compiler.new()
-	var program := StopeProgram.Program.new()
+	var compiler := Stope.Compiler.Compiler.new()
+	var program := Stope.Program.Program.new()
 	var rc := compiler.compile(tree, program)	# 输入、输出都是引用语义
 	for e in compiler.errors: print('[compile] ', e)
-	if rc != StopeResult.Success:
+	if rc != Stope.Result.Success:
 		push_error('compile failed, nothing to run')
 		return
-	print(StopeDebug.disasm(program))	# 对齐 cpp/demo/01-quick-start.cpp 的 DisasmNoCustom
+	print(Stope.Debug.disasm(program))	# 对齐 cpp/demo/01-quick-start.cpp 的 DisasmNoCustom
 
 	# ---------------- step 2-3: 装配执行器 ----------------
 	# 稳定性：内置的基础虚拟机 —— 会维护、接口不随意改，但不属于标准。
 	# 换一个执行器，这一段可以整个换掉。
-	var api := StopeBasicVM.Api.new()
+	var api := Stope.BasicVM.Api.new()
 	var host := HostFns.new()
 	var args := MyArgs.new([1.0, 2.0, 3.0, 4.0, 5.0])
-	var state := StopeBasicVM.State.new()
+	var state := Stope.BasicVM.State.new()
 	state.set_api(api)
 	state.set_program(program)
 	state.set_arguments(args)
@@ -84,7 +87,7 @@ func demo() -> void:
 	state.variables[program.exports['fmt:println']] = Callable(host, 'println')
 
 	# ---------------- step 4: 跑 ----------------
-	if state.run() != StopeResult.Success:
+	if state.run() != Stope.Result.Success:
 		for e in state.errors: print('[vm] ', e)
 		return
 	print('result: ', HostFns._fmt(state.returns[0]))

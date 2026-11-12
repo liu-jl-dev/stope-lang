@@ -7,6 +7,9 @@
 
 extends RefCounted
 
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
+
 const Objects := preload("res://demo/06-gc/objects.gd")
 const GcScript := preload("res://demo/06-gc/gc.gd")
 
@@ -23,28 +26,28 @@ func new_object(cls_id:int) -> Variant:
 		return null
 	obj.class_id = cls_id
 	obj.fields.resize(runtime.classes[cls_id].properties.size())
-	return StopeBasicVM.Handle.new(obj)
+	return Stope.BasicVM.Handle.new(obj)
 
 # 描述符（RefCounted）：每次新建，不去重——demo 5 的 bind_cache / 驱逐 /
 # 复用池在 demo 6 里全部消失，无人引用的描述符由引擎引用计数当场回收。
-func new_member_desc(member_id:int) -> StopeBasicVM.Handle:
+func new_member_desc(member_id:int) -> Stope.BasicVM.Handle:
 	var d = Objects.MemberDesc.new()
 	d.member_id = member_id
-	return StopeBasicVM.Handle.new(d)
+	return Stope.BasicVM.Handle.new(d)
 
-func new_ctor_desc(cls_id:int, ctor_idx:int) -> StopeBasicVM.Handle:
+func new_ctor_desc(cls_id:int, ctor_idx:int) -> Stope.BasicVM.Handle:
 	var d = Objects.CtorDesc.new()
 	d.cls_id = cls_id
 	d.ctor_idx = ctor_idx
-	return StopeBasicVM.Handle.new(d)
+	return Stope.BasicVM.Handle.new(d)
 
 # 绑定描述符：每次新建。obj 是普通 Handle——描述符不持有对象（引擎计数
 # 管不到 gc 对象），「正在执行方法」的对象由 runtime.pinned 保活。
-func bind(member_id:int, obj_handle:StopeBasicVM.Handle) -> StopeBasicVM.Handle:
+func bind(member_id:int, obj_handle:Stope.BasicVM.Handle) -> Stope.BasicVM.Handle:
 	var d = Objects.MemberDesc.new()
 	d.member_id = member_id
 	d.obj = obj_handle
-	return StopeBasicVM.Handle.new(d)
+	return Stope.BasicVM.Handle.new(d)
 
 # 三个开口的公共前奏：安全点——先同步根集合，再做本次操作。「引用计数
 # 归零 -> 立即级联释放」的可靠性由这条顺序保证（见 gc.gd 头注释）。
@@ -52,19 +55,19 @@ func safe_point() -> void:
 	alloc.sync_roots()
 
 # obj:<名>[p] -> 绑定描述符。
-func at(s:StopeBasicVM.State, handle:StopeBasicVM.Handle, key) -> Variant:
+func at(s:Stope.BasicVM.State, handle:Stope.BasicVM.Handle, key) -> Variant:
 	safe_point()
 	var d = handle.data
 	if not (d is Objects.MemberDesc):
 		s.error('no implement for container type. ')
 		return null
-	if not (key is StopeBasicVM.Handle):
+	if not (key is Stope.BasicVM.Handle):
 		s.error('not an object. ')
 		return null
 	return bind(d.member_id, key)
 
 # obj:<属性>[p] = v -> 写字段（走 set_field：旧值减引用可级联，新值加引用）。
-func assign(s:StopeBasicVM.State, handle:StopeBasicVM.Handle, value) -> void:
+func assign(s:Stope.BasicVM.State, handle:Stope.BasicVM.Handle, value) -> void:
 	safe_point()
 	var d = handle.data
 	if not (d is Objects.MemberDesc) or d.obj == null:
@@ -80,7 +83,7 @@ func assign(s:StopeBasicVM.State, handle:StopeBasicVM.Handle, value) -> void:
 
 # obj:<名>[p](...) -> 调方法；<Class>:<New>(...) -> 构造。
 # demo 6 没有 obj:delete(p)：生命期归 gc 管。
-func call_member(s:StopeBasicVM.State, handle:StopeBasicVM.Handle,
+func call_member(s:Stope.BasicVM.State, handle:Stope.BasicVM.Handle,
 		args:Array) -> Variant:
 	safe_point()
 	var d = handle.data

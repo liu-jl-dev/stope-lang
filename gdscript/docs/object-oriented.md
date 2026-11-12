@@ -11,18 +11,20 @@
 
 与 C++ 相同，缝内建在库里（`addons/stope/basic_vm.gd`，随插件分发，不需要改）：
 
-- `StopeBasicVM.Handle`——第 7 种可观测值，包装一个宿主引用（`data`）；
+- `Stope.BasicVM.Handle`——第 7 种可观测值，包装一个宿主引用（`data`）；
   `equals` 加同一性分支：两个 Handle 相等当且仅当同一个包装实例；
 - `Api` 内置三个**虚方法** `handle_at` / `handle_assign` / `handle_call`，
   默认实现一律报错；
 - `_at` / `_assign` / `_call` 各有 Handle 分支：识别 Handle → 转发虚调用 →
   检查 errors → 维持栈纪律（弹参、压返回值归指令管）。
 
-宿主侧要做的只是**继承 `StopeBasicVM.Api` 并覆写三个方法**（GDScript 方法
+宿主侧要做的只是**继承 `Stope.BasicVM.Api` 并覆写三个方法**（GDScript 方法
 天然动态派发，不需要 C++ 那样的 virtual 语法）：
 
+> **引入方式**：插件不注册全局类。示例里的 `Stope` 来自脚本顶部的一行 `const Stope = preload("res://addons/stope/stope.gd")`，完整可跑写法见 [`README.md`](README.md) §5 与 `demo/`。
+
 ```gdscript
-class DemoApi extends StopeBasicVM.Api:
+class DemoApi extends "res://addons/stope/basic_vm.gd".Api:
 	func handle_at(s, handle, key) -> Variant: return obj_mgr.at(s, handle, key)
 	func handle_assign(s, handle, value) -> void: obj_mgr.assign(s, handle, value)
 	func handle_call(s, handle, args) -> Variant: return obj_mgr.call_member(s, handle, args)

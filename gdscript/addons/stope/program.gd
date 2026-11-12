@@ -1,5 +1,3 @@
-class_name StopeProgram
-
 # 程序 = 指令流 + 常量池 + 变量表。字段名取 cpp/stope/program.hpp 的 snake_case 形式。
 # 各容器都给默认空值，`Program.new()` 拿到的就是可直接编译/执行的空程序
 # （与 C++ 的 Program 默认构造一致）。

@@ -1,4 +1,10 @@
-class_name StopeParser
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const Ast = preload("res://addons/stope/ast.gd")
+const BinArrParser = preload("res://addons/stope/binarr_parser.gd")
+const ExprOptim = preload("res://addons/stope/expr_optim.gd")
+const Lexer = preload("res://addons/stope/lexer.gd")
+const Opcode = preload("res://addons/stope/opcode.gd")
+
 # 语法分析器 —— 逐行端口 cpp/stope/parser.hpp（C++ 为权威实现，2026-10-18 重写）。
 #
 # 行为契约见 docs/zh-cn/parser-test-plan.md，与 C++ 的偏差登记在该文档 §7（GD-P-xx）。
@@ -12,11 +18,11 @@ class_name StopeParser
 #      **不要**改成把 parse_expr 包一层 —— 那样每层递归多一个栈帧，会把深括号用例打崩。
 #   5. 节点取的是 token 的 parsed 而非 literal：字符串要转义后的值、标识符要拼好的 ':'。
 #      只有 BinArr 取 literal（词法阶段不做任何转义）。
-const TokenType = StopeLexer.Token.Type
+const TokenType = Lexer.Token.Type
 
 class Parser:
-	var lexer:StopeLexer.Lexer
-	var custom:StopeOpcode.CustomOpcodeConfig	# 可空：词法器靠它认出自定义指令
+	var lexer:Lexer.Lexer
+	var custom:Opcode.CustomOpcodeConfig	# 可空：词法器靠它认出自定义指令
 	var errors:Array[String] = []
 	var const_folding:bool = true	# 表达式常量折叠开关（测试里按用例切换）
 	# 嵌套深度上限。depth 由调用链显式传递（每个 parse_xxx 一个形参），不存成员：
@@ -26,14 +32,14 @@ class Parser:
 	var max_depth:int = 256
 	var _aborted:bool = false
 
-	var cur_token:StopeLexer.Token
-	var peek_token:StopeLexer.Token
-	var _bin_arr := StopeBinArrParser.new()
+	var cur_token:Lexer.Token
+	var peek_token:Lexer.Token
+	var _bin_arr := BinArrParser.new()
 
-	func _init(lexer_:StopeLexer.Lexer, custom_:StopeOpcode.CustomOpcodeConfig = null) -> void:
+	func _init(lexer_:Lexer.Lexer, custom_:Opcode.CustomOpcodeConfig = null) -> void:
 		reset(lexer_, custom_)
 	# 与 C++ 的 Parser::Reset 一致：清错误、重挂词法器、重读两个 token。
-	func reset(lexer_:StopeLexer.Lexer, custom_:StopeOpcode.CustomOpcodeConfig = null) -> void:
+	func reset(lexer_:Lexer.Lexer, custom_:Opcode.CustomOpcodeConfig = null) -> void:
 		errors = []
 		_aborted = false
 		lexer = lexer_
@@ -70,12 +76,12 @@ class Parser:
 		_infix_fns[TokenType.LParen] = parse_call_expr		# () 函数调用
 		_infix_fns[TokenType.LBrack] = parse_at_expr		# [] 取元素
 
-	func parse_program(prog:StopeAst.Prog) -> void: parse_prog(prog, true, 1)
+	func parse_program(prog:Ast.Prog) -> void: parse_prog(prog, true, 1)
 
 	# ================================ 语句 ================================
 	# is_top_level=true 只有 parse_program 用。块/if/while 内部的 prog 都是 false：
 	# 它们的 "}" 属于外层语句，必须由外层自己消费。
-	func parse_prog(prog:StopeAst.Prog, is_top_level:bool, depth:int) -> void:
+	func parse_prog(prog:Ast.Prog, is_top_level:bool, depth:int) -> void:
 		if _aborted: return
 		while not _aborted and cur_token.type != TokenType.Eof:
 			if cur_token.type == TokenType.RBrace:
@@ -88,7 +94,7 @@ class Parser:
 				next_token()
 				continue
 			# 语句分派：parseProg 循环与 defer 载荷共用同一条链（parse_stmt_dispatch）
-			var stmt:StopeAst.Stmt = parse_stmt_dispatch(depth)
+			var stmt:Ast.Stmt = parse_stmt_dispatch(depth)
 			# 超限中止时子函数返回 null：不追加、不再往下解析（否则拿着同一个
 			# token 反复调用会死循环）。
 			if stmt == null: break
@@ -96,7 +102,7 @@ class Parser:
 
 	# 语句分派。"{" / ";" / "}" 等结构性 token 由调用方（parse_prog 循环或
 	# parse_defer_stmt）处理。与 cpp/src/parser.cpp 的 parseStmtDispatch 一致。
-	func parse_stmt_dispatch(depth:int) -> StopeAst.Stmt:
+	func parse_stmt_dispatch(depth:int) -> Ast.Stmt:
 		if cur_token.type == TokenType.Let:
 			return parse_let_stmt(depth)
 		elif cur_token.type == TokenType.Export:
@@ -119,9 +125,9 @@ class Parser:
 			return parse_expr_or_assign_stmt(depth)
 
 	# defer_stmt : "defer" stmt
-	func parse_defer_stmt(depth:int) -> StopeAst.DeferStmt:
+	func parse_defer_stmt(depth:int) -> Ast.DeferStmt:
 		if _aborted: return null
-		var stmt := StopeAst.DeferStmt.new(cur_token.line)
+		var stmt := Ast.DeferStmt.new(cur_token.line)
 		next_token()	# 跳过 defer
 		if cur_token.type == TokenType.Semi or cur_token.type == TokenType.RBrace \
 				or cur_token.type == TokenType.Eof:
@@ -134,8 +140,8 @@ class Parser:
 		stmt.stmt = parse_stmt_dispatch(depth + 1)
 		return stmt
 
-	func parse_let_stmt(depth:int) -> StopeAst.LetStmt:
-		var stmt := StopeAst.LetStmt.new(cur_token.line)
+	func parse_let_stmt(depth:int) -> Ast.LetStmt:
+		var stmt := Ast.LetStmt.new(cur_token.line)
 		stmt.has_assign = false
 		next_token()	# 跳过 let
 		if cur_token.type != TokenType.Ident:
@@ -164,15 +170,15 @@ class Parser:
 		elif cur_token.type == TokenType.Assign:	# 有赋值
 			stmt.has_assign = true
 			next_token()
-			stmt.expr = parse_expr(StopeAst.Precedence.Lowest, depth)
+			stmt.expr = parse_expr(Ast.Precedence.Lowest, depth)
 			next_token()
 		else:
 			error(cur_token.line, "unexpected token in let statement. ")
 			next_token()
 		return stmt
 
-	func parse_export_stmt(_depth:int) -> StopeAst.ExportStmt:
-		var stmt := StopeAst.ExportStmt.new(cur_token.line)
+	func parse_export_stmt(_depth:int) -> Ast.ExportStmt:
+		var stmt := Ast.ExportStmt.new(cur_token.line)
 		next_token()	# 跳过 export
 		if cur_token.type != TokenType.Ident:
 			error(cur_token.line, 'expected identifier after "export". ')
@@ -201,8 +207,8 @@ class Parser:
 		return stmt
 
 	# return_stmt : "return" ( expr ( "," expr )* )? ";"
-	func parse_return_stmt(depth:int) -> StopeAst.ReturnStmt:
-		var stmt := StopeAst.ReturnStmt.new(cur_token.line)
+	func parse_return_stmt(depth:int) -> Ast.ReturnStmt:
+		var stmt := Ast.ReturnStmt.new(cur_token.line)
 		next_token()	# 跳过 return
 		if cur_token.type == TokenType.Semi:	# 无返回值，exprs 为空
 			next_token()
@@ -211,25 +217,25 @@ class Parser:
 			# 缺 ";"：此时不能吞掉 } 或 Eof，否则外层块会解析错位
 			error(cur_token.line, 'expected ";" in return statement. ')
 			return stmt
-		stmt.exprs.append(parse_expr(StopeAst.Precedence.Lowest, depth))	# 第一个表达式
+		stmt.exprs.append(parse_expr(Ast.Precedence.Lowest, depth))	# 第一个表达式
 		next_token()	# 到达 , 或 ;
 		while true:		# ("," expr)*
 			if cur_token.type == TokenType.Semi:
 				next_token(); break
 			elif cur_token.type == TokenType.Comma:
 				next_token()
-				stmt.exprs.append(parse_expr(StopeAst.Precedence.Lowest, depth))
+				stmt.exprs.append(parse_expr(Ast.Precedence.Lowest, depth))
 				next_token()
 			else:
 				error(cur_token.line, 'expected ";" or "," in return statement. ')
 				next_token(); break
 		return stmt
 
-	func parse_block_stmt(depth:int) -> StopeAst.BlockStmt:
+	func parse_block_stmt(depth:int) -> Ast.BlockStmt:
 		if _aborted: return null	# 已超限：不再解析
-		var stmt := StopeAst.BlockStmt.new(cur_token.line)
+		var stmt := Ast.BlockStmt.new(cur_token.line)
 		next_token()	# 跳过 {
-		stmt.prog = StopeAst.Prog.new()
+		stmt.prog = Ast.Prog.new()
 		parse_prog(stmt.prog, false, depth + 1)
 		if cur_token.type != TokenType.RBrace:
 			error(cur_token.line, 'expected "}" at end of block statement. ')
@@ -237,32 +243,32 @@ class Parser:
 		return stmt
 
 	# if_stmt : "if" expr "{" prog "}" ("elif" expr "{" prog "}")* ("else" "{" prog "}")?
-	func parse_if_stmt(depth:int) -> StopeAst.IfStmt:
+	func parse_if_stmt(depth:int) -> Ast.IfStmt:
 		if _aborted: return null
-		var stmt := StopeAst.IfStmt.new(cur_token.line)
+		var stmt := Ast.IfStmt.new(cur_token.line)
 		next_token()	# 跳过 if
-		stmt.cond = parse_expr(StopeAst.Precedence.Lowest, depth)
+		stmt.cond = parse_expr(Ast.Precedence.Lowest, depth)
 		next_token()	# 到达 {
 		if cur_token.type != TokenType.LBrace:
 			error(cur_token.line, 'expected "{" in if statement. ')
 			return stmt
 		next_token()	# 跳过 {
-		stmt.first_prog = StopeAst.Prog.new()
+		stmt.first_prog = Ast.Prog.new()
 		parse_prog(stmt.first_prog, false, depth + 1)
 		if cur_token.type != TokenType.RBrace:
 			error(cur_token.line, 'expected "}" in if statement. ')
 			return stmt
 		next_token()	# 跳过 }
 		while cur_token.type == TokenType.Elif:	# ("elif" expr "{" prog "}")*
-			var ei := StopeAst.IfStmtElif.new(cur_token.line)
+			var ei := Ast.IfStmtElif.new(cur_token.line)
 			next_token()	# 跳过 elif
-			ei.cond = parse_expr(StopeAst.Precedence.Lowest, depth)
+			ei.cond = parse_expr(Ast.Precedence.Lowest, depth)
 			next_token()
 			if cur_token.type != TokenType.LBrace:
 				error(cur_token.line, 'expected "{" of elif. ')
 				return stmt
 			next_token()	# 跳过 {
-			ei.prog = StopeAst.Prog.new()
+			ei.prog = Ast.Prog.new()
 			parse_prog(ei.prog, false, depth + 1)
 			if cur_token.type != TokenType.RBrace:
 				error(cur_token.line, 'expected "}" of elif. ')
@@ -275,7 +281,7 @@ class Parser:
 				error(cur_token.line, 'expected "{" after else. ')
 				return stmt
 			next_token()	# 跳过 {
-			stmt.else_prog = StopeAst.Prog.new()
+			stmt.else_prog = Ast.Prog.new()
 			parse_prog(stmt.else_prog, false, depth + 1)
 			if cur_token.type != TokenType.RBrace:
 				error(cur_token.line, 'expected "}" in if statement. ')
@@ -284,18 +290,18 @@ class Parser:
 		return stmt
 
 	# while_stmt : "while" expr? "{" prog "}"
-	func parse_while_stmt(depth:int) -> StopeAst.WhileStmt:
+	func parse_while_stmt(depth:int) -> Ast.WhileStmt:
 		if _aborted: return null
-		var stmt := StopeAst.WhileStmt.new(cur_token.line)
+		var stmt := Ast.WhileStmt.new(cur_token.line)
 		next_token()	# 跳过 while
 		if cur_token.type != TokenType.LBrace:	# expr?
-			stmt.cond = parse_expr(StopeAst.Precedence.Lowest, depth)
+			stmt.cond = parse_expr(Ast.Precedence.Lowest, depth)
 			next_token()	# 到达 {
 		if cur_token.type != TokenType.LBrace:
 			error(cur_token.line, 'expected "{" in while statement. ')
 			return stmt
 		next_token()	# 跳过 {
-		stmt.prog = StopeAst.Prog.new()
+		stmt.prog = Ast.Prog.new()
 		parse_prog(stmt.prog, false, depth + 1)
 		if cur_token.type != TokenType.RBrace:
 			error(cur_token.line, 'expected "}" at end of while statement. ')
@@ -304,8 +310,8 @@ class Parser:
 		return stmt
 
 	# break_stmt : "break" ";"
-	func parse_break_stmt(_depth:int) -> StopeAst.BreakStmt:
-		var stmt := StopeAst.BreakStmt.new(cur_token.line)
+	func parse_break_stmt(_depth:int) -> Ast.BreakStmt:
+		var stmt := Ast.BreakStmt.new(cur_token.line)
 		next_token()	# 跳过 break
 		if cur_token.type != TokenType.Semi:
 			error(cur_token.line, 'expected ";" in break statement. ')
@@ -314,8 +320,8 @@ class Parser:
 		return stmt
 
 	# continue_stmt : "continue" ";"
-	func parse_continue_stmt(_depth:int) -> StopeAst.ContinueStmt:
-		var stmt := StopeAst.ContinueStmt.new(cur_token.line)
+	func parse_continue_stmt(_depth:int) -> Ast.ContinueStmt:
+		var stmt := Ast.ContinueStmt.new(cur_token.line)
 		next_token()	# 跳过 continue
 		if cur_token.type != TokenType.Semi:
 			error(cur_token.line, 'expected ";" in continue statement. ')
@@ -323,20 +329,20 @@ class Parser:
 			next_token()
 		return stmt
 
-	func parse_expr_or_assign_stmt(depth:int) -> StopeAst.Stmt:
-		var left_expr := parse_expr(StopeAst.Precedence.Lowest, depth)
+	func parse_expr_or_assign_stmt(depth:int) -> Ast.Stmt:
+		var left_expr := parse_expr(Ast.Precedence.Lowest, depth)
 		if left_expr == null: return null	# 超限中止：下面要读 left_expr.line
 		next_token()	# 到达 = 或 ;
 		if cur_token.type == TokenType.Semi:
 			next_token()	# 跳过 ;
-			var s := StopeAst.ExprStmt.new(left_expr.line)
+			var s := Ast.ExprStmt.new(left_expr.line)
 			s.expr = left_expr
 			return s
 		elif cur_token.type == TokenType.Assign:
 			next_token()	# 跳过 =
-			var a := StopeAst.AssignStmt.new(left_expr.line)
+			var a := Ast.AssignStmt.new(left_expr.line)
 			a.left_expr = left_expr
-			a.right_expr = parse_expr(StopeAst.Precedence.Lowest, depth)
+			a.right_expr = parse_expr(Ast.Precedence.Lowest, depth)
 			next_token()	# 到达 ;
 			if cur_token.type != TokenType.Semi:
 				error(cur_token.line, 'expected ";" at end of assign statement. ')
@@ -346,12 +352,12 @@ class Parser:
 			error(cur_token.line, 'expected ";" or "=". ')
 			# 不推进：当前 token 不是合法的语句边界，留给下一轮语句解析。
 			# 否则会吞掉后续语句（PD-4d：f(1, 2 x; y; 里的 x; 被吞）。
-			var s2 := StopeAst.ExprStmt.new(left_expr.line)
+			var s2 := Ast.ExprStmt.new(left_expr.line)
 			s2.expr = left_expr
 			return s2
 
 	# ================================ 表达式主循环 ================================
-	func parse_expr(precedence:int, depth:int) -> StopeAst.Expr:
+	func parse_expr(precedence:int, depth:int) -> Ast.Expr:
 		# 深度检查只在这里和 parse_prog 做 —— 只有这两处会递归。
 		if _aborted: return null
 		if max_depth > 0 and depth > max_depth:
@@ -359,8 +365,8 @@ class Parser:
 			return null
 		if not _prefix_fns.has(cur_token.type):
 			error(cur_token.line, "no prefix parse function for token type. ")
-			return StopeAst.Expr.new(cur_token.line)	# 失败路径返回裸节点，形状为 Err(L行号)
-		var left_expr:StopeAst.Expr = _prefix_fns[cur_token.type].call(self, depth)
+			return Ast.Expr.new(cur_token.line)	# 失败路径返回裸节点，形状为 Err(L行号)
+		var left_expr:Ast.Expr = _prefix_fns[cur_token.type].call(self, depth)
 		if left_expr == null: return null	# 子表达式已中止（括号会原样透出）
 		while not _aborted and peek_token.type != TokenType.Semi and precedence < peek_precedence():
 			if not _infix_fns.has(peek_token.type):
@@ -372,57 +378,57 @@ class Parser:
 		return left_expr
 
 	func cur_precedence() -> int:
-		return StopeAst.binop_prec_map.get(cur_token.type, StopeAst.Precedence.Lowest)
+		return Ast.binop_prec_map.get(cur_token.type, Ast.Precedence.Lowest)
 	func peek_precedence() -> int:
-		return StopeAst.binop_prec_map.get(peek_token.type, StopeAst.Precedence.Lowest)
+		return Ast.binop_prec_map.get(peek_token.type, Ast.Precedence.Lowest)
 
 	# 常量折叠的单一入口。挂在 parse_unary_op_expr / parse_binary_op_expr 的构造末尾
 	# （见那两处），**不要**改成把 parse_expr 包一层。
-	func optimize_in_place(e) -> StopeAst.Expr:
+	func optimize_in_place(e) -> Ast.Expr:
 		if not const_folding: return e
-		return StopeExprOptim.optimize(e)
+		return ExprOptim.optimize(e)
 
 	# ================================ 前缀 ================================
-	static func parse_ident_expr(p:Parser, _depth:int) -> StopeAst.Expr:
-		return StopeAst.IdentExpr.new(p.cur_token.line, p.cur_token.parsed)
-	static func parse_null_expr(p:Parser, _depth:int) -> StopeAst.Expr:
-		return StopeAst.NullExpr.new(p.cur_token.line)
-	static func parse_bool_expr(p:Parser, _depth:int) -> StopeAst.Expr:
-		return StopeAst.BoolExpr.new(p.cur_token.line, p.cur_token.type == TokenType.True)
-	static func parse_int_expr(p:Parser, _depth:int) -> StopeAst.Expr:
-		return StopeAst.IntExpr.new(p.cur_token.line, p.cur_token.int_value)
-	static func parse_float_expr(p:Parser, _depth:int) -> StopeAst.Expr:
-		return StopeAst.FloatExpr.new(p.cur_token.line, p.cur_token.float_value)
-	static func parse_string_expr(p:Parser, _depth:int) -> StopeAst.Expr:
+	static func parse_ident_expr(p:Parser, _depth:int) -> Ast.Expr:
+		return Ast.IdentExpr.new(p.cur_token.line, p.cur_token.parsed)
+	static func parse_null_expr(p:Parser, _depth:int) -> Ast.Expr:
+		return Ast.NullExpr.new(p.cur_token.line)
+	static func parse_bool_expr(p:Parser, _depth:int) -> Ast.Expr:
+		return Ast.BoolExpr.new(p.cur_token.line, p.cur_token.type == TokenType.True)
+	static func parse_int_expr(p:Parser, _depth:int) -> Ast.Expr:
+		return Ast.IntExpr.new(p.cur_token.line, p.cur_token.int_value)
+	static func parse_float_expr(p:Parser, _depth:int) -> Ast.Expr:
+		return Ast.FloatExpr.new(p.cur_token.line, p.cur_token.float_value)
+	static func parse_string_expr(p:Parser, _depth:int) -> Ast.Expr:
 		# 取 parsed：转义已完成（literal 是未转义的原文）
-		return StopeAst.StringExpr.new(p.cur_token.line, p.cur_token.parsed)
-	static func parse_bin_arr_expr(p:Parser, _depth:int) -> StopeAst.Expr:
-		var e := StopeAst.BinArrExpr.new(p.cur_token.line)
+		return Ast.StringExpr.new(p.cur_token.line, p.cur_token.parsed)
+	static func parse_bin_arr_expr(p:Parser, _depth:int) -> Ast.Expr:
+		var e := Ast.BinArrExpr.new(p.cur_token.line)
 		# 取 literal：二进制数组不做转义，解析到一半失败也要保留前半段（报错但继续）
 		if not p._bin_arr.parse(p.cur_token.literal, e.value):
 			p.error(p.cur_token.line, "invalid binary array. ")
 		return e
-	static func parse_argc_expr(p:Parser, _depth:int) -> StopeAst.Expr:
-		return StopeAst.ArgcExpr.new(p.cur_token.line)
+	static func parse_argc_expr(p:Parser, _depth:int) -> Ast.Expr:
+		return Ast.ArgcExpr.new(p.cur_token.line)
 
-	static func parse_unary_op_expr(p:Parser, depth:int) -> StopeAst.Expr:
-		var e := StopeAst.UnaryOpExpr.new(p.cur_token.line)
+	static func parse_unary_op_expr(p:Parser, depth:int) -> Ast.Expr:
+		var e := Ast.UnaryOpExpr.new(p.cur_token.line)
 		e.op = p.cur_token.type
 		p.next_token()
-		e.expr = p.parse_expr(StopeAst.Precedence.Prefix, depth + 1)
+		e.expr = p.parse_expr(Ast.Precedence.Prefix, depth + 1)
 		var out := p.optimize_in_place(e)	# 自底向上：子表达式已折好，这里折自己
 		return out
 
-	static func parse_paren_expr(p:Parser, depth:int) -> StopeAst.Expr:
+	static func parse_paren_expr(p:Parser, depth:int) -> Ast.Expr:
 		p.next_token()
-		var e := p.parse_expr(StopeAst.Precedence.Lowest, depth + 1)
+		var e := p.parse_expr(Ast.Precedence.Lowest, depth + 1)
 		p.next_token()
 		if p.cur_token.type != TokenType.RParen:
 			p.error(p.cur_token.line, 'expected ")". ')
 		return e	# 停在 )
 
-	static func parse_custom_opcode_expr(p:Parser, depth:int) -> StopeAst.Expr:
-		var e := StopeAst.CustomOpcodeExpr.new(p.cur_token.line)
+	static func parse_custom_opcode_expr(p:Parser, depth:int) -> Ast.Expr:
+		var e := Ast.CustomOpcodeExpr.new(p.cur_token.line)
 		e.opcode_name = p.cur_token.parsed
 		p.next_token()	# 到达 (
 		if p.cur_token.type != TokenType.LParen:
@@ -433,33 +439,33 @@ class Parser:
 		if p.cur_token.type == TokenType.RParen:
 			pass	# 空参数表，cur 停在 )
 		else:	# expr ("," expr)*
-			e.args.append(p.parse_expr(StopeAst.Precedence.Lowest, depth + 1))
+			e.args.append(p.parse_expr(Ast.Precedence.Lowest, depth + 1))
 			while p.peek_token.type == TokenType.Comma:
 				p.next_token(); p.next_token()
-				e.args.append(p.parse_expr(StopeAst.Precedence.Lowest, depth + 1))
+				e.args.append(p.parse_expr(Ast.Precedence.Lowest, depth + 1))
 			if p.peek_token.type != TokenType.RParen:
 				p.error(p.cur_token.line, 'expected ")". ')
 			p.next_token()	# 到达 )
 		return e
 
-	static func parse_args_expr(p:Parser, depth:int) -> StopeAst.Expr:
-		var e := StopeAst.ArgsExpr.new(p.cur_token.line)
+	static func parse_args_expr(p:Parser, depth:int) -> Ast.Expr:
+		var e := Ast.ArgsExpr.new(p.cur_token.line)
 		if p.peek_token.type != TokenType.LBrack:
 			# 不推进（cur 停在 "args"）：把后续 token 留给下一条语句，避免吞掉（PD-4c）
 			p.error(p.peek_token.line, 'expected "[" after "args". ')
 			return e
 		p.next_token()	# 到达 [
 		p.next_token()
-		e.key_expr = p.parse_expr(StopeAst.Precedence.Lowest, depth + 1)
+		e.key_expr = p.parse_expr(Ast.Precedence.Lowest, depth + 1)
 		p.next_token()
 		if p.cur_token.type != TokenType.RBrack:
 			p.error(p.cur_token.line, 'expected "]". ')
 		return e
 
 	# ================================ 中缀 ================================
-	static func parse_binary_op_expr(p:Parser, left_expr, depth:int) -> StopeAst.Expr:
+	static func parse_binary_op_expr(p:Parser, left_expr, depth:int) -> Ast.Expr:
 		if left_expr == null: return null	# 左操作数已中止（正常路径进不来）
-		var e := StopeAst.BinaryOpExpr.new(left_expr.line)
+		var e := Ast.BinaryOpExpr.new(left_expr.line)
 		e.left_expr = left_expr
 		e.op = p.cur_token.type
 		var prec:int = p.cur_precedence()
@@ -471,35 +477,35 @@ class Parser:
 		var out := p.optimize_in_place(e)	# 两侧都已折好，折叠只在最深的节点先发生
 		return out
 
-	static func parse_call_expr(p:Parser, callee, depth:int) -> StopeAst.Expr:
+	static func parse_call_expr(p:Parser, callee, depth:int) -> Ast.Expr:
 		if callee == null: return null
-		var e := StopeAst.CallExpr.new(callee.line)
+		var e := Ast.CallExpr.new(callee.line)
 		e.callee = callee
 		# 外层已保证此处是 (
 		if p.peek_token.type != TokenType.RParen:	# expr ("," expr)*
 			p.next_token()	# 到达第一个表达式
-			e.args.append(p.parse_expr(StopeAst.Precedence.Lowest, depth + 1))
+			e.args.append(p.parse_expr(Ast.Precedence.Lowest, depth + 1))
 			while p.peek_token.type == TokenType.Comma:	# ("," expr)*
 				p.next_token()	# 到达 ","
 				p.next_token()	# 到达下一个表达式
-				e.args.append(p.parse_expr(StopeAst.Precedence.Lowest, depth + 1))
+				e.args.append(p.parse_expr(Ast.Precedence.Lowest, depth + 1))
 		if p.peek_token.type == TokenType.RParen:
 			p.next_token()	# 跳过 )
 		else:	# 缺 ")" 时不推进，避免吞掉后面的 token
 			p.error(p.peek_token.line, 'expected ")". ')
 		return e
 
-	static func parse_at_expr(p:Parser, container, depth:int) -> StopeAst.Expr:
+	static func parse_at_expr(p:Parser, container, depth:int) -> Ast.Expr:
 		if container == null: return null
-		var e := StopeAst.AtExpr.new(container.line)
+		var e := Ast.AtExpr.new(container.line)
 		e.container = container
 		if p.peek_token.type != TokenType.RBrack:	# expr ("," expr)*
 			p.next_token()	# 到达第一个表达式
-			e.key_exprs.append(p.parse_expr(StopeAst.Precedence.Lowest, depth + 1))
+			e.key_exprs.append(p.parse_expr(Ast.Precedence.Lowest, depth + 1))
 			while p.peek_token.type == TokenType.Comma:	# ("," expr)*
 				p.next_token()	# 到达 ","
 				p.next_token()	# 到达下一个表达式
-				e.key_exprs.append(p.parse_expr(StopeAst.Precedence.Lowest, depth + 1))
+				e.key_exprs.append(p.parse_expr(Ast.Precedence.Lowest, depth + 1))
 		if p.peek_token.type == TokenType.RBrack:
 			p.next_token()	# 跳过 ]
 		else:	# 缺 "]" 时不推进，避免吞掉后面的 token

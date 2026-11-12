@@ -1,5 +1,8 @@
 extends Node
 
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
+
 # Demo 06: 宿主侧的垃圾回收 —— 对应 cpp/demo/06-gc/。
 #
 # 多文件拆分与 C++ 参考实现同构（demo/06-gc/ 目录）：
@@ -95,8 +98,8 @@ const DOC := """
 
 # ==================== 入口 ====================
 
-class NoArgs extends StopeBasicVM.Arguments:
-	func at(_s:StopeBasicVM.State, _k) -> Variant:
+class NoArgs extends "res://addons/stope/basic_vm.gd".Arguments:
+	func at(_s:Stope.BasicVM.State, _k) -> Variant:
 		return null
 	func num() -> int:
 		return 0
@@ -116,10 +119,10 @@ func demo() -> void:
 	# gc 时机完全归帧循环（下方的 slices % 25 == 0）。
 
 	# ---------- 1. STML 解析：代码段标签按 Stope 代码扫 ----------
-	var lexer := STMLLexer.Lexer.new(DOC)
-	var parser := STMLParser.Parser.new(lexer)
-	var root := STML.Element.new()
-	if parser.parse(root, _state_func) != StopeResult.Success:
+	var lexer := Stope.STMLLexer.Lexer.new(DOC)
+	var parser := Stope.STMLParser.Parser.new(lexer)
+	var root := Stope.STML.Element.new()
+	if parser.parse(root, _state_func) != Stope.Result.Success:
 		for e in parser.errors: print(e)
 		return
 
@@ -179,5 +182,5 @@ func host_println(args:Array):
 
 # 带 stope 属性的元素，内容按 Stope 代码扫；其余按子元素列表（Xml）解析。
 static func _state_func(tag:String, _attrs:Dictionary) -> int:
-	return STMLLexer.State.Stope if tag in ['method', 'new', 'delete', 'func'] \
-		else STMLLexer.State.Xml
+	return Stope.STMLLexer.State.Stope if tag in ['method', 'new', 'delete', 'func'] \
+		else Stope.STMLLexer.State.Xml

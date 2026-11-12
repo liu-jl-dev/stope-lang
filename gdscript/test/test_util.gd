@@ -1,4 +1,9 @@
-class_name StopeTestUtil
+# 测试脚本不注册 class_name；依赖以 preload 常量引入。
+const Ast = preload("res://addons/stope/ast.gd")
+const Debug = preload("res://addons/stope/debug.gd")
+const Opcode = preload("res://addons/stope/opcode.gd")
+const Program = preload("res://addons/stope/program.gd")
+
 # 测试基础设施。三组测试（词法 / 语法 / 编译器）共用。
 #
 # 【期望值从哪来】test/data/*.txt 是**机器生成**的：由 cpp/tools/golden*.cpp
@@ -6,9 +11,9 @@ class_name StopeTestUtil
 # 只负责让 GDScript 侧产出同格式文本，再逐字段比对。
 # 重跑方式见 gdscript/docs/testing.md。
 
-# dump_program 里用的两个别名（原来是 StopeProgram 文件顶部的常量，随函数一起搬来）
-const Opcode = StopeOpcode.Opcode
-const CustomOpcode = StopeOpcode.CustomOpcode
+# dump_program 里用的两个别名（原来是 Program 文件顶部的常量，随函数一起搬来）
+const Op = Opcode.Opcode
+const CustomOpcode = Opcode.CustomOpcode
 
 # ============================== 结果汇总 ==============================
 class Report:
@@ -140,27 +145,27 @@ static func read_lines(path:String) -> Array[String]:
 # ============================== 自定义指令 ==============================
 # 三组测试都用同一张配置，与 cpp/tools/*.cpp 里注册的一致：
 #   myop 定长 2 参 -> opcode 100；vop 变长 -> opcode 101
-static func custom_config() -> StopeOpcode.CustomOpcodeConfig:
-	var cfg := StopeOpcode.CustomOpcodeConfig.new()
+static func custom_config() -> Opcode.CustomOpcodeConfig:
+	var cfg := Opcode.CustomOpcodeConfig.new()
 	cfg.add_custom_opcode('myop', 100, 2)
 	cfg.add_custom_opcode('vop', 101, -1)
 	return cfg
 
 # Program 序列化成「通用测试计划」约定的一行文本（docs/zh-cn/compiler-test-plan.md §2.3）。
 #
-# **只给测试比对用，不属于库 API** —— 人读的反汇编是 StopeDebug.disasm，
+# **只给测试比对用，不属于库 API** —— 人读的反汇编是 Debug.disasm，
 # 与 C++ 侧的分工一致（那边单行格式是 tools/golden.cpp 的私有 dumpLine）。
 #   code[PushId(0) PushInt(0) Assign] vars=1 stack=2 maxRet=0
 #   ints=[1] floats=[] strs=[] binarrs=[] exports=[a:0,b:1]
-# cis 是自定义指令表（名字 -> StopeOpcode.CustomOpcode），用来判断 >32 的 opcode 是否变长。
-static func dump_program(p:StopeProgram.Program, cis:Dictionary = {}) -> String:
+# cis 是自定义指令表（名字 -> Opcode.CustomOpcode），用来判断 >32 的 opcode 是否变长。
+static func dump_program(p:Program.Program, cis:Dictionary = {}) -> String:
 	var s := 'code['
 	var i := 0
 	while i < len(p.opcodes):
 		if i > 0: s += ' '
 		var op:int = p.opcodes[i]; i += 1
 		var has_param:bool
-		if op > Opcode.Return:
+		if op > Op.Return:
 			s += str('Opcode(', op, ')')
 			has_param = false
 			for k in cis.keys():
@@ -169,8 +174,8 @@ static func dump_program(p:StopeProgram.Program, cis:Dictionary = {}) -> String:
 					has_param = ci.arg_num < 0	# 与 C++ 的 isVarArg 同一判据
 					break
 		else:
-			has_param = StopeOpcode.has_a_param(op)
-			s += Opcode.keys()[op]
+			has_param = Opcode.has_a_param(op)
+			s += Op.keys()[op]
 		if has_param and i < len(p.opcodes):
 			s += str('(', p.opcodes[i], ')')
 			i += 1
@@ -186,12 +191,12 @@ static func dump_program(p:StopeProgram.Program, cis:Dictionary = {}) -> String:
 	s += ' floats=['
 	for k in range(len(p.float_consts)):
 		if k > 0: s += ','
-		s += StopeAst.fmt_g(p.float_consts[k])
+		s += Ast.Fmt.fmt_g(p.float_consts[k])
 	s += ']'
 	s += ' strs=['
 	for k in range(len(p.string_consts)):
 		if k > 0: s += ','
-		s += StopeAst.esc(p.string_consts[k])
+		s += Ast.Fmt.esc(p.string_consts[k])
 	s += ']'
 	s += ' binarrs=['
 	for k in range(len(p.bin_arr_consts)):
@@ -215,10 +220,10 @@ static func dump_program(p:StopeProgram.Program, cis:Dictionary = {}) -> String:
 	for k in keys:
 		if not first: s += ','
 		first = false
-		s += str(StopeAst.esc(k), ':', p.exports[k])
+		s += str(Ast.Fmt.esc(k), ':', p.exports[k])
 	s += ']'
 	return s
 
 # 建一个 Program。字段已有默认空容器，这里只是给调用方一个明确的构造入口。
-static func new_program() -> StopeProgram.Program:
-	return StopeProgram.Program.new()
+static func new_program() -> Program.Program:
+	return Program.Program.new()

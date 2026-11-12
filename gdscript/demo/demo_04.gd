@@ -1,5 +1,8 @@
 extends Node
 
+# 统一入口：addons/stope 不注册全局类，preload 门面后按 Stope.模块 访问
+const Stope = preload("res://addons/stope/stope.gd")
+
 # Demo 04: 预导出（preExports）—— 宿主先把形参塞进作用域，再编译函数体。
 # 对应 cpp/demo/04-pre-export.cpp。
 #
@@ -21,8 +24,8 @@ const DOC := """
 """
 
 # 这个 demo 不给函数传实参，argc / args[i] 用不上；但接口要求必须给一个。
-class NoArgs extends StopeBasicVM.Arguments:
-	func at(_state:StopeBasicVM.State, _index_or_key) -> Variant:
+class NoArgs extends "res://addons/stope/basic_vm.gd".Arguments:
+	func at(_state:Stope.BasicVM.State, _index_or_key) -> Variant:
 		return null
 	func num() -> int:
 		return 0
@@ -34,10 +37,10 @@ func _ready() -> void:
 func demo() -> void:
 	# ---------- 1. 从 STML 里取出函数定义 ----------
 	# 带 stope 属性的元素，内容按 Stope 代码扫；切出来的 text 就是原样源码。
-	var lexer := STMLLexer.Lexer.new(DOC)
-	var parser := STMLParser.Parser.new(lexer)
-	var root := STML.Element.new()
-	if parser.parse(root, _state_func) != StopeResult.Success:
+	var lexer := Stope.STMLLexer.Lexer.new(DOC)
+	var parser := Stope.STMLParser.Parser.new(lexer)
+	var root := Stope.STML.Element.new()
+	if parser.parse(root, _state_func) != Stope.Result.Success:
 		for e in lexer.errors: print('[lex] ', e)
 		for e in parser.errors: print('[parse] ', e)
 		return
@@ -50,11 +53,11 @@ func demo() -> void:
 	# ---------- 2. 用参数表当 preExports 编译 ----------
 	# 形参先占槽位（a=0、b=1），函数体里的 a、b 于是解析到文件作用域 ——
 	# 反汇编里是 PushValue(0) / PushValue(1)。
-	var program := StopeProgram.Program.new()
+	var program := Stope.Program.Program.new()
 	print('\n[2] 编译函数体（preExports = 形参表）：')
 	if not compile_and_report(fn.text, fn.text_line, params, program):
 		return
-	print(StopeDebug.disasm(program))
+	print(Stope.Debug.disasm(program))
 	var parts:Array[String] = []
 	for k in program.exports:
 		parts.append('%s=%d' % [k, program.exports[k]])
@@ -63,14 +66,14 @@ func demo() -> void:
 	# ---------- 3. 塞实参、运行 ----------
 	# 编译期就知道槽位，所以 run() 之前就能把值写进去 —— 这才是预导出的用处：
 	# 宿主的「调用」就是写变量 + 跑一遍，不需要额外的参数传递机制。
-	var state := StopeBasicVM.State.new()
-	state.set_api(StopeBasicVM.Api.new())
+	var state := Stope.BasicVM.State.new()
+	state.set_api(Stope.BasicVM.Api.new())
 	state.set_program(program)
 	state.set_arguments(NoArgs.new())
 	state.variables[program.exports['a']] = 3
 	state.variables[program.exports['b']] = 4
 
-	if state.run() != StopeResult.Success:
+	if state.run() != Stope.Result.Success:
 		for e in state.errors: print('[vm] ', e)
 		return
 	print('\n[3] add(3, 4) = ', state.returns[0])
@@ -79,14 +82,14 @@ func demo() -> void:
 	# 名字已经进了文件作用域，源码里再 export 同名、或顶层 let 同名，都是
 	# duplicate。预导出的变量只能赋值（a = 1;），不能重新声明。
 	print('\n[4] 函数体里又写 export a;：')
-	compile_and_report('export a; return a;', 1, params, StopeProgram.Program.new())
+	compile_and_report('export a; return a;', 1, params, Stope.Program.Program.new())
 
 # 带 stope 属性的元素，内容按 Stope 代码扫；其余按子元素列表（Xml）解析。
 static func _state_func(_tag:String, attrs:Dictionary) -> int:
-	return STMLLexer.State.Stope if 'stope' in attrs else STMLLexer.State.Xml
+	return Stope.STMLLexer.State.Stope if 'stope' in attrs else Stope.STMLLexer.State.Xml
 
 # 按名字找子元素。
-static func _child_by_tag(ele:STML.Element, tag:String) -> STML.Element:
+static func _child_by_tag(ele:Stope.STML.Element, tag:String) -> Stope.STML.Element:
 	for c in ele.children:
 		if c.tag == tag: return c
 	return null
@@ -95,17 +98,17 @@ static func _child_by_tag(ele:STML.Element, tag:String) -> STML.Element:
 # start_line 是 src 首行的物理行号 —— 从 STML 切出来的代码段不是从 1 开始，设给
 # lexer 之后报错行号才和文档对得上（这里直接从 fn.text_line 取）。
 static func compile_and_report(src:String, start_line:int, pre_exports:Array,
-		out:StopeProgram.Program) -> bool:
-	var lexer := StopeLexer.Lexer.new(src)
+		out:Stope.Program.Program) -> bool:
+	var lexer := Stope.Lexer.Lexer.new(src)
 	lexer.line = start_line
-	var parser := StopeParser.Parser.new(lexer)
-	var tree := StopeAst.Prog.new()
+	var parser := Stope.Parser.Parser.new(lexer)
+	var tree := Stope.Ast.Prog.new()
 	parser.parse_program(tree)
 	for e in lexer.errors: print('  lexer: ', e)
 	for e in parser.errors: print('  parser: ', e)
 
-	var compiler := StopeCompiler.Compiler.new()
+	var compiler := Stope.Compiler.Compiler.new()
 	var rc := compiler.compile(tree, out, pre_exports)
 	for e in compiler.errors: print('  compiler: ', e)
-	return rc == StopeResult.Success and lexer.errors.is_empty() \
+	return rc == Stope.Result.Success and lexer.errors.is_empty() \
 		and parser.errors.is_empty()

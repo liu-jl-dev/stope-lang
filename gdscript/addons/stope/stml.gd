@@ -1,5 +1,3 @@
-class_name STML
-
 # STML 的公共类型：元素与 Token。契约见 docs/zh-cn/stml-test-plan.md，
 # 权威实现是 cpp/include/stope/stml_lexer.hpp + stml_parser.hpp。
 #

@@ -1,4 +1,5 @@
-class_name StopeLexer
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const Opcode = preload("res://addons/stope/opcode.gd")
 
 # 18 个关键字
 const key_words := {
@@ -92,7 +93,7 @@ class Lexer:
 
 	# custom 可省。与 cpp/include/stope/lexer.hpp 一致：配置【不】存在词法器里，
 	# 每次取 token 时传进来 —— 换一张表不必重建词法器。
-	func next_token(custom:StopeOpcode.CustomOpcodeConfig = null) -> Token:
+	func next_token(custom:Opcode.CustomOpcodeConfig = null) -> Token:
 		var token := Token.new()
 		skip_ws(); token.line = line
 		if len(input) <= 0:
@@ -313,7 +314,7 @@ class Lexer:
 		if len(input) > 0: input = input.substr(1)
 
 	# ---------------- 标识符 ----------------
-	func scan_ident(token:Token, custom:StopeOpcode.CustomOpcodeConfig) -> void: # ^[a-zA-Z_][a-zA-Z0-9_]*(:[a-zA-Z_][a-zA-Z0-9_]*)*
+	func scan_ident(token:Token, custom:Opcode.CustomOpcodeConfig) -> void: # ^[a-zA-Z_][a-zA-Z0-9_]*(:[a-zA-Z_][a-zA-Z0-9_]*)*
 		token.type = Token.Type.Ident
 		token.parsed = input.substr(0, 1); input = input.substr(1)
 		while len(input) > 0 and is_ident_char(input[0]):
@@ -329,7 +330,7 @@ class Lexer:
 				token.parsed += input.substr(0, 1); input = input.substr(1)
 		token.literal = token.parsed
 		analyze_ident(token, custom)
-	func analyze_ident(token:Token, custom:StopeOpcode.CustomOpcodeConfig) -> void:
+	func analyze_ident(token:Token, custom:Opcode.CustomOpcodeConfig) -> void:
 		if token.type == Token.Type.Invalid: return
 		# 顺序与 C++ 一致：关键字优先，其次才是自定义指令，
 		# 所以注册一个叫 if 的指令仍会按关键字处理。

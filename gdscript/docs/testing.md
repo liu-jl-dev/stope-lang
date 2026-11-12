@@ -37,28 +37,27 @@ Windows 上 Godot 没进 PATH 就写全路径（本机是 mono 版，装在 C �
     got= line 2: expected "}". 
 ```
 
-> 新建、删除或**移动**带 `class_name` 的脚本后，请先跑一次
-> `godot --headless --path gdscript --import` 让 Godot 刷新
-> `.godot/global_script_class_cache.cfg`，否则会出现
-> `Identifier "Xxx" not declared in the current scope`。
+> 本实现不注册任何 `class_name` 全局类，跨文件一律 `preload` 路径引用，因此**不依赖**
+> `.godot/global_script_class_cache.cfg`：删掉 `.godot/` 或全新拷贝也能直接跑测试
+> （2026-11-12 实测：无 `.godot/` 副本 3444 条断言全过）。
 
-### 当前结果（2026-10-30）
+### 当前结果（2026-11-12，零 `.godot/` 缓存实测）
 
 ```
 ================ Stope GDScript 测试 ================
 [1/5] 词法分析
   断言 588 条，失败 0 条
 [2/5] 语法分析
-  （语法累计）  断言 1891 条，失败 0 条
+  （语法累计）  断言 2029 条，失败 0 条
 [3/5] 编译器
-  断言 2510 条，失败 0 条
+  断言 2717 条，失败 0 条
 [4/5] STML
-  （STML 本组）  断言 3137 条，失败 0 条
+  （STML 本组）  断言 3350 条，失败 0 条
 [5/5] 执行器
-  （执行器本组）  断言 3237 条，失败 0 条
+  （执行器本组）  断言 3444 条，失败 0 条
 ====================================================
-全部通过：共 3237 条断言
-  （其中词法组 588 条；词法+语法+编译器 2510 条；STML 3137 条；执行器 94 条）
+全部通过：共 3444 条断言
+  （其中词法组 588 条；词法+语法+编译器 2717 条；STML 3350 条；执行器 94 条）
 ```
 
 > 第 2/3 行打印的是**累计值**，不是本组条数（历史如此）。
@@ -67,20 +66,20 @@ Windows 上 Godot 没进 PATH 就写全路径（本机是 mono 版，装在 C �
 
 ```
 gdscript/test/
-  run_tests.gd        入口（SceneTree 脚本），依次跑五组并汇总
-  test_util.gd        StopeTestUtil：Report、转义、数据文件读取、共用自定义指令表
-  test_lexer.gd       StopeTestLexer    —— 词法
-  test_parser.gd      StopeTestParser   —— 语法（含二进制数组 + 常量折叠矩阵）
-  test_compiler.gd    StopeTestCompiler —— 编译器
-  test_stml.gd        StopeTestSTML     —— STML 词法 + 语法
-  test_vm.gd          StopeTestVM       —— 执行器（**没有** golden 数据，见 §3.4）
+  run_tests.gd        入口（SceneTree 脚本），preload 各组，依次跑并汇总
+  test_util.gd        Report、转义、数据文件读取、共用自定义指令表
+  test_lexer.gd       词法
+  test_parser.gd      语法（含二进制数组 + 常量折叠矩阵）
+  test_compiler.gd    编译器
+  test_stml.gd        STML 词法 + 语法
+  test_vm.gd          执行器（**没有** golden 数据，见 §3.4）
   data/
     golden_lex.txt      147 条 · 词法
     golden.txt          224 条 · 语法 + 编译器共用
     golden_binarr.txt    86 条 · 二进制数组 + 常量折叠
     stml_cases.txt      126 条 · STML **用例清单**（两侧共用）
     golden_stml.txt     126 条 · STML 期望值（由清单 dump）
-    golden_disasm.txt    12 条 · 反汇编器（StopeDebug.disasm）的整段输出
+    golden_disasm.txt    12 条 · 反汇编器（Stope.Debug.disasm）的整段输出
 ```
 
 本目录**不放 C++ 源码**。生成这些 `*.txt` 的探针在 `cpp/tools/`（`golden.cpp`、
@@ -88,9 +87,9 @@ gdscript/test/
 的 `gen-golden` target 编译并运行（见 §3.3）。它们必须链接 `stope` 库才算出得来期望值，
 所以东西留在 C++ 那边；`godot` 不会碰它们，只在「重生成期望值」时才需要。
 
-五组测试各占一个 `class_name`，都只有静态 `run(rep)`。`run_tests.gd` 持有唯一的
-`StopeTestUtil.Report`，五组往同一个报表里累加。前四组的期望值来自 `data/*.txt`，
-执行器那组自己算（见 §3.4）。
+五组测试各占一个脚本（不注册全局类，由 `run_tests.gd` 顶部 `preload` 引入），都只有静态
+`run(rep)`。`run_tests.gd` 持有唯一的 `StopeTestUtil.Report`，五组往同一个报表里累加。
+前四组的期望值来自 `data/*.txt`，执行器那组自己算（见 §3.4）。
 
 ## 3. 期望值不是手写的
 
@@ -288,7 +287,7 @@ C++ 侧有对应用例：`cpp/test/test_vm.cpp` 的 `V-31…V-34`，同样把 `R
 
 | 现象 | 原因 / 处理 |
 | --- | --- |
-| `Identifier "StopeLexer" not declared in the current scope` | 全局类缓存过期 → `--import` |
+| `Identifier "StopeTestXxx" not declared in the current scope` | `run_tests.gd` 顶部的 `preload` 路径与被测脚本实际路径不符（改过目录结构） |
 | `FAIL 词法：读不到 res://test/data/...` | 数据文件缺失或被 .gitignore 挡住 → 按 §3.3 重新生成 |
 | 整组只有 `ERRN` 对、`TOKS` 全错 | 大概率是行号或 `type_name` 变了，先看第一条差异 |
 | `FAIL ... 字段 LEXEMES` | 标点 / 标识符的 lexeme 本来就「实现自定」，只有数字 / 字符串 / 二进制数组参与比对；别把断言扩到标点 |

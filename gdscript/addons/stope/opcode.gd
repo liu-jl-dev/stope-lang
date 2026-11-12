@@ -1,4 +1,5 @@
-class_name StopeOpcode
+# 不注册 class_name，避免占用全局类命名空间；依赖以 preload 常量引入，名字与 stope.gd 门面的键一致。
+const Result = preload("res://addons/stope/stope_result.gd")
 
 enum Opcode {
 	Assign, PushNull, PushFalse, PushTrue, PushInt,
@@ -28,12 +29,12 @@ class CustomOpcodeConfig:
 	# 调用看起来成功、实际把先注册的那个悄悄换掉了。返回值可以不管（GDScript
 	# 允许丢弃），要查就接。
 	func add_custom_opcode(name:String, opcode:int, arg_num:int=-1) -> int:
-		if opcodes.has(name): return StopeResult.DuplicateWithBuiltinOpcode
+		if opcodes.has(name): return Result.DuplicateWithBuiltinOpcode
 		opcodes[name] = CustomOpcode.new(name, opcode, arg_num)
-		return StopeResult.Success
+		return Result.Success
 
-# 该指令是否带一个操作数。**唯一实现**：StopeDebug.opcode_has_arg 与测试侧的
-# StopeTestUtil.dump_program 都从这里取，分档与 golden 探针 / VM 的步进规则一致。
+# 该指令是否带一个操作数。**唯一实现**：Debug.opcode_has_arg 与测试侧的
+# test_util.gd 的 dump_program 都从这里取，分档与 golden 探针 / VM 的步进规则一致。
 # 对应 cpp/include/stope/debug.hpp 的 OpcodeHasArg（那边只管内置指令，自定义指令
 # 由 CustomOpcodeHasArg 看 arg_num）。
 static func has_a_param(inst:int) -> bool:
