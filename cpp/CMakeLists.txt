@@ -98,6 +98,13 @@ add_executable(test_parser
     test/test_parser_fold.cpp
 )
 target_link_libraries(test_parser PRIVATE stope)
+# B-07/B-08 在 test_parser_flow.cpp 重载了全局 operator new/delete 做分配计数，
+# 重载必须覆盖二进制里的【所有】分配——动态链接 libstdc++-6.dll 时，DLL 内代码
+# （如 stringstream 的缓冲）走 DLL 私有的 CRT 堆，EXE 侧释放却走重载的 std::free，
+# 跨堆释放触发 0xc0000374（2026-11-12 排查定位，gdb 回溯 = Parser::~Parser 释放
+# errors 里的 string 缓冲）。静态链接 libstdc++/libgcc 后全二进制只有一个分配器，
+# 计数配平（PD-12 随之消失），B-08 断言翻转见 test_parser_flow.cpp。
+target_link_options(test_parser PRIVATE -static-libstdc++ -static-libgcc)
 
 add_test(NAME parser COMMAND test_parser)
 # 死循环兜底：parseAll 无法在进程内熔断 parser 的递归/循环，

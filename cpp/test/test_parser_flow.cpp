@@ -11,9 +11,11 @@ namespace Test {
 // ---- 全局分配计数（B-07/B-08）----
 // 坑（已记入测试计划 §10.5）：必须同时重载 sized delete（C++14 起析构路径优先选
 // operator delete(void*, size_t)），否则计数永远不配平、得出假泄漏结论。
-// 另一个坑：每次 error() 里的 std::stringstream 会让 del 比 new 多 1（PD-12，
-// 根因是该工具链上 stringstream 的内部分配不走可替换的全局 operator new，
-// 释放却走 —— 已实测隔离复现，不是双重释放也不是 AST 泄漏）。
+// 另一个坑（已修 2026-11-12，PD-12）：动态链接 libstdc++-6.dll 时，DLL 内代码
+// 的分配（如 error() 里 stringstream 的缓冲）走 DLL 私有 CRT 堆、不走这里替换的
+// 全局 operator new，释放却走 —— 每发 1 条 error 计量多 1 次 delete，且跨堆释放
+// 直接堆损坏（0xc0000374）。test_parser 已改静态链接 libstdc++/libgcc（见
+// CMakeLists），全二进制只有一个分配器，计数配平，B-08 按 d == n 断言。
 // 注意：operator new/delete 只能声明在全局作用域，不能放进 namespace。
 static long long g_allocNew = 0, g_allocDel = 0;
 static bool g_allocOn = false;
@@ -265,7 +267,8 @@ void runFlowTests() {
                 escUtf8(srcs[i]) + "]");
     }
   }
-  {  // B-08 有 error 的路径：del == new + error条数（PD-12 的当前表现）
+  {  // B-08 有 error 的路径：new == delete 照样配平（PD-12 修复后的断言，
+    // 2026-11-12 FIXED-PENDING-FLIP 翻转：旧断言是 del == new + error条数）
     auto warm = std::make_shared<std::u16string>(u"break x;");
     long long wn, wd;
     measureParse(warm, wn, wd);
@@ -279,12 +282,9 @@ void runFlowTests() {
       auto holder = std::make_shared<std::u16string>(c.src);
       long long n, d;
       measureParse(holder, n, d);
-      auto r = parseAll(c.src);
-      long long want = n + static_cast<long long>(r.errors.size());
-      check(d == want, c.id, "del == new + errors",
+      check(d == n, c.id, "del == new（有 error 也配平）",
             "new=" + std::to_string(n) + " del=" + std::to_string(d) +
-                " errors=" + std::to_string(r.errors.size()) + " src=[" + escUtf8(c.src) + "]");
-      KNOWN("PD-12", d == n, c.id);  // 修好 error() 的计量后应配平
+                " src=[" + escUtf8(c.src) + "]");
     }
   }
   {  // B-09 复用同一个 Lexer/Parser 跑第二条输入：明确不支持，只断言不崩

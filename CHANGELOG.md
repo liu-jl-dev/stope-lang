@@ -56,6 +56,17 @@ python tools/check_version.py          # 全部一致才返回 0
 python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 ```
 
+## [Unreleased]
+
+### 修复
+
+- **test_parser 堆损坏崩溃（0xc0000374）**：B-07/B-08 的全局 operator new/delete
+  计数重载与动态链接的 libstdc++-6.dll 混用所致——DLL 内代码（如 stringstream
+  缓冲）在 DLL 私有 CRT 堆分配，EXE 侧释放却走重载的 std::free，跨堆释放崩溃。
+  `test_parser` 改静态链接 libstdc++/libgcc（全二进制唯一分配器），ctest 15/15。
+  PD-12（每发 1 条 error 计量多 1 次 delete）随之根治，B-08 按 FIXED-PENDING-FLIP
+  协议翻转回 `d == n` 断言。仅测试基建改动，库代码与语言行为零变化。
+
 ## [0.5.1] - 2026-11-12
 
 ### 修复
