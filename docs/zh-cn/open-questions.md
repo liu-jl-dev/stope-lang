@@ -1,6 +1,6 @@
 # 待定夺与决定记录（Open Questions）
 
-> 收**跨实现的语言 / 编译器层**问题：还没定夺的设计取舍、已定夺但未落地的改动、
+> 收**跨实现的语言 / 编译器层 / 文档设计**问题：还没定夺的设计取舍、已定夺但未落地的改动、
 > 以及已落地决定的索引。单实现内部的小事（缺陷修法、重构）仍留在各自文档
 > （如 [syntax-impl.md §10](syntax-impl.md) 的 PD-x 清单），这里不重复。
 >
@@ -16,6 +16,7 @@
 | OQ-3 | **`-2 ^ 2` 的一元负号优先级**（PD-18） | 现状 `(-2)^2`（一元高于 `^`）；Python 是 `-(2^2)`，Excel 是 `(-2)^2` | 参考实现与本实现一致，倾向记录为现状 |
 | OQ-4 | **parser 不校验赋值左值**（PD-10，`1 = 2;` 0 errors） | 交给语义分析，或 parser 报错 | 待定 |
 | OQ-5 | **跨类型 `==` / `null` 比较是否折叠**（[expr-optim.md §10](../../cpp/docs/expr-optim.md)） | 需先定夺类型强制规则：`true == 1`、`null == 0`、`null` 参与比较的语义 | 折叠必须与运行期一致，规则未定前不动 |
+| OQ-10 | **Object 与 Descriptor 是否并入同一引用计数对象池**（demo5 内存管理） | 现状 demo5：对象 `new` 堆分配（裸指针 Handle）、描述符走 `RefCountedPool`（下标 Handle），双编码并存——错种 Handle 越界崩而非干净报错；`obj:delete` 手动驱逐描述符 + 删对象，存悬垂对象指针 / 过时描述符索引风险。候选：统一进一个 `RefCountedPool`，Handle 均为池下标，`classId` 区分对象（≥0）与描述符（<0），错种经 `classId` 校验转为干净 `s.Error`；配套需把 `Type::Handle` 从"无引用计数、宿主自管"改为"VM 在 `Copy`/`Move`/`Clear2` 对其 RefInc/RefDec"（BasicVM 核心行为变化，C++ 独有），`obj:delete` 语义变 RefDec 而非立即释放，`live` 表 + `maxObjects` 上限需重想，每次值拷贝多一次引用计数增减 | 与 demo6 GC 路线重叠度高，合并考虑；demo5 暂保持双编码现状 |
 
 ## 2. 已定夺未落地
 

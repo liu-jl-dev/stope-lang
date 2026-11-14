@@ -26,3 +26,7 @@ struct Object {
 
 Stope::BasicVM::Value ObjectToHandle(Object* p);
 Object* HandleToObject(const Stope::BasicVM::Value& v);
+// 描述符 Handle 编码成 descPool 下标（非对象指针）：data.handle 直接存池下标，
+// 池用 vector 底、下标天然稳定。HandleToDesc 是 ObjectManager 成员（需访问其
+// descPool），不在此声明。
+Stope::BasicVM::Value DescToHandle(unsigned index);

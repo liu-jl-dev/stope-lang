@@ -18,99 +18,80 @@
 
 namespace Stope::BasicVM {
 
+// 引用计数 + 句柄槽位复用的通用模板。字符串、字节数组（以及 demo 里的描述符）共用同一套
+// New/RefInc/RefDec/复用堆逻辑，避免在 Allocator 里复制多份近乎相同的代码。访问走整数
+// 句柄，引用计数语义与精简前的 Allocator 完全一致；模板在编译期单态化，VM 热路径零开销。
+//
+// Storage 默认 std::vector（String/BinArr 用：只按句柄索引访问、不取元素地址，最优）。
+// 需要「元素地址长期稳定」的场景（如 demo5 把描述符当 Type::Handle 裸指针传递）传
+// std::deque 即可获得稳定地址——两者都提供随机访问，recycled 复用堆不受影响。
+template <class T, template <class...> class Storage = std::vector>
+struct RefCountedPool {
+  struct Entry {
+    bool isDeleted = false;
+    int refCount = 0;
+    T data;
+  };
+  Storage<Entry> entries;
+  std::vector<unsigned> recycled;  // 复用堆：std::greater 使最小 handle 优先复用
+
+  [[nodiscard]] unsigned New() {
+    unsigned handle;
+    if (!recycled.empty()) {
+      std::pop_heap(recycled.begin(), recycled.end(), std::greater<unsigned>());
+      handle = recycled.back();
+      recycled.pop_back();
+      entries[handle].isDeleted = false;  // 复用前复位（原 BinArrData/StringData 复用路径漏复位 isDeleted，会让槽位卡死、无法再释放）
+    } else {
+      handle = entries.size();
+      entries.push_back({});
+    }
+    entries[handle].refCount = 1;
+    return handle;
+  }
+  void RefInc(unsigned handle) {
+    if (handle < entries.size()) {
+      entries[handle].refCount++;
+    }
+  }
+  void RefDec(unsigned handle) {
+    if (handle >= entries.size() || entries[handle].isDeleted) {
+      return;
+    }
+    entries[handle].refCount--;
+    if (entries[handle].refCount <= 0) {
+      Delete(handle);
+    }
+  }
+  T& Get(unsigned handle) { return entries[handle].data; }
+  size_t size() const { return entries.size(); }  // 已分配槽位数（含已回收未复用）
+
+ private:
+  void Delete(unsigned handle) {
+    entries[handle].isDeleted = true;
+    entries[handle].data = T{};
+    recycled.push_back(handle);
+    std::push_heap(recycled.begin(), recycled.end(), std::greater<unsigned>());
+  }
+};
+
 struct Allocator {
-  struct BinArrData {
-    bool isDeleted = false;
-    int refCount = 0;
-    std::vector<char> data;
-  };
-  struct StringData {
-    bool isDeleted = false;
-    int refCount = 0;
-    std::u16string data;
-  };
-  std::vector<BinArrData> binArrs;
-  std::vector<StringData> strings;
-  std::vector<unsigned> recycledBinArrs;
-  std::vector<unsigned> recycledStrings;
+  RefCountedPool<std::vector<char>> binArrs;
+  RefCountedPool<std::u16string> strings;
   Allocator() = default;
   Allocator(const Allocator&) = delete;
   Allocator& operator=(const Allocator&) = delete;
-  [[nodiscard]] unsigned NewBinArr() {
-    unsigned handle;
-    if (!recycledBinArrs.empty()) {
-      std::pop_heap(recycledBinArrs.begin(), recycledBinArrs.end(),
-                    std::greater<unsigned>());
-      handle = recycledBinArrs.back();
-      recycledBinArrs.pop_back();
-    } else {
-      handle = binArrs.size();
-      binArrs.push_back({});
-    }
-    binArrs[handle].refCount = 1;
-    return handle;
-  }
-  void BinArrRefInc(unsigned handle) {
-    if (handle < binArrs.size()) {
-      binArrs[handle].refCount++;
-    }
-  }
-  void BinArrRefDec(unsigned handle) {
-    if (handle >= binArrs.size() || binArrs[handle].isDeleted) {
-      return;
-    }
-    binArrs[handle].refCount--;
-    if (binArrs[handle].refCount <= 0) {
-      deleteBinArr(handle);
-    }
-  }
 
-  [[nodiscard]] unsigned NewString() {
-    unsigned handle;
-    if (!recycledStrings.empty()) {
-      std::pop_heap(recycledStrings.begin(), recycledStrings.end(),
-                    std::greater<unsigned>());
-      handle = recycledStrings.back();
-      recycledStrings.pop_back();
-    } else {
-      handle = strings.size();
-      strings.push_back({});
-    }
-    strings[handle].refCount = 1;
-    return handle;
-  }
-  void StringRefInc(unsigned handle) {
-    if (handle < strings.size()) {
-      strings[handle].refCount++;
-    }
-  }
-  void StringRefDec(unsigned handle) {
-    if (handle >= strings.size() || strings[handle].isDeleted) {
-      return;
-    }
-    strings[handle].refCount--;
-    if (strings[handle].refCount <= 0) {
-      deleteString(handle);
-    }
-  }
-  std::vector<char>& GetBinArr(unsigned handle) { return binArrs[handle].data; }
-  std::u16string& GetString(unsigned handle) { return strings[handle].data; }
-
- private:
-  void deleteBinArr(unsigned handle) {
-    binArrs[handle].isDeleted = true;
-    binArrs[handle].data.clear();
-    recycledBinArrs.push_back(handle);
-    std::push_heap(recycledBinArrs.begin(), recycledBinArrs.end(),
-                   std::greater<unsigned>());
-  }
-  void deleteString(unsigned handle) {
-    strings[handle].isDeleted = true;
-    strings[handle].data.clear();
-    recycledStrings.push_back(handle);
-    std::push_heap(recycledStrings.begin(), recycledStrings.end(),
-                   std::greater<unsigned>());
-  }
+  // 薄包装：保持原 NewBinArr/NewString/RefInc/RefDec/Get* 接口不变，
+  // Program、VM 各 op* 与所有宿主侧调用点无需改动。
+  [[nodiscard]] unsigned NewBinArr() { return binArrs.New(); }
+  void BinArrRefInc(unsigned handle) { binArrs.RefInc(handle); }
+  void BinArrRefDec(unsigned handle) { binArrs.RefDec(handle); }
+  [[nodiscard]] unsigned NewString() { return strings.New(); }
+  void StringRefInc(unsigned handle) { strings.RefInc(handle); }
+  void StringRefDec(unsigned handle) { strings.RefDec(handle); }
+  std::vector<char>& GetBinArr(unsigned handle) { return binArrs.Get(handle); }
+  std::u16string& GetString(unsigned handle) { return strings.Get(handle); }
 };
 
 struct Value;
@@ -224,13 +205,13 @@ struct ProgramConstants {
       binArrs.emplace_back();
       binArrs.back().type = Value::Type::BinArr;
       binArrs.back().data.handle = alloc.NewBinArr();
-      alloc.binArrs[binArrs.back().data.handle].data = data;
+      alloc.GetBinArr(binArrs.back().data.handle) = data;
     }
     for (auto& data : program.stringConsts) {
       strings.emplace_back();
       strings.back().type = Value::Type::String;
       strings.back().data.handle = alloc.NewString();
-      alloc.strings[strings.back().data.handle].data = data;
+      alloc.GetString(strings.back().data.handle) = data;
     }
   }
   void Clear() {
@@ -496,14 +477,14 @@ struct API {
     int64_t index = key.data.integer;
     int64_t result = 0;
     if (container.type == Value::Type::BinArr) {
-      std::vector<char>& data = s.alloc->binArrs[container.data.handle].data;
+      std::vector<char>& data = s.alloc->GetBinArr(container.data.handle);
       if (index < 0 || index >= data.size()) {
         s.Error("index out of range. ");
         return;
       }
       result = data[index];
     } else if (container.type == Value::Type::String) {
-      std::u16string& data = s.alloc->strings[container.data.handle].data;
+      std::u16string& data = s.alloc->GetString(container.data.handle);
       if (index < 0 || index >= data.size()) {
         s.Error("index out of range. ");
         return;
@@ -807,8 +788,8 @@ struct API {
                right.type == Value::Type::String) {
       result.type = Value::Type::String;
       unsigned hRes = s.alloc->NewString();
-      s.alloc->strings[hRes].data = s.alloc->strings[left.data.handle].data +
-                                    s.alloc->strings[right.data.handle].data;
+      s.alloc->GetString(hRes) = s.alloc->GetString(left.data.handle) +
+                                  s.alloc->GetString(right.data.handle);
       result.data.handle = hRes;
     } else if (left.type == Value::Type::BinArr &&
                right.type == Value::Type::BinArr) {
@@ -879,8 +860,8 @@ struct API {
         return s.alloc->GetBinArr(left.data.handle) ==
                s.alloc->GetBinArr(right.data.handle);
       } else if (left.type == Value::Type::String) {
-        return s.alloc->strings[left.data.handle].data ==
-               s.alloc->strings[right.data.handle].data;
+        return s.alloc->GetString(left.data.handle) ==
+               s.alloc->GetString(right.data.handle);
       }
     } else if (left.type == Value::Type::Null ||
                right.type == Value::Type::Null) {

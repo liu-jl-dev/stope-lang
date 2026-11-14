@@ -361,14 +361,22 @@ int main() {
 
 ### 9.1 两个池 + 句柄
 
-`Allocator` 里只有两个池，字符串一个、BinArr 一个：
+`Allocator` 里只有两个池，字符串一个、BinArr 一个。两者逻辑完全同构（引用计数 + 句柄复用堆），
+抽成了一个泛型模板 `RefCountedPool<T>`，`Allocator` 只持有两个特化成员：
 
 ```cpp
+// 引用计数 + 句柄槽位复用：字符串 / BinArr（以及将来的描述符）共用同一套逻辑
+template <class T>
+struct RefCountedPool {
+  struct Entry { bool isDeleted; int refCount; T data; };
+  std::vector<Entry>        entries;     // 池
+  std::vector<unsigned>     recycled;    // 释放过的下标（小顶堆，最小优先复用）
+};
+
 struct Allocator {
-  struct StringData { bool isDeleted; int refCount; std::u16string data; };
-  std::vector<StringData> strings;        // 池
-  std::vector<unsigned> recycledStrings;  // 释放过的下标（小顶堆）
-  // BinArr 一套同构的成员
+  RefCountedPool<std::vector<char>> binArrs;   // BinArr 池
+  RefCountedPool<std::u16string>   strings;    // 字符串池
+  // NewBinArr/NewString/RefInc/RefDec/Get* 是上面的薄包装，调用点不变
 };
 ```
 

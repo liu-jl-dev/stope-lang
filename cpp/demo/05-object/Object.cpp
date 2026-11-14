@@ -15,7 +15,14 @@ BasicVM::Value ObjectToHandle(Object* p) {
   return v;
 }
 
-Object* HandleToObject(const BasicVM::Value& v) {
+Object* HandleToObject(const Stope::BasicVM::Value& v) {
   return reinterpret_cast<Object*>(static_cast<std::uintptr_t>(v.data.data));
 }
 
+// 描述符 Handle：data.handle 直接存 descPool 下标（vector 底、下标稳定）。
+BasicVM::Value DescToHandle(unsigned index) {
+  BasicVM::Value v;
+  v.type = BasicVM::Value::Type::Handle;
+  v.data.handle = index;
+  return v;
+}

@@ -257,7 +257,7 @@ struct API : Stope::BasicVM::API {
 // ObjectManager.cpp
 void ObjectManager::Assign(BasicVM::State& s, const BasicVM::Value& handle,
                            const BasicVM::Value& value) {
-  Object* desc = HandleToObject(handle);
+  Object* desc = HandleToDesc(handle);
   if (desc->classId != kMemberDescClass ||
       desc->fields[1].type != BasicVM::Value::Type::Handle) {
     s.Error("not assignable. ");
@@ -352,8 +352,9 @@ Handle——运行中零查找。
 
 另一个工程决策是**容器的选择按「谁需要地址稳定」区分**：
 
-- **描述符放 `deque`** 且长存不回收——描述符的 Handle 存裸指针，`deque` 扩容
-  不搬移元素，指针在整个运行期稳定。这是 Handle 存裸指针能成立的前提；
+- **描述符放 `RefCountedPool<Object>`（vector 底）** 且按回收槽位复用——描述符的
+  Handle 存**池下标**而非裸指针，vector 下标天然稳定、`realloc` 无所谓，无需
+  `deque`；这是 Handle 存下标能成立的前提；
 - **类/方法/函数用 `vector`** 就够了——整数索引化之后没有人跨容器扩容持有
   指针（长期引用全是 id / 下标）；`constAlloc` 用 `unique_ptr` 让
   `Method` / `Function` 可移动（库的 `ProgramConstants` 也因此实现了移动
@@ -450,7 +451,7 @@ void Runtime::FinishFrame(Frame& f) {
 `VisitDoc` 全部类访问完之后跑（方法可以引用文档里后定义的成员）；`SetupMethodState`
 据 `selfMethodBinds` 往槽位绑 `objMgr.Bind(memberId, self)` 的绑定描述符——
 **创建时即绑定 self**，所以 `self:Greet()` 无需 `[对象]`，Call 直接走绑定
-分支；去重缓存保证反复调用（含方法递归）不重复分配。
+分支；每次 Bind 新建一个绑定描述符（不去重），由 descPool 的回收复用兜底。
 
 链接遍同时做校验：`self:` 前缀的隐式导出若既没链接到属性、也没链接到任何
 本类方法（典型如拼写错误 `self:Gret`），装配期就抛错拦下——否则要等运行时
@@ -536,29 +537,34 @@ void ObjectManager::Delete(BasicVM::State& s, Object& obj) {
   它变成不存在的问题。
 
 **描述符的账**：对象之外还有一类隐式分配要管——`obj:Greet[p]()` 每次执行的
-At 都会 `Bind` 出一个绑定描述符，文档程序员拿不到它，没法手动删。解法分两层：
+At 都会 `Bind` 出一个绑定描述符，文档程序员拿不到它，没法手动删。demo 5 的做法：
 
-1. **去重**：绑定描述符只存 `(成员 id, 对象地址)` 且创建后不可变，同一绑定
-   永远等价——`bindCache` 命中直接复用，反复调用不重复分配；
-2. **驱逐与复用**：仅靠去重，缓存的账仍随**曾见**绑定（成员数 × 曾见对象
-   地址数）单调涨。所以 `obj:delete` 时按地址**整组驱逐**——缓存做成外层
-   按地址、内层按成员 id 的两级 map，驱逐是 O(log A) 定位 + O(k) 逐个入
-   `freeDescs` 复用池（k ≤ 成员数，是驱逐的固有工作量）；`Bind` 未命中时
-   优先复用池里的槽位。账从此只随**活跃绑定**走：
+描述符也是 `Object`（classId 为负哨兵），统一塞进 `RefCountedPool<Object>`
+（vector 底，Handle 存**池下标**而非裸指针，下标天然稳定、无需 `deque`），
+**不去重**——每次 `Bind` 都新建一个、返回其下标 Handle，池子按回收槽位复用：
+
+- **`New` 即建**：`NewMemberDesc` / `NewCtorDesc` / `Bind` 都走 `descPool.New()`，
+  引用计数置 1，返回稳定指针；
+- **`obj:delete` 整组驱逐**：绑定描述符登记进 `descByObject`（对象地址 ->
+  其绑定描述符的池句柄，仅用于驱逐、不做去重），`Delete` 时按地址 O(log A)
+  定位、O(k) 逐个 `RefDec` 回收（k ≤ 成员数，是驱逐的固有工作量）。`RefDec`
+  归零即回收槽位，下次 `New` 优先复用最小句柄；
+- **账只随活跃绑定走**：`descPool` 内存 ≈ 峰值并发绑定数；`descByObject`
+  条目数 ≈ 活跃对象数 × 其绑定描述符数。
 
    | 量 | 上界 |
    | --- | --- |
-   | `bindCache` 条目 | 成员数 × 活跃对象数 |
-   | `descs` 内存 | 峰值并发绑定数 |
+   | `descByObject` 条目 | 活跃对象数 × 其绑定描述符数 |
+   | `descPool` 内存 | 峰值并发绑定数 |
 
-   实测：10 万次「New → 写属性 → 调方法 → delete」churn 循环后，`descs`
-   与不跑循环时完全相同（`ReportLive` 会打印 `[descs]` 一行，增长在此现形）。
+   实测：`ReportLive` 打印的 `[descs]` 一行（allocated / pooled）随 churn
+   循环增长到峰值后即靠回收复用，不再单调涨。
 
-一个如实记录的语义变化：条目被驱逐、槽位被复用后，悬空绑定 Handle 若再用
-会**别名到复用后的新绑定**——错乱方式从「指向已释放内存」变为「操作错误的
+一个如实记录的语义变化：描述符槽位被回收复用后，悬空绑定 Handle 若再用会
+**别名到复用后的新绑定**——错乱方式从「指向已释放内存」变为「操作错误的
 绑定」，本质同属「悬空 Handle 是程序错误」的纪律，不变。demo 6 的 GC 接手
-后，`obj:delete` / `bindCache` / `freeDescs` 全部退场，绑定描述符随可达性
-自动回收，这笔账按构造消失。
+后，`obj:delete` 与 `descByObject` 退场，绑定描述符随可达性自动回收，这笔账
+按构造消失。
 
 ## 8. 装配与运行
 
@@ -587,7 +593,8 @@ demo 先限步 1 帧再 `RunAll` 跑完，输出带一行统计。
 `catch` 在入口。`throw` 会跳过 `VisitDoc → VisitClass → VisitMethod` 中间
 所有栈帧直达入口——这条跳转不体现在任何函数签名的返回值里，读代码时容易
 漏掉，故在此明示。栈展开本身是安全的：中间各层不持手工资源（对象在堆上由
-`live` 表管、描述符在 `deque` 里长存），你扩展时若在某个栈帧里拿了需要释放
+`live` 表管、描述符在 `descPool`（vector 底、池下标 Handle）里按回收复用兜底），
+你扩展时若在某个栈帧里拿了需要释放
 的资源，请改用 RAII 或就地捕获。
 
 两套错误通道的分界要分清：**Stope 程序的运行期错误不抛**——`not

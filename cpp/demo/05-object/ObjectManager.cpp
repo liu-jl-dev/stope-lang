@@ -18,60 +18,55 @@ BasicVM::Value ObjectManager::NewObject(int clsId) {
   return ObjectToHandle(obj);
 }
 
+// 描述符 Handle（存 descPool 下标）-> Object*。返回的指针在 descPool 不 New 的
+// 窗口内有效（各调用点均只读后即弃，安全）。
+Object* ObjectManager::HandleToDesc(const Stope::BasicVM::Value& handle) {
+  return &descPool.Get((unsigned)handle.data.handle);
+}
+
 // 成员描述符 fields = [Integer 成员 id, 绑定对象 Handle/Null]：运行中按两层
 // 整数查询定位（成员 id -> 类内 MemberRef，类取自绑定对象自己的 classId），
 // kind 由查表揭晓——不做按名查找。
 BasicVM::Value ObjectManager::NewMemberDesc(int memberId) {
-  Object& d = descs.emplace_back();
+  unsigned h = descPool.New();
+  Object& d = descPool.Get(h);
   d.classId = kMemberDescClass;
   d.fields.resize(2);
   d.fields[0].type = BasicVM::Value::Type::Integer;
   d.fields[0].data.integer = memberId;
-  return ObjectToHandle(&d);
+  return DescToHandle(h);
 }
 
 BasicVM::Value ObjectManager::NewCtorDesc(int clsId, int ctorId) {
-  Object& d = descs.emplace_back();
+  unsigned h = descPool.New();
+  Object& d = descPool.Get(h);
   d.classId = kCtorDescClass;
   d.fields.resize(2);  // [类 id, 构造器 methods 下标]
   d.fields[0].type = BasicVM::Value::Type::Integer;
   d.fields[0].data.integer = clsId;
   d.fields[1].type = BasicVM::Value::Type::Integer;
   d.fields[1].data.integer = ctorId;
-  return ObjectToHandle(&d);
+  return DescToHandle(h);
 }
 
-// 按成员 id 直接绑定：绑定描述符只存 (成员 id, 对象地址) 且创建后不可变，
-// 同一绑定永远等价——两级缓存命中即复用。未命中时优先从 freeDescs 取被
-// 驱逐的槽位重置复用，descs 只随峰值并发绑定增长。
+// 按成员 id 直接绑定：每次新建一个绑定描述符（**不去重**），登记进 descByObject
+// 以便 obj:delete 整组驱逐。绑定描述符只存 (成员 id, 对象地址)，创建后不可变。
 BasicVM::Value ObjectManager::Bind(int memberId, const BasicVM::Value& obj) {
   Object* objPtr = HandleToObject(obj);
-  auto& perAddr = bindCache[(const void*)objPtr];
-  auto hit = perAddr.find(memberId);
-  if (hit != perAddr.end()) {
-    return ObjectToHandle(hit->second);
-  }
-  Object* bound;
-  if (!freeDescs.empty()) {
-    bound = freeDescs.back();
-    freeDescs.pop_back();
-    bound->fields.clear();
-    bound->fields.resize(2);  // 重置：上一世的字段值一并清掉
-  } else {
-    bound = &descs.emplace_back();
-    bound->classId = kMemberDescClass;
-    bound->fields.resize(2);
-  }
-  bound->fields[0].type = BasicVM::Value::Type::Integer;
-  bound->fields[0].data.integer = memberId;
-  BasicVM::Value::Copy(runtime->basicAlloc, const_cast<BasicVM::Value&>(obj), bound->fields[1]);
-  perAddr.emplace(memberId, bound);
-  return ObjectToHandle(bound);
+  unsigned h = descPool.New();
+  Object& bound = descPool.Get(h);
+  bound.classId = kMemberDescClass;
+  bound.fields.resize(2);
+  bound.fields[0].type = BasicVM::Value::Type::Integer;
+  bound.fields[0].data.integer = memberId;
+  BasicVM::Value::Copy(runtime->basicAlloc, const_cast<BasicVM::Value&>(obj), bound.fields[1]);
+  descByObject[objPtr].push_back(h);  // 登记：obj:delete 时整组驱逐
+  return DescToHandle(h);
 }
 
 BasicVM::Value ObjectManager::Bind(const BasicVM::Value& memberDesc,
                                    const BasicVM::Value& obj) {
-  Object* desc = HandleToObject(memberDesc);
+  Object* desc = HandleToDesc(memberDesc);
   if (desc->classId != kMemberDescClass) {
     throw runtime_error("Bind: not a member descriptor");
   }
@@ -83,7 +78,7 @@ BasicVM::Value ObjectManager::Bind(const BasicVM::Value& memberDesc,
 // obj:<名>[p] -> 绑定成员描述符（属性引用 / 绑定方法都从这里出发）。
 void ObjectManager::At(BasicVM::State& s, const BasicVM::Value& handle,
                        const BasicVM::Value& key, BasicVM::Value& out) {
-  Object* desc = HandleToObject(handle);
+  Object* desc = HandleToDesc(handle);
   if (desc->classId != kMemberDescClass) {
     s.Error("not a member. ");
     return;
@@ -100,7 +95,7 @@ void ObjectManager::At(BasicVM::State& s, const BasicVM::Value& handle,
 // 同名成员在各类里落在不同位置也各归各。
 void ObjectManager::Assign(BasicVM::State& s, const BasicVM::Value& handle,
                            const BasicVM::Value& value) {
-  Object* desc = HandleToObject(handle);
+  Object* desc = HandleToDesc(handle);
   if (desc->classId != kMemberDescClass ||
       desc->fields[1].type != BasicVM::Value::Type::Handle) {
     s.Error("not assignable. ");
@@ -126,7 +121,7 @@ void ObjectManager::Assign(BasicVM::State& s, const BasicVM::Value& handle,
 // <Class>:<New>(...) -> 构造。
 void ObjectManager::Call(BasicVM::State& s, const BasicVM::Value& handle,
                          std::span<BasicVM::Value> args, BasicVM::Value& out) {
-  Object* desc = HandleToObject(handle);
+  Object* desc = HandleToDesc(handle);
   if (desc->classId == kCtorDescClass) {
     Class& cls = runtime->classes[(size_t)desc->fields[0].data.integer];
     Method& m = cls.methods[(size_t)desc->fields[1].data.integer];
@@ -195,15 +190,15 @@ void ObjectManager::Delete(BasicVM::State& s, Object& obj) {
   if (cls.deconstructorId >= 0) {
     runtime->InvokeMethod(cls.methods[cls.deconstructorId], obj, {}, nullptr);
   }
-  // 驱逐该地址的全部绑定描述符：O(log A) 定位 + O(k) 入复用池。
+  // 驱逐该地址的全部绑定描述符：O(log A) 定位 + O(k) RefDec 回收。
   // 悬空绑定 Handle 若再用会别名到复用后的新绑定——同属「悬空 Handle 是
   // 程序错误」的纪律。
-  auto it = bindCache.find(&obj);
-  if (it != bindCache.end()) {
-    for (auto& [id, d] : it->second) {
-      freeDescs.push_back(d);
+  auto it = descByObject.find(&obj);
+  if (it != descByObject.end()) {
+    for (unsigned h : it->second) {
+      descPool.RefDec(h);
     }
-    bindCache.erase(it);
+    descByObject.erase(it);
   }
   // 清掉字段里的 String/BinArr 引用：Value 析构不会 RefDec，不手动清，
   // Allocator 里的字符串/二进制串条目引用计数卡住，永不可复用。
@@ -223,6 +218,6 @@ void ObjectManager::ReportLive() {
     }
     cout << "\n";
   }
-  cout << "[descs] " << descs.size() << " allocated, " << freeDescs.size()
+  cout << "[descs] " << descPool.size() << " allocated, " << descPool.recycled.size()
        << " pooled\n";
 }
