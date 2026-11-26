@@ -147,20 +147,45 @@ pub fn escLex(alloc: std.mem.Allocator, s: []const u8) ![]const u8 {
     return out.toOwnedSlice(alloc);
 }
 
-/// printf("%g") 的忠实实现（C 的 %g）。先用 {d} 起步，够 golden 的词法用例。
-pub fn fmtG(alloc: std.mem.Allocator, v: f64) ![]const u8 {
-    if (std.math.isNan(v)) return alloc.dupe(u8, "nan");
-    if (std.math.isInf(v)) return alloc.dupe(u8, if (v < 0) "-inf" else "inf");
-    var buf: [256]u8 = undefined;
-    const s = try std.fmt.bufPrint(&buf, "{d}", .{v});
-    return alloc.dupe(u8, s);
-}
+pub const fmtG = @import("stope").format.fmtG;
+
 
 pub fn joinEsc(alloc: std.mem.Allocator, errs: []const []const u8) ![]const u8 {
     var out = std.ArrayList(u8).empty;
     for (errs, 0..) |e, i| {
         if (i > 0) try out.append(alloc, '|');
         try out.appendSlice(alloc, try escLex(alloc, e));
+    }
+    return out.toOwnedSlice(alloc);
+}
+
+pub const StmlCase = struct {
+    fields: std.StringHashMap([]const u8),
+    src: []const u8,
+    times: usize,
+
+    pub fn get(self: StmlCase, key: []const u8) []const u8 {
+        return self.fields.get(key) orelse "";
+    }
+};
+
+/// stml_cases.txt：用例清单（SRC 用 unescapeLex，TIMES 默认 1）。
+pub fn readStmlCases(alloc: std.mem.Allocator, io: std.Io) ![]StmlCase {
+    const lines = try readLines(alloc, io, "stml_cases.txt");
+    var out = std.ArrayList(StmlCase).empty;
+    for (lines) |line| {
+        if (line.len == 0 or line[0] == '#') continue;
+        var rec = StmlCase{ .fields = std.StringHashMap([]const u8).init(alloc), .src = "", .times = 1 };
+        var fit = std.mem.splitScalar(u8, line, '\t');
+        while (fit.next()) |field| {
+            const eq = std.mem.indexOfScalar(u8, field, '=') orelse continue;
+            try rec.fields.put(field[0..eq], field[eq + 1 ..]);
+        }
+        if (!rec.fields.contains("ID")) continue;
+        rec.src = try unescapeLex(alloc, rec.get("SRC"));
+        const ts = rec.get("TIMES");
+        if (ts.len > 0) rec.times = std.fmt.parseInt(usize, ts, 10) catch 1;
+        try out.append(alloc, rec);
     }
     return out.toOwnedSlice(alloc);
 }

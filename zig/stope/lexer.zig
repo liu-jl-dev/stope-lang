@@ -2,6 +2,7 @@
 //! 不出异常：出错只往 errors 记一条，然后按最长可行前缀产 token 继续扫。
 const std = @import("std");
 const tok = @import("token.zig");
+const op = @import("opcode.zig");
 const Token = tok.Token;
 const TokenType = tok.TokenType;
 
@@ -51,6 +52,8 @@ pub const Lexer = struct {
     input: []const u8,
     line: i32 = 1,
     errors: std.ArrayList([]const u8),
+
+    custom: ?*op.CustomOpcodeConfig = null,
 
     pub fn init(alloc: std.mem.Allocator, src: []const u8) Lexer {
         return .{ .alloc = alloc, .input = src, .errors = std.ArrayList([]const u8).empty };
@@ -348,7 +351,6 @@ pub const Lexer = struct {
     }
 
     fn analyzeIdent(self: *Lexer, t: *Token) void {
-        _ = self;
         if (t.typ == .Invalid) return;
         for (keywords) |kw| {
             if (std.mem.eql(u8, t.parsed, kw.name)) {
@@ -356,10 +358,12 @@ pub const Lexer = struct {
                 return;
             }
         }
-        // 自定义指令：golden 全带 myop / vop 两条（见 test_lexer.py 的 CFG）。
-        if (std.mem.eql(u8, t.parsed, "myop") or std.mem.eql(u8, t.parsed, "vop")) {
-            t.typ = .Custom;
-            return;
+        // 自定义指令由宿主登记的 config 决定（关键字优先）。
+        if (self.custom) |cfg| {
+            if (cfg.opcodes.contains(t.parsed)) {
+                t.typ = .Custom;
+                return;
+            }
         }
         t.typ = .Ident;
     }

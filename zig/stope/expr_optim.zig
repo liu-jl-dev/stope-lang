@@ -21,9 +21,11 @@ pub fn intNeg(a: i64) i64 {
     return -%a;
 }
 pub fn intDiv(a: i64, b: i64) i64 {
-    return @divTrunc(a, b); // 向零取整；MIN/-1 会 trap，但调用处 b!=0 且折叠用例不触此边界
+    if (a == std.math.minInt(i64) and b == -1) return std.math.minInt(i64); // 回绕，避免 trap
+    return @divTrunc(a, b);
 }
 pub fn intMod(a: i64, b: i64) i64 {
+    if (b == -1) return 0; // 避免 MIN/-1 溢出
     return @rem(a, b); // 向零取整余数
 }
 pub fn intPow(base: i64, exp_: i64) i64 {
@@ -42,7 +44,7 @@ pub fn isSpecial(v: f64) bool {
 }
 pub fn fmod(a: f64, b: f64) f64 {
     if (b == 0.0 or std.math.isNan(a) or std.math.isNan(b)) return std.math.nan(f64);
-    return @mod(a, b); // Zig @mod 余数符号跟被除数（C fmod 语义）
+    return @rem(a, b); // Zig @rem 余数符号跟被除数（C fmod 语义）
 }
 pub fn fpow(a: f64, b: f64) f64 {
     return std.math.pow(f64, a, b);

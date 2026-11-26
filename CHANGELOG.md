@@ -1,6 +1,6 @@
 # 变更历史
 
-本文件记录 **Stope 语言**（含标准范围内的语言、STML、编译器产物 `Program`）与仓库内八份实现的变更。
+本文件记录 **Stope 语言**（含标准范围内的语言、STML、编译器产物 `Program`）与仓库内九份实现的变更。
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
 [语义化版本](https://semver.org/lang/zh-CN/)。
@@ -22,7 +22,7 @@
 
 `0.x` 期间语法与公开 API 仍可能调整：不兼容变更**升次版本号**（`0.1.0` → `0.2.0`）并在对应
 版本的「变更」小节里标注。`1.0.0` 起承诺 `1.x` 内保持兼容，不兼容变更只能升主版本 —— 覆盖
-三件标准（语言 / STML / `Program`）、八份实现的公开 API，以及**内置 BasicVM 的公开接口**。
+三件标准（语言 / STML / `Program`）、九份实现的公开 API，以及**内置 BasicVM 的公开接口**。
 
 BasicVM 不属于标准（见 [`cpp/docs/basic-vm.md`](cpp/docs/basic-vm.md) §1.1）—— 换一台执行器
 可以完全不用它；但本仓库自带的这一台会一直维护，`1.x` 内 `Api` / `State` / `Value` 这些
@@ -30,7 +30,7 @@ BasicVM 不属于标准（见 [`cpp/docs/basic-vm.md`](cpp/docs/basic-vm.md) §1
 
 ### 为什么全仓只用一个版本号
 
-八份实现由同一批 golden 用例（`gdscript/test/data/`）与跨实现差分测试绑成一个行为整体，
+九份实现由同一批 golden 用例（`gdscript/test/data/`）与跨实现差分测试绑成一个行为整体，
 `Program` 的字节序列本身就是跨实现的契约 —— 按实现各自定版本没有意义。
 
 正式版本用 annotated tag 锚定，tag 名带 `v` 前缀（`v0.1.0`）；五个实现内的版本字段**不带**
@@ -57,6 +57,12 @@ python tools/check_version.py 0.2.0    # 发版前预检：与期望值比较
 ```
 
 ## [Unreleased]
+
+### 新增
+
+- **Zig 实现（`zig/`）**：第九份实现，Zig 0.17+、零第三方依赖。词法 / 语法 / 常量折叠 /
+  编译器 / 反汇编 / STML / BasicVM 全部对齐 golden，`zig build test` 3179 断言全绿；
+  demo ×4 可运行。参考实现，不属第二套标准。
 
 ### 修复
 

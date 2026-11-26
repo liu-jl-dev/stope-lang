@@ -25,12 +25,8 @@ fn hasArg(op: u16, cfg: ?*opcode.CustomOpcodeConfig) bool {
     return opcode.hasArg(op);
 }
 
-fn fmtG(alloc: std.mem.Allocator, v: f64) ![]const u8 {
-    if (std.math.isNan(v)) return alloc.dupe(u8, "nan");
-    if (std.math.isInf(v)) return alloc.dupe(u8, if (v < 0) "-inf" else "inf");
-    var buf: [256]u8 = undefined;
-    return alloc.dupe(u8, try std.fmt.bufPrint(&buf, "{d}", .{v}));
-}
+const fmtG = stope.format.fmtG;
+
 
 fn esc(alloc: std.mem.Allocator, s: []const u8) ![]const u8 {
     var out = std.ArrayList(u8).empty;
