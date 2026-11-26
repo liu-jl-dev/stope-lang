@@ -5,3 +5,7 @@ pub const TokenType = token.TokenType;
 pub const typeName = token.typeName;
 pub const lexer = @import("lexer.zig");
 pub const Lexer = lexer.Lexer;
+pub const ast = @import("ast.zig");
+pub const binarr = @import("binarr.zig");
+pub const parser = @import("parser.zig");
+pub const Parser = parser.Parser;

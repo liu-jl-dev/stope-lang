@@ -89,6 +89,102 @@ fn testLexer(alloc: std.mem.Allocator, io: std.Io, rep: *Report) !void {
     }
 }
 
+fn testParser(alloc: std.mem.Allocator, io: std.Io, rep: *Report) !void {
+    const cases = try golden.readGolden(alloc, io, "golden.txt", true);
+    if (cases.len == 0) {
+        std.debug.print("FAIL golden.txt 一条都没读到\n", .{});
+        rep.failed += 1;
+        return;
+    }
+    for (cases) |c| {
+        const cid = c.get("ID");
+        // golden.txt 的 SRC 在读文件时已解一层 E_()，这里再解一层 escUtf8。
+        const src = try golden.unescape(alloc, c.get("SRC"));
+        var lx = stope.Lexer.init(alloc, src);
+        var ps = try stope.Parser.init(alloc, &lx);
+        ps.const_folding = std.mem.eql(u8, c.get("FOLD"), "1");
+        var tree = stope.ast.Prog.init(alloc);
+        try ps.parseProgram(&tree);
+        const shape = try stope.ast.shapeProg(alloc, &tree);
+        rep.check(cid, "SHAPE", c.get("SHAPE"), shape);
+
+        var lines = std.ArrayList(u8).empty;
+        for (tree.stmts.items, 0..) |s, i| {
+            if (i > 0) try lines.append(alloc, ',');
+            var buf: [32]u8 = undefined;
+            try lines.appendSlice(alloc, try std.fmt.bufPrint(&buf, "{d}", .{s.line}));
+        }
+        rep.check(cid, "LINES", c.get("LINES"), try lines.toOwnedSlice(alloc));
+
+        const perr = try std.fmt.allocPrint(alloc, "{d}", .{ps.errors.items.len});
+        rep.check(cid, "PERR", c.get("PERR"), perr);
+        rep.check(cid, "PERRS", c.get("PERRS"), try golden.joinEsc(alloc, ps.errors.items));
+        const lerr = try std.fmt.allocPrint(alloc, "{d}", .{lx.errors.items.len});
+        rep.check(cid, "LEXERR", c.get("LEXERR"), lerr);
+        rep.check(cid, "LEXERRS", c.get("LEXERRS"), try golden.joinEsc(alloc, lx.errors.items));
+    }
+}
+
+fn depthSource(alloc: std.mem.Allocator, kind: []const u8, n: usize) ![]const u8 {
+    var out = std.ArrayList(u8).empty;
+    if (std.mem.eql(u8, kind, "paren")) {
+        var i: usize = 0;
+        while (i < n) : (i += 1) try out.append(alloc, '(');
+        try out.appendSlice(alloc, "a");
+        i = 0;
+        while (i < n) : (i += 1) try out.append(alloc, ')');
+        try out.appendSlice(alloc, ";");
+    } else if (std.mem.eql(u8, kind, "block")) {
+        var i: usize = 0;
+        while (i < n) : (i += 1) try out.append(alloc, '{');
+        try out.appendSlice(alloc, "a;");
+        i = 0;
+        while (i < n) : (i += 1) try out.append(alloc, '}');
+    } else if (std.mem.eql(u8, kind, "unary")) {
+        var i: usize = 0;
+        while (i < n) : (i += 1) try out.append(alloc, '-');
+        try out.appendSlice(alloc, "a;");
+    } else if (std.mem.eql(u8, kind, "at")) {
+        var i: usize = 0;
+        while (i < n) : (i += 1) try out.appendSlice(alloc, "a[");
+        try out.appendSlice(alloc, "0");
+        i = 0;
+        while (i < n) : (i += 1) try out.append(alloc, ']');
+        try out.appendSlice(alloc, ";");
+    }
+    return out.toOwnedSlice(alloc);
+}
+
+fn testDepth(alloc: std.mem.Allocator, rep: *Report) !void {
+    const cases = [_]struct { kind: []const u8, n: usize, deep: bool }{
+        .{ .kind = "paren", .n = 200, .deep = false },
+        .{ .kind = "paren", .n = 300, .deep = true },
+        .{ .kind = "block", .n = 300, .deep = true },
+        .{ .kind = "unary", .n = 300, .deep = true },
+        .{ .kind = "at", .n = 300, .deep = true },
+        .{ .kind = "block", .n = 200, .deep = false },
+        .{ .kind = "unary", .n = 200, .deep = false },
+        .{ .kind = "at", .n = 200, .deep = false },
+    };
+    for (cases) |c| {
+        const src = try depthSource(alloc, c.kind, c.n);
+        var lx = stope.Lexer.init(alloc, src);
+        var ps = try stope.Parser.init(alloc, &lx);
+        var tree = stope.ast.Prog.init(alloc);
+        try ps.parseProgram(&tree);
+        const id = try std.fmt.allocPrint(alloc, "PD-{s}-{d}", .{ c.kind, c.n });
+        const nerr = try std.fmt.allocPrint(alloc, "{d}", .{ps.errors.items.len});
+        if (c.deep) {
+            rep.check(id, "错误条数", "1", nerr);
+            const want = "line 1: nesting too deep (max 256). ";
+            const got = if (ps.errors.items.len > 0) ps.errors.items[0] else "<无错误>";
+            rep.check(id, "错误文案", want, got);
+        } else {
+            rep.check(id, "错误条数", "0", nerr);
+        }
+    }
+}
+
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -100,7 +196,11 @@ pub fn main() !void {
 
     var rep = Report{ .alloc = alloc };
     try testLexer(alloc, io, &rep);
+    const lex_failed = rep.failed;
+    try testParser(alloc, io, &rep);
+    const parser_failed = rep.failed - lex_failed;
+    try testDepth(alloc, &rep);
 
-    std.debug.print("词法断言 {d} 条，失败 {d} 条\n", .{ rep.passed + rep.failed, rep.failed });
+    std.debug.print("词法失败 {d} 条，语法失败 {d} 条，深度失败 {d} 条，总计 {d} 断言、失败 {d}\n", .{ lex_failed, parser_failed, rep.failed - lex_failed - parser_failed, rep.passed + rep.failed, rep.failed });
     if (rep.failed > 0) std.process.exit(1);
 }
