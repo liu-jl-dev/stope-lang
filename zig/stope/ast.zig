@@ -4,6 +4,11 @@ const std = @import("std");
 const tok = @import("token.zig");
 const TokenType = tok.TokenType;
 
+pub const LetData = struct { idents: []const []const u8, has_assign: bool, expr: ?*Expr };
+pub const IfData = struct { cond: ?*Expr, first: *Prog, elifs: []const Elif, else_prog: ?*Prog };
+pub const WhileData = struct { cond: ?*Expr, prog: *Prog };
+pub const BinaryData = struct { op: TokenType, left: *Expr, right: *Expr };
+
 pub const Elif = struct {
     cond: ?*Expr = null,
     prog: *Prog,
@@ -15,12 +20,12 @@ pub const Stmt = struct {
 
     pub const Data = union(enum) {
         expr_stmt: *Expr,
-        let_stmt: struct { idents: []const []const u8, has_assign: bool, expr: ?*Expr },
+        let_stmt: LetData,
         return_stmt: []const *Expr,
         export_stmt: []const []const u8,
         block_stmt: *Prog,
-        if_stmt: struct { cond: ?*Expr, first: *Prog, elifs: []const Elif, else_prog: ?*Prog },
-        while_stmt: struct { cond: ?*Expr, prog: *Prog },
+        if_stmt: IfData,
+        while_stmt: WhileData,
         assign_stmt: struct { left: *Expr, right: *Expr },
         break_stmt,
         continue_stmt,
@@ -45,7 +50,7 @@ pub const Expr = struct {
         argc_expr,
         args_expr: ?*Expr,
         unary_op: struct { op: TokenType, expr: *Expr },
-        binary_op: struct { op: TokenType, left: *Expr, right: *Expr },
+        binary_op: BinaryData,
         call: struct { callee: *Expr, args: []const *Expr },
         at: struct { container: *Expr, keys: []const *Expr },
         custom: struct { name: []const u8, args: []const *Expr },

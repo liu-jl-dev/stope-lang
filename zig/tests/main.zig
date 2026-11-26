@@ -2,6 +2,7 @@
 const std = @import("std");
 const stope = @import("stope");
 const golden = @import("golden.zig");
+const dump = @import("dump.zig");
 
 const TokenType = stope.TokenType;
 
@@ -86,6 +87,37 @@ fn testLexer(alloc: std.mem.Allocator, io: std.Io, rep: *Report) !void {
         const errn_buf = try std.fmt.allocPrint(alloc, "{d}", .{r.errn});
         rep.check(cid, "ERRN", c.get("ERRN"), errn_buf);
         rep.check(cid, "ERRS", c.get("ERRS"), r.errs);
+    }
+}
+
+fn testCompiler(alloc: std.mem.Allocator, io: std.Io, rep: *Report) !void {
+    const cases = try golden.readGolden(alloc, io, "golden.txt", true);
+    if (cases.len == 0) return;
+    for (cases) |c| {
+        const cid = c.get("ID");
+        const src = try golden.unescape(alloc, c.get("SRC"));
+        var lx = stope.Lexer.init(alloc, src);
+        var cfg = stope.opcode.CustomOpcodeConfig.init(alloc);
+        try cfg.add("myop", 100, 2);
+        try cfg.add("vop", 101, -1);
+        var ps = try stope.Parser.init(alloc, &lx);
+        ps.const_folding = std.mem.eql(u8, c.get("FOLD"), "1");
+        var tree = stope.ast.Prog.init(alloc);
+        try ps.parseProgram(&tree);
+
+        var pre = std.ArrayList([]const u8).empty;
+        const pre_field = c.get("PRE");
+        if (pre_field.len > 0) {
+            var pit = std.mem.splitScalar(u8, pre_field, ',');
+            while (pit.next()) |name| try pre.append(alloc, name);
+        }
+        var prog = stope.program.Program.init(alloc);
+        var comp = try stope.Compiler.init(alloc, &prog, &cfg);
+        _ = try comp.compile(&tree, pre.items);
+
+        const out = try dump.dumpProgram(alloc, &prog, &cfg);
+        rep.check(cid, "OUT", c.get("OUT"), out);
+        rep.check(cid, "CERRS", c.get("CERRS"), try golden.joinEsc(alloc, comp.errors.items));
     }
 }
 
@@ -199,8 +231,10 @@ pub fn main() !void {
     const lex_failed = rep.failed;
     try testParser(alloc, io, &rep);
     const parser_failed = rep.failed - lex_failed;
+    try testCompiler(alloc, io, &rep);
+    const compiler_failed = rep.failed - lex_failed - parser_failed;
     try testDepth(alloc, &rep);
 
-    std.debug.print("词法失败 {d} 条，语法失败 {d} 条，深度失败 {d} 条，总计 {d} 断言、失败 {d}\n", .{ lex_failed, parser_failed, rep.failed - lex_failed - parser_failed, rep.passed + rep.failed, rep.failed });
+    std.debug.print("词法失败 {d}，语法失败 {d}，编译失败 {d}，深度失败 {d}；总计 {d} 断言、失败 {d}\n", .{ lex_failed, parser_failed, compiler_failed, rep.failed - lex_failed - parser_failed - compiler_failed, rep.passed + rep.failed, rep.failed });
     if (rep.failed > 0) std.process.exit(1);
 }

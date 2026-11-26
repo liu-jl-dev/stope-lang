@@ -14,7 +14,10 @@ zig/
 │   ├── ast.zig
 │   ├── binarr.zig
 │   ├── expr_optim.zig
-│   └── parser.zig
+│   ├── parser.zig
+│   ├── opcode.zig
+│   ├── program.zig
+│   └── compiler.zig
 ├── tests/                      # 测试跑器（读 gdscript/test/data/ 的 golden）
 │   ├── golden.zig              # golden 读取与转义（照抄 python/tests/golden.py）
 │   └── main.zig
@@ -29,7 +32,7 @@ zig/
 zig build --build-file zig/build.zig test
 ```
 
-当前进度：词法（`golden_lex.txt` 153 条）、语法（`golden.txt` 224 条的 SHAPE/LINES/错误字段，含 FOLD 折叠）、常量折叠、嵌套深度上限共 **1968 断言全绿**；编译器 / BinArr dump / STML / BasicVM / 反汇编等模块待移植。
+当前进度：词法（`golden_lex.txt` 153 条）、语法（`golden.txt` 224 条的 SHAPE/LINES/错误字段，含 FOLD 折叠）、常量折叠、编译器（OUT/CERRS 单行产物格式，含 preExports/defer）、嵌套深度上限共 **2416 断言全绿**；STML / BasicVM / 反汇编 / demo 等模块待移植。
 
 ## 语义对齐要点
 

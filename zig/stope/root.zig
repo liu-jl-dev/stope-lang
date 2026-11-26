@@ -9,3 +9,7 @@ pub const ast = @import("ast.zig");
 pub const binarr = @import("binarr.zig");
 pub const parser = @import("parser.zig");
 pub const Parser = parser.Parser;
+pub const opcode = @import("opcode.zig");
+pub const program = @import("program.zig");
+pub const compiler = @import("compiler.zig");
+pub const Compiler = compiler.Compiler;
