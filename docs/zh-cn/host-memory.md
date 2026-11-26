@@ -1,4 +1,4 @@
-# demo 5/6 的宿主内存管理：九份实现的对照
+# demo 5/6 的宿主内存管理：十份实现的对照
 
 > demo 5（[`cpp/docs/object-oriented.md`](../../cpp/docs/object-oriented.md)）把类、
 > 属性、方法、构造、析构**全部长在宿主侧**：对象是 `Value::Handle`（宿主引用），

@@ -1,6 +1,6 @@
 # 移植指南（往本仓库加一份新的语言实现）
 
-> 读者：要移植第九份语言实现的人（或 agent）。语义权威是 `cpp/`；
+> 读者：要移植第十份语言实现的人（或 agent）。语义权威是 `cpp/`；
 > 本文讲**怎么移植** —— 顺序、容易翻车的地方、交付前检查单。
 > 行为契约本体在 [compiler-test-plan.md](compiler-test-plan.md)、
 > [stml-test-plan.md](stml-test-plan.md) 与 [vm-guide.md](vm-guide.md)，本文不复述。

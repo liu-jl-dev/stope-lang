@@ -1,11 +1,11 @@
-# API Reference（九份实现的接口形状对照）
+# API Reference（十份实现的接口形状对照）
 
-> 定位：**有什么、叫什么、哪里不同** —— 按类给出九份实现的成员对照。
+> 定位：**有什么、叫什么、哪里不同** —— 按类给出十份实现的成员对照。
 > 怎么用（示例、错误文案、排错）在各实现的 `docs/usage.md` 与 `docs/quick-start.md`；
 > 行为契约在四份 `*-test-plan.md` 与 [vm-guide.md](vm-guide.md)，本文不复述语义。
 >
 > 命名只是风格：PascalCase（Node.js / C# / Go）与 snake_case（GDScript / Python /
-> Lua / Rust / Zig）。**能力集合九份一致**；真正的差异集中在 §8「差异登记」。
+> Lua / Rust / Zig）。**能力集合十份一致**；真正的差异集中在 §8「差异登记」。
 
 ## 0. 入口对照
 
@@ -76,7 +76,7 @@ JS `Map` / Go `[]ExportEntry` / Rust `BTreeMap`…），遍历顺序不保证 �
 | 成员 | 对照 |
 | --- | --- |
 | 单步 / 连跑 | `Step()` / `Run()` —— **两份独立实现**（热循环不套函数调用），测试锁两条路径一致 |
-| 返回值 | `Result`（`Success` / `Error`）—— 九份一致 |
+| 返回值 | `Result`（`Success` / `Error`）—— 十份一致 |
 | 公开状态 | `variables` / `returns` / `stack` / `errors` / `i`（指令指针） |
 | 报错入口 | `Error(msg)` —— 追加 `"<i>: msg"`；`HasError()` |
 | 栈辅助 | `AtTop(k)`（从栈顶数、1 起算）/ `Pop` / `PopN` / `PushInt`（Go 为包内私有） |
