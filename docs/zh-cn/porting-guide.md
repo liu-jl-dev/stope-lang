@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | 1 | `python/`（`stope/` + `tests/` + `demo/`） | **主参考**：纯标准库、无语言特技，模块划分照抄它 |
 | 2 | `cpp/src/` | 语义权威：折叠规则（`expr_optim`）、STML 四态、BasicVM 指令语义拿不准时看它 |
-| 3 | `gdscript/test/data/` | golden 数据真源（**只读、绝不复制**）：`golden_lex` 147 / `golden` 201 / `golden_binarr` 86 / `golden_stml` 126 / `golden_disasm` 12 条（以文件实际行数为准，会随功能增长） |
+| 3 | `gdscript/test/data/` | golden 数据真源（**只读、绝不复制**）：`golden_lex` 153 / `golden` 224 / `golden_binarr` 86 / `golden_stml` 126 / `golden_disasm` 12 条（以文件实际行数为准，会随功能增长） |
 | 4 | `python/tests/golden.py`、`gdscript/test/test_util.gd` | 转义规则的权威实现，照抄逻辑 |
 | 5 | `nodejs/` | 看整数回绕（BigInt）与 `dumpProgram` 口径 |
 
@@ -129,7 +129,7 @@ Lua 的 `common.lua` 都是干这个的）。折叠只在两侧都是字面量�
 ## 6. 交付前检查单
 
 ```text
-[ ] 五份 golden 全绿（147 / 201 / 86 / 126 / 12，以文件实际行数为准；测试先断言条数）
+[ ] 五份 golden 全绿（153 / 224 / 86 / 126 / 12，以文件实际行数为准；测试先断言条数）
 [ ] 自写断言：深度上限、textLine、preExports（line 0）、VM step ≡ run 各有覆盖
 [ ] demo01、demo02 与 Python 份逐字节一致（剥行尾 diff 为空）；03、04 对齐或在 README 写明差异
 [ ] 零第三方依赖（依赖清单为空；Rust 无 [dependencies]、Go 无 go.sum）
